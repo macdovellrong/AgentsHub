@@ -16,7 +16,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(result.stdout, end="")
         return result.exit_code
-    print("usage: python -m agenthub.main pipe-smoke", file=sys.stderr)
+    if args == ["hmi"]:
+        from agenthub.ui.main_window import run_hmi
+
+        return run_hmi(sys.argv)
+    print("usage: python -m agenthub.main [pipe-smoke|hmi]", file=sys.stderr)
     return 2
 
 
