@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,14 +17,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from agenthub.adapters.profiles import DEFAULT_AGENT_PROFILES, AgentProfile
 from agenthub.process.interactive_pty import InteractivePtySession
 from agenthub.ui.output_buffer import OutputBuffer
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, profiles: tuple[AgentProfile, ...] = DEFAULT_AGENT_PROFILES) -> None:
         super().__init__()
         self.setWindowTitle("AgentHub")
+        self._profiles = profiles
+        self._active_profile: AgentProfile | None = None
         self._session: InteractivePtySession | None = None
         self._output_buffer = OutputBuffer(max_chars=200_000)
         self._flush_timer = QTimer(self)
@@ -31,10 +35,12 @@ class MainWindow(QMainWindow):
         self._flush_timer.timeout.connect(self._drain_session)
 
         self.status_label = QLabel("未连接")
+        self.agent_combo = QComboBox()
+        for profile in self._profiles:
+            self.agent_combo.addItem(profile.display_name, profile.id)
         self.start_button = QPushButton("启动")
         self.stop_button = QPushButton("停止")
         self.command_input = QLineEdit()
-        self.command_input.setPlaceholderText("输入 PowerShell 命令")
         self.send_button = QPushButton("发送")
         self.terminal = QPlainTextEdit()
         self.terminal.setReadOnly(True)
@@ -43,6 +49,8 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.status_label)
         top_bar.addStretch(1)
+        top_bar.addWidget(QLabel("Agent"))
+        top_bar.addWidget(self.agent_combo)
         top_bar.addWidget(self.start_button)
         top_bar.addWidget(self.stop_button)
 
@@ -63,14 +71,17 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.stop_session)
         self.send_button.clicked.connect(self.send_command)
         self.command_input.returnPressed.connect(self.send_command)
+        self.agent_combo.currentIndexChanged.connect(self._sync_agent_placeholder)
+        self._sync_agent_placeholder()
         self._sync_controls()
 
     def start_session(self) -> None:
         if self._session is not None and self._session.is_alive():
             return
+        profile = self.selected_profile()
         self._session = InteractivePtySession(
-            run_id="hmi-powershell",
-            command=["powershell.exe", "-NoLogo", "-NoProfile"],
+            run_id=f"hmi-{profile.id}",
+            command=profile.command,
         )
         try:
             self._session.start()
@@ -79,7 +90,8 @@ class MainWindow(QMainWindow):
             self._append_text(f"启动失败: {exc}\n")
             self._sync_controls()
             return
-        self.status_label.setText("PowerShell 在线")
+        self._active_profile = profile
+        self.status_label.setText(f"{profile.display_name} 在线")
         self._flush_timer.start()
         self._sync_controls()
 
@@ -87,12 +99,17 @@ class MainWindow(QMainWindow):
         if self._session is None:
             return
         try:
-            if self._session.is_alive():
+            if (
+                self._session.is_alive()
+                and self._active_profile is not None
+                and self._active_profile.id == "powershell"
+            ):
                 self._session.write("exit\r\n")
         finally:
             self._session.stop()
             self._drain_session()
             self._session = None
+            self._active_profile = None
             self._flush_timer.stop()
             self.status_label.setText("已停止")
             self._sync_controls()
@@ -109,6 +126,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802
         self.stop_session()
         super().closeEvent(event)
+
+    def selected_profile(self) -> AgentProfile:
+        index = self.agent_combo.currentIndex()
+        return self._profiles[index]
 
     def _drain_session(self) -> None:
         if self._session is None:
@@ -132,10 +153,14 @@ class MainWindow(QMainWindow):
 
     def _sync_controls(self) -> None:
         connected = self._session is not None and self._session.is_alive()
+        self.agent_combo.setEnabled(not connected)
         self.start_button.setEnabled(not connected)
         self.stop_button.setEnabled(connected)
         self.command_input.setEnabled(connected)
         self.send_button.setEnabled(connected)
+
+    def _sync_agent_placeholder(self) -> None:
+        self.command_input.setPlaceholderText(self.selected_profile().placeholder)
 
 
 def run_hmi(argv: list[str] | None = None) -> int:

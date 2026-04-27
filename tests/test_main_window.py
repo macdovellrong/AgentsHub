@@ -19,3 +19,23 @@ def test_main_window_constructs_with_initial_controls_disabled():
     finally:
         window.close()
         app.processEvents()
+
+
+def test_main_window_lists_agent_profiles_and_updates_prompt_placeholder():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        labels = [
+            window.agent_combo.itemText(index)
+            for index in range(window.agent_combo.count())
+        ]
+
+        assert labels == ["PowerShell", "Codex"]
+        assert window.command_input.placeholderText() == "输入 PowerShell 命令"
+
+        window.agent_combo.setCurrentIndex(1)
+
+        assert window.command_input.placeholderText() == "输入 Codex prompt"
+    finally:
+        window.close()
+        app.processEvents()

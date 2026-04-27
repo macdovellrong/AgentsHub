@@ -23,3 +23,5 @@ Run the minimal desktop HMI:
 $env:PYTHONPATH = "src"
 python -m agenthub.main hmi
 ```
+
+The HMI currently supports manual PowerShell and Codex PTY sessions. Select the agent, start the session, then type commands or prompts into the input box.
