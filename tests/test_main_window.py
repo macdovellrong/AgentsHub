@@ -80,3 +80,45 @@ def test_main_window_writes_drained_events_to_run_log(tmp_path):
         window._session = None
         window.close()
         app.processEvents()
+
+
+def test_main_window_uses_workspace_for_default_log_root(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(workspace_path=tmp_path)
+    try:
+        assert window.workspace_path == tmp_path
+        assert window.log_root == tmp_path / ".agenthub" / "runs"
+        assert str(tmp_path) in window.workspace_label.text()
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_set_workspace_updates_default_log_root(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    initial = tmp_path / "initial"
+    selected = tmp_path / "selected"
+    initial.mkdir()
+    selected.mkdir()
+    window = MainWindow(workspace_path=initial)
+    try:
+        window.set_workspace(selected)
+
+        assert window.workspace_path == selected
+        assert window.log_root == selected / ".agenthub" / "runs"
+        assert str(selected) in window.workspace_label.text()
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_creates_sessions_in_selected_workspace(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(workspace_path=tmp_path)
+    try:
+        session = window._create_session(window.selected_profile())
+
+        assert session.cwd == tmp_path
+    finally:
+        window.close()
+        app.processEvents()
