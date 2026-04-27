@@ -4,6 +4,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
+from agenthub.process.base import OutputEvent, StreamName
+from agenthub.storage.run_logs import RunLogWriter
 from agenthub.ui.main_window import MainWindow
 
 
@@ -37,5 +39,44 @@ def test_main_window_lists_agent_profiles_and_updates_prompt_placeholder():
 
         assert window.command_input.placeholderText() == "输入 Codex prompt"
     finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_writes_drained_events_to_run_log(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+    event = OutputEvent(
+        run_id="hmi-powershell",
+        stream=StreamName.PTY,
+        raw="\x1b[32mLOG\x1b[0m\r\n",
+        clean="LOG\r\n",
+    )
+
+    class FakeSession:
+        def drain(self):
+            return [event]
+
+        def is_alive(self):
+            return True
+
+        def stop(self):
+            pass
+
+    window._session = FakeSession()
+    window._log_writer = RunLogWriter.create(
+        root=tmp_path,
+        profile_id="powershell",
+        run_id="hmi-powershell-test",
+    )
+    try:
+        window._drain_session()
+        window._log_writer.close()
+
+        run_dir = tmp_path / "hmi-powershell-test"
+        assert (run_dir / "raw.log").read_bytes() == "\x1b[32mLOG\x1b[0m\r\n".encode()
+        assert (run_dir / "clean.log").read_bytes() == "LOG\r\n".encode()
+    finally:
+        window._session = None
         window.close()
         app.processEvents()

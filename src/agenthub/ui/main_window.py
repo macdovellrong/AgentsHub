@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QTextCursor
@@ -19,14 +20,21 @@ from PySide6.QtWidgets import (
 
 from agenthub.adapters.profiles import DEFAULT_AGENT_PROFILES, AgentProfile
 from agenthub.process.interactive_pty import InteractivePtySession
+from agenthub.storage.run_logs import RunLogWriter
 from agenthub.ui.output_buffer import OutputBuffer
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, profiles: tuple[AgentProfile, ...] = DEFAULT_AGENT_PROFILES) -> None:
+    def __init__(
+        self,
+        profiles: tuple[AgentProfile, ...] = DEFAULT_AGENT_PROFILES,
+        log_root: Path | str = ".agenthub/runs",
+    ) -> None:
         super().__init__()
         self.setWindowTitle("AgentHub")
         self._profiles = profiles
+        self._log_root = Path(log_root)
+        self._log_writer: RunLogWriter | None = None
         self._active_profile: AgentProfile | None = None
         self._session: InteractivePtySession | None = None
         self._output_buffer = OutputBuffer(max_chars=200_000)
@@ -90,8 +98,20 @@ class MainWindow(QMainWindow):
             self._append_text(f"启动失败: {exc}\n")
             self._sync_controls()
             return
+        try:
+            self._log_writer = RunLogWriter.create(
+                root=self._log_root,
+                profile_id=profile.id,
+            )
+        except Exception as exc:
+            self._session.stop()
+            self._session = None
+            self._append_text(f"日志启动失败: {exc}\n")
+            self._sync_controls()
+            return
         self._active_profile = profile
         self.status_label.setText(f"{profile.display_name} 在线")
+        self._append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
         self._flush_timer.start()
         self._sync_controls()
 
@@ -109,6 +129,9 @@ class MainWindow(QMainWindow):
             self._session.stop()
             self._drain_session()
             self._session = None
+            if self._log_writer is not None:
+                self._log_writer.close()
+                self._log_writer = None
             self._active_profile = None
             self._flush_timer.stop()
             self.status_label.setText("已停止")
@@ -135,12 +158,17 @@ class MainWindow(QMainWindow):
         if self._session is None:
             return
         for event in self._session.drain():
+            if self._log_writer is not None:
+                self._log_writer.append(event)
             self._output_buffer.append(event)
         text = self._output_buffer.flush_text()
         if text:
             self._append_text(text)
         if not self._session.is_alive():
             self.status_label.setText("进程已退出")
+            if self._log_writer is not None:
+                self._log_writer.close()
+                self._log_writer = None
             self._flush_timer.stop()
             self._sync_controls()
 
