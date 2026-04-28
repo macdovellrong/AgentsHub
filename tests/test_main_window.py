@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from agenthub.process.base import OutputEvent, StreamName
@@ -138,6 +139,57 @@ def test_main_window_renders_drained_events_as_screen_snapshot(tmp_path):
         assert window.terminal.toPlainText() == "new"
     finally:
         window._session = None
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_terminal_keys_write_directly_to_live_session(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+
+    class FakeSession:
+        def __init__(self):
+            self.writes = []
+
+        def drain(self):
+            return []
+
+        def is_alive(self):
+            return True
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def stop(self):
+            pass
+
+    fake_session = FakeSession()
+    window._session = fake_session
+    try:
+        window._sync_controls()
+        window.terminal.setFocus()
+
+        QTest.keyClicks(window.terminal, "abc")
+        QTest.keyClick(window.terminal, Qt.Key.Key_Return)
+        QTest.keyClick(window.terminal, Qt.Key.Key_Backspace)
+        QTest.keyClick(window.terminal, Qt.Key.Key_Up)
+
+        assert "".join(fake_session.writes[:3]) == "abc"
+        assert fake_session.writes[3:] == ["\r", "\x7f", "\x1b[A"]
+    finally:
+        window._session = None
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_applies_operational_layout_and_terminal_style():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        assert window.terminal.objectName() == "terminalPane"
+        assert window._workspace_splitter.count() == 3
+        assert "QPlainTextEdit#terminalPane" in window.styleSheet()
+    finally:
         window.close()
         app.processEvents()
 

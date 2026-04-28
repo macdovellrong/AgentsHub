@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -38,6 +40,144 @@ TASK_STATUS_LABELS = {
     TaskStatus.DONE: "完成",
     TaskStatus.FAILED: "失败",
 }
+
+
+MAIN_WINDOW_STYLESHEET = """
+QMainWindow, QWidget#appRoot {
+    background: #111418;
+    color: #e6eaf0;
+}
+QLabel {
+    color: #cfd6df;
+}
+QLabel#statusLabel {
+    color: #9fe6b8;
+    font-weight: 600;
+    padding: 4px 10px;
+    border: 1px solid #244c34;
+    border-radius: 6px;
+    background: #132119;
+}
+QPushButton {
+    background: #253140;
+    color: #f4f7fb;
+    border: 1px solid #344457;
+    border-radius: 5px;
+    padding: 6px 12px;
+}
+QPushButton:hover {
+    background: #304056;
+}
+QPushButton:disabled {
+    color: #748091;
+    background: #1a2029;
+    border-color: #252d38;
+}
+QComboBox, QLineEdit, QListWidget {
+    background: #171d25;
+    color: #eef2f6;
+    border: 1px solid #303a48;
+    border-radius: 5px;
+    padding: 5px;
+    selection-background-color: #355f8c;
+}
+QGroupBox {
+    border: 1px solid #2b3542;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 8px;
+    font-weight: 600;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    padding: 0 4px;
+    color: #aeb8c6;
+}
+QSplitter::handle {
+    background: #202833;
+}
+QPlainTextEdit#terminalPane {
+    background: #070a0d;
+    color: #d8f3dc;
+    border: 1px solid #28313d;
+    border-radius: 6px;
+    padding: 8px;
+    selection-background-color: #2f5d46;
+}
+"""
+
+
+class TerminalPane(QPlainTextEdit):
+    _KEY_SEQUENCES = {
+        Qt.Key.Key_Return: "\r",
+        Qt.Key.Key_Enter: "\r",
+        Qt.Key.Key_Backspace: "\x7f",
+        Qt.Key.Key_Tab: "\t",
+        Qt.Key.Key_Escape: "\x1b",
+        Qt.Key.Key_Up: "\x1b[A",
+        Qt.Key.Key_Down: "\x1b[B",
+        Qt.Key.Key_Right: "\x1b[C",
+        Qt.Key.Key_Left: "\x1b[D",
+        Qt.Key.Key_Home: "\x1b[H",
+        Qt.Key.Key_End: "\x1b[F",
+        Qt.Key.Key_Delete: "\x1b[3~",
+        Qt.Key.Key_PageUp: "\x1b[5~",
+        Qt.Key.Key_PageDown: "\x1b[6~",
+    }
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._input_handler: Callable[[str], None] | None = None
+        self._terminal_input_enabled = False
+        self.setReadOnly(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setUndoRedoEnabled(False)
+
+    def set_input_handler(self, handler: Callable[[str], None]) -> None:
+        self._input_handler = handler
+
+    def set_terminal_input_enabled(self, enabled: bool) -> None:
+        self._terminal_input_enabled = enabled
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        text = self._terminal_text_for_event(event)
+        if text is not None:
+            self._send_terminal_text(text)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def insertFromMimeData(self, source) -> None:  # noqa: N802
+        if (
+            self._terminal_input_enabled
+            and self._input_handler is not None
+            and source.hasText()
+        ):
+            text = _normalize_terminal_input(source.text())
+            self._send_terminal_text(text)
+            return
+        super().insertFromMimeData(source)
+
+    def _terminal_text_for_event(self, event) -> str | None:
+        if not self._terminal_input_enabled or self._input_handler is None:
+            return None
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            control = _control_sequence_for_key(event.key())
+            if control is not None:
+                return control
+        if event.key() in self._KEY_SEQUENCES:
+            return self._KEY_SEQUENCES[event.key()]
+        text = event.text()
+        if text and not text.isspace():
+            return text
+        if text == " ":
+            return text
+        return None
+
+    def _send_terminal_text(self, text: str) -> None:
+        if self._input_handler is not None and text:
+            self._input_handler(text)
 
 
 class MainWindow(QMainWindow):
@@ -66,6 +206,7 @@ class MainWindow(QMainWindow):
         self._flush_timer.timeout.connect(self._drain_session)
 
         self.status_label = QLabel("未连接")
+        self.status_label.setObjectName("statusLabel")
         self.workspace_label = QLabel()
         self.recent_workspace_combo = QComboBox()
         self.choose_workspace_button = QPushButton("选择目录")
@@ -86,10 +227,13 @@ class MainWindow(QMainWindow):
         for status in TaskStatus:
             task_list = QListWidget()
             task_list.setMinimumWidth(140)
-            task_list.setMaximumHeight(160)
+            task_list.setMinimumHeight(72)
             self.task_lists[status] = task_list
-        self.terminal = QPlainTextEdit()
-        self.terminal.setReadOnly(True)
+        self.terminal = TerminalPane()
+        self.terminal.setObjectName("terminalPane")
+        self.terminal.setFont(QFont("Consolas", 10))
+        self.terminal.set_input_handler(self._write_terminal_input)
+        self.terminal.setPlaceholderText("启动 Agent 后，可在这里直接输入与终端交互")
         self.terminal.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
         top_bar = QHBoxLayout()
@@ -121,7 +265,7 @@ class MainWindow(QMainWindow):
         task_bar.addStretch(1)
         task_bar.addWidget(self.refresh_tasks_button)
 
-        task_board = QHBoxLayout()
+        task_board = QVBoxLayout()
         for status in TaskStatus:
             group = QGroupBox(TASK_STATUS_LABELS[status])
             group_layout = QVBoxLayout()
@@ -129,18 +273,51 @@ class MainWindow(QMainWindow):
             group.setLayout(group_layout)
             task_board.addWidget(group)
 
+        left_panel = QWidget()
+        left_panel.setObjectName("taskPanel")
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addLayout(task_bar)
+        left_layout.addLayout(task_board)
+        left_panel.setLayout(left_layout)
+
+        terminal_panel = QWidget()
+        terminal_panel.setObjectName("terminalPanel")
+        terminal_layout = QVBoxLayout()
+        terminal_layout.setContentsMargins(0, 0, 0, 0)
+        terminal_layout.addWidget(QLabel("实时终端"))
+        terminal_layout.addWidget(self.terminal, 1)
+        terminal_layout.addLayout(input_bar)
+        terminal_panel.setLayout(terminal_layout)
+
+        history_panel = QWidget()
+        history_panel.setObjectName("historyPanel")
+        history_layout = QVBoxLayout()
+        history_layout.setContentsMargins(0, 0, 0, 0)
+        history_layout.addLayout(history_bar)
+        history_layout.addWidget(self.history_list, 1)
+        history_panel.setLayout(history_layout)
+
+        self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._workspace_splitter.addWidget(left_panel)
+        self._workspace_splitter.addWidget(terminal_panel)
+        self._workspace_splitter.addWidget(history_panel)
+        self._workspace_splitter.setStretchFactor(0, 0)
+        self._workspace_splitter.setStretchFactor(1, 1)
+        self._workspace_splitter.setStretchFactor(2, 0)
+        self._workspace_splitter.setSizes([260, 720, 320])
+
         layout = QVBoxLayout()
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
         layout.addLayout(top_bar)
-        layout.addLayout(task_bar)
-        layout.addLayout(task_board)
-        layout.addWidget(self.terminal, 1)
-        layout.addLayout(history_bar)
-        layout.addWidget(self.history_list)
-        layout.addLayout(input_bar)
+        layout.addWidget(self._workspace_splitter, 1)
 
         container = QWidget()
+        container.setObjectName("appRoot")
         container.setLayout(layout)
         self.setCentralWidget(container)
+        self.setStyleSheet(MAIN_WINDOW_STYLESHEET)
 
         self.start_button.clicked.connect(self.start_session)
         self.stop_button.clicked.connect(self.stop_session)
@@ -207,6 +384,7 @@ class MainWindow(QMainWindow):
         self._output_buffer.reset()
         self._output_buffer.append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
         self._render_output_snapshot()
+        self.terminal.setFocus()
         self._flush_timer.start()
         self._sync_controls()
 
@@ -238,6 +416,11 @@ class MainWindow(QMainWindow):
             return
         self._session.write(text + "\r\n")
         self.command_input.clear()
+
+    def _write_terminal_input(self, text: str) -> None:
+        if self._session is None or not self._session.is_alive():
+            return
+        self._session.write(text)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self.stop_session()
@@ -408,6 +591,7 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(connected)
         self.command_input.setEnabled(connected)
         self.send_button.setEnabled(connected)
+        self.terminal.set_terminal_input_enabled(connected)
         self._sync_history_controls()
 
     def _sync_history_controls(self) -> None:
@@ -477,6 +661,18 @@ class MainWindow(QMainWindow):
 def run_hmi(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
     window = MainWindow(settings_store=SettingsStore.default())
-    window.resize(1000, 680)
+    window.resize(1280, 760)
     window.show()
     return app.exec()
+
+
+def _control_sequence_for_key(key: int) -> str | None:
+    if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+        return chr(key - Qt.Key.Key_A + 1)
+    if key == Qt.Key.Key_Space:
+        return "\x00"
+    return None
+
+
+def _normalize_terminal_input(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
