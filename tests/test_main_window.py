@@ -640,6 +640,62 @@ def test_main_window_lists_recent_workspaces_from_settings(tmp_path):
         app.processEvents()
 
 
+def test_main_window_disables_workspace_controls_while_any_agent_is_alive(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    store = SettingsStore(tmp_path / "settings.json")
+    workspace = tmp_path / "workspace"
+    recent = tmp_path / "recent"
+    workspace.mkdir()
+    recent.mkdir()
+    store.record_workspace(recent)
+    window = MainWindow(workspace_path=workspace, settings_store=store)
+
+    class FakeSession:
+        def drain(self):
+            return []
+
+        def is_alive(self):
+            return True
+
+        def stop(self):
+            pass
+
+    codex_state = window._agent_states["codex"]
+    codex_state.session = FakeSession()
+    codex_state.status = AgentSessionStatus.RUNNING
+
+    def select_agent(profile_id):
+        row = next(
+            index
+            for index, profile in enumerate(window._profiles)
+            if profile.id == profile_id
+        )
+        window.agent_list.setCurrentRow(row)
+
+    try:
+        select_agent("powershell")
+        window._sync_controls()
+        window._sync_recent_workspaces()
+
+        assert not window.choose_workspace_button.isEnabled()
+        assert not window.recent_workspace_combo.isEnabled()
+        assert window.command_input.isEnabled()
+        assert window.send_button.isEnabled()
+        assert window.selected_profile().id == "powershell"
+        assert window.start_button.isEnabled()
+        assert not window.stop_button.isEnabled()
+
+        select_agent("codex")
+
+        assert window.selected_profile().id == "codex"
+        assert not window.start_button.isEnabled()
+        assert window.stop_button.isEnabled()
+    finally:
+        codex_state.session = None
+        window.close()
+        app.processEvents()
+
+
 def test_main_window_indexes_started_and_stopped_sessions(tmp_path):
     app = QApplication.instance() or QApplication([])
     workspace = tmp_path / "workspace"
@@ -810,6 +866,33 @@ def test_main_window_loads_selected_clean_and_raw_history_logs(tmp_path):
 
         window.load_selected_raw_log()
         assert window.terminal.toPlainText() == "\x1b[32mRAW LOG\x1b[0m\n"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_history_log_loads_into_shared_chat_timeline(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _create_indexed_run(
+        workspace,
+        run_id="codex-run",
+        profile_id="codex",
+        profile_name="Codex",
+        clean_text="CLEAN CHAT LOG\n",
+        raw_text="\x1b[32mRAW CHAT LOG\x1b[0m\n",
+    )
+
+    window = MainWindow(workspace_path=workspace)
+    try:
+        window.refresh_run_history()
+        window.history_list.setCurrentRow(0)
+
+        window.load_selected_clean_log()
+
+        assert window.chat_timeline.toPlainText() == "CLEAN CHAT LOG\n"
+        assert window.terminal is window.chat_timeline
     finally:
         window.close()
         app.processEvents()

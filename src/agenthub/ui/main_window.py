@@ -761,7 +761,9 @@ class MainWindow(QMainWindow):
             for path in self._settings_store.load().recent_workspaces:
                 self.recent_workspace_combo.addItem(str(path), str(path))
         self.recent_workspace_combo.blockSignals(False)
-        self.recent_workspace_combo.setEnabled(self.recent_workspace_combo.count() > 0)
+        self.recent_workspace_combo.setEnabled(
+            not self._any_session_alive() and self.recent_workspace_combo.count() > 0
+        )
 
     def _select_recent_workspace(self, index: int) -> None:
         selected = self.recent_workspace_combo.itemData(index)
