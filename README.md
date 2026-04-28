@@ -24,6 +24,16 @@ $env:PYTHONPATH = "src"
 python -m agenthub.main hmi
 ```
 
+## HMI 共享聊天
+
+HMI 中间区域是共享聊天时间线。左侧 roster 可以分别启动
+PowerShell、Codex、Claude、Gemini；同一 workspace 内，不同 Agent 可并行
+运行。输入框支持 `@codex`、`@claude`、`@gemini`、`@powershell` 定向发送；
+无前缀时默认发送给 Codex。
+
+每个 Agent 仍独立写入 `.agenthub/runs/` 下的 raw/clean run 日志。任一
+Agent 在线时禁止切换 workspace。
+
 Run one explicit orchestration pass:
 
 ```powershell
@@ -31,7 +41,7 @@ $env:PYTHONPATH = "src"
 python -m agenthub.main orchestrate "Implement the requested change" --workspace C:\path\to\workspace
 ```
 
-The HMI currently supports manual PowerShell, Codex, Claude, and Gemini PTY sessions. Select the workspace directory, select the agent, start the session, then type commands or prompts into the input box.
+HMI 当前支持手动 PowerShell、Codex、Claude、Gemini PTY session。选择 workspace 后，在左侧 roster 启动所需 Agent，再通过共享输入框发送消息；需要指定目标时使用 `@agent` 前缀。
 
 Headless Claude/Gemini review is available through `agenthub.adapters.headless`.
 It uses `PipeBackend` to run one-shot non-interactive commands and returns a

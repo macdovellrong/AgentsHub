@@ -77,10 +77,15 @@ python -m agenthub.main hmi
 - 任务看板 UI：pending / running / review / done / failed。
 - 更强终端输出处理：从简单 ANSI 清洗升级到 terminal screen buffer。
 - 自动编排：Claude 拆任务、Codex 执行、Gemini review。
+- 共享聊天式多 Agent HMI：同一 workspace 下并行运行 PowerShell / Codex / Claude / Gemini，并通过 `@agent` 定向发送。
+- 多 Agent 会话保护：每个 Agent 独立写入 run 日志，任一 Agent 在线时禁止切换 workspace。
 
 ## 未完成任务
 
-- 暂无。
+- 角色 prompt 编辑器。
+- 自主 Agent-to-Agent 编排与转发。
+- 同 profile 多实例、写入锁与 git worktree 隔离。
+- 超出功能性共享时间线的富文本聊天渲染。
 
 ## 安全与配置提示
 
