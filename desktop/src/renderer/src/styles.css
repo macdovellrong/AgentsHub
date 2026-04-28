@@ -1,0 +1,162 @@
+:root {
+  color: #d8dee9;
+  background: #111318;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+button {
+  border: 1px solid #3c4657;
+  border-radius: 6px;
+  background: #202735;
+  color: #f8fafc;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+button:hover:not(:disabled) {
+  background: #2a3446;
+  border-color: #59667a;
+}
+
+button:disabled {
+  color: #7e8795;
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-height: 100%;
+  background: #111318;
+}
+
+.topbar {
+  align-items: center;
+  border-bottom: 1px solid #2c3340;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 72px;
+  padding: 14px 18px;
+}
+
+.topbar h1 {
+  color: #f8fafc;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.topbar p {
+  color: #9aa4b2;
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.status-pill {
+  border: 1px solid #3c4657;
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 72px;
+  padding: 7px 10px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.status-online {
+  background: #12351f;
+  border-color: #2f7d48;
+  color: #8ef0a7;
+}
+
+.status-starting {
+  background: #34280f;
+  border-color: #8a6b22;
+  color: #f2cc60;
+}
+
+.status-error {
+  background: #3b1719;
+  border-color: #8f3438;
+  color: #ff9da1;
+}
+
+.workspace-row {
+  align-items: center;
+  border-bottom: 1px solid #252b35;
+  color: #9aa4b2;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 42px;
+  padding: 8px 18px;
+}
+
+.workspace-row span {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.workspace-row code {
+  color: #d8dee9;
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-banner {
+  background: #3b1719;
+  border-bottom: 1px solid #8f3438;
+  color: #ffd4d6;
+  font-size: 13px;
+  padding: 10px 18px;
+}
+
+.terminal-pane {
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 12px 12px;
+}
+
+.terminal-pane .xterm {
+  height: 100%;
+}
+
+.terminal-pane .xterm-viewport {
+  scrollbar-color: #4a5363 #12161d;
+}
