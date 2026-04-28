@@ -11,6 +11,7 @@ from agenthub.storage.run_index import RunIndexStore, RunStatus
 from agenthub.storage.run_logs import RunLogPaths, RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.storage.tasks import TaskStatus, TaskStore
+from agenthub.ui.agent_session import AgentSessionStatus, create_agent_states
 from agenthub.ui.main_window import MainWindow
 
 
@@ -31,6 +32,23 @@ def test_main_window_constructs_with_initial_controls_disabled():
             TaskStatus.DONE,
             TaskStatus.FAILED,
         }
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_create_agent_states_initializes_each_profile_independently():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        states = create_agent_states(window._profiles)
+
+        assert set(states) == {"powershell", "codex", "claude", "gemini"}
+        assert states["codex"].profile.id == "codex"
+        assert states["codex"].status == AgentSessionStatus.OFFLINE
+        assert states["codex"].session is None
+        assert states["codex"].run_id is None
+        assert states["codex"].output_buffer.snapshot() == ""
     finally:
         window.close()
         app.processEvents()
