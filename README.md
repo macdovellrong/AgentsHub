@@ -24,6 +24,13 @@ $env:PYTHONPATH = "src"
 python -m agenthub.main hmi
 ```
 
+Run one explicit orchestration pass:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m agenthub.main orchestrate "Implement the requested change" --workspace C:\path\to\workspace
+```
+
 The HMI currently supports manual PowerShell, Codex, Claude, and Gemini PTY sessions. Select the workspace directory, select the agent, start the session, then type commands or prompts into the input box.
 
 Headless Claude/Gemini review is available through `agenthub.adapters.headless`.
@@ -49,6 +56,13 @@ workspace, start/end time, log paths, and status.
 Tasks are persisted per workspace at `<workspace>/.agenthub/tasks/tasks.jsonl`.
 Use `agenthub.storage.tasks.TaskStore` to create tasks, update their status, and
 attach a related `run_id`.
+
+Automatic orchestration is only triggered by the explicit `orchestrate` CLI
+command. It asks Claude to split the requirement into tasks, persists those
+tasks in the selected workspace, runs each task through `codex exec` with the
+`workspace-write` sandbox, then asks Gemini for a headless review. It does not
+start from the HMI or at process startup, and it does not use bypass-danger
+approval flags.
 
 The HMI shows a task board for the selected workspace, grouped by pending,
 running, review, done, and failed status. Use "刷新任务" to reload

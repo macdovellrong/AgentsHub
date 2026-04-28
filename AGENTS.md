@@ -76,10 +76,11 @@ python -m agenthub.main hmi
 - 任务模型：标题、描述、状态、关联 run，位于 `<workspace>/.agenthub/tasks/tasks.jsonl`。
 - 任务看板 UI：pending / running / review / done / failed。
 - 更强终端输出处理：从简单 ANSI 清洗升级到 terminal screen buffer。
+- 自动编排：Claude 拆任务、Codex 执行、Gemini review。
 
 ## 未完成任务
 
-- 自动编排：Claude 拆任务、Codex 执行、Gemini review。
+- 暂无。
 
 ## 安全与配置提示
 
