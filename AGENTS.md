@@ -80,6 +80,7 @@ python -m agenthub.main hmi
 - 共享聊天式多 Agent HMI：同一 workspace 下并行运行 PowerShell / Codex / Claude / Gemini，并通过 `@agent` 定向发送。
 - 多 Agent 会话保护：每个 Agent 独立写入 run 日志，任一 Agent 在线时禁止切换 workspace。
 - Electron + xterm.js + node-pty 迁移设计 spec，目标是替代 PyQt 文本框终端渲染。
+- Electron 终端 smoke 实现计划。
 
 ## 未完成任务
 
