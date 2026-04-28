@@ -35,7 +35,12 @@ from agenthub.ui.agent_session import (
     AgentSessionStatus,
     create_agent_states,
 )
-from agenthub.ui.chat import ChatMessageKind, format_chat_message, new_chat_message
+from agenthub.ui.chat import (
+    ChatMessageKind,
+    format_chat_message,
+    new_chat_message,
+    parse_routed_input,
+)
 
 
 TASK_STATUS_LABELS = {
@@ -197,7 +202,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AgentHub")
         self._profiles = profiles
         self._agent_states = create_agent_states(self._profiles)
-        self._default_agent_id = "codex"
+        self._default_agent_id = self._derive_default_agent_id(self._profiles)
         self._settings_store = settings_store
         self._workspace_path = self._initial_workspace(workspace_path)
         self._explicit_log_root = log_root is not None
@@ -431,13 +436,33 @@ class MainWindow(QMainWindow):
             self._sync_controls()
 
     def send_command(self) -> None:
-        state = self.selected_agent_state()
-        if state.session is None or not state.session.is_alive():
+        default_agent_id = self._default_agent_id or ""
+        routed = parse_routed_input(
+            self.command_input.text(),
+            known_agent_ids=set(self._agent_states),
+            default_agent_id=default_agent_id,
+        )
+        if routed.error_message is not None:
+            self._append_system_message(routed.error_message)
             return
-        text = self.command_input.text().strip()
-        if not text:
+
+        target_agent_id = routed.target_agent_id
+        if target_agent_id is None or target_agent_id not in self._agent_states:
+            self._append_system_message("没有可用的默认 Agent")
             return
-        state.session.write(text + "\r\n")
+
+        state = self._agent_states[target_agent_id]
+        if not state.is_alive():
+            self._append_system_message(f"{state.profile.display_name} 未启动")
+            return
+
+        state.session.write(routed.text + "\r\n")
+        self._append_chat_message(
+            sender_id="user",
+            sender_name=f"你 -> {state.profile.display_name}",
+            text=routed.text,
+            kind=ChatMessageKind.USER,
+        )
         self.command_input.clear()
 
     def _write_terminal_input(self, text: str) -> None:
@@ -668,18 +693,18 @@ class MainWindow(QMainWindow):
         self.chat_timeline.moveCursor(QTextCursor.MoveOperation.End)
 
     def _sync_controls(self) -> None:
-        state = self.selected_agent_state()
-        selected_connected = state.is_alive()
+        state = self.selected_agent_state() if self._profiles else None
+        selected_connected = state.is_alive() if state is not None else False
         any_connected = self._any_session_alive()
         self.choose_workspace_button.setEnabled(not any_connected)
         self.recent_workspace_combo.setEnabled(
             not any_connected and self.recent_workspace_combo.count() > 0
         )
         self.agent_combo.setEnabled(True)
-        self.start_button.setEnabled(not selected_connected)
+        self.start_button.setEnabled(state is not None and not selected_connected)
         self.stop_button.setEnabled(selected_connected)
-        self.command_input.setEnabled(selected_connected)
-        self.send_button.setEnabled(selected_connected)
+        self.command_input.setEnabled(any_connected)
+        self.send_button.setEnabled(any_connected)
         self.terminal.set_terminal_input_enabled(selected_connected)
         if selected_connected:
             self.status_label.setText(f"{state.profile.display_name} 在线")
@@ -712,7 +737,19 @@ class MainWindow(QMainWindow):
         self.view_raw_button.setEnabled(has_selection)
 
     def _sync_agent_placeholder(self) -> None:
-        self.command_input.setPlaceholderText(self.selected_profile().placeholder)
+        route_hints = " / ".join(f"@{profile.id}" for profile in self._profiles)
+        default_state = (
+            self._agent_states.get(self._default_agent_id)
+            if self._default_agent_id is not None
+            else None
+        )
+        if default_state is None:
+            self.command_input.setPlaceholderText("没有可用 Agent，无法发送共享消息")
+            return
+        self.command_input.setPlaceholderText(
+            f"输入共享消息，默认 {default_state.profile.display_name}；"
+            f"可用 {route_hints} 定向发送"
+        )
 
     def _sync_workspace_label(self) -> None:
         self.workspace_label.setText(str(self._workspace_path))
@@ -759,6 +796,17 @@ class MainWindow(QMainWindow):
 
     def _default_log_root(self) -> Path:
         return self._workspace_path / ".agenthub" / "runs"
+
+    @staticmethod
+    def _derive_default_agent_id(
+        profiles: tuple[AgentProfile, ...],
+    ) -> str | None:
+        profile_ids = [profile.id for profile in profiles]
+        if "codex" in profile_ids:
+            return "codex"
+        if profile_ids:
+            return profile_ids[0]
+        return None
 
     def _initial_workspace(self, explicit_workspace: Path | str | None) -> Path:
         if explicit_workspace is not None:

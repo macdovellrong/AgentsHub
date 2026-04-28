@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from agenthub.adapters.profiles import AgentProfile
 from agenthub.process.base import OutputEvent, StreamName
 from agenthub.storage.run_index import RunIndexStore, RunStatus
 from agenthub.storage.run_logs import RunLogPaths, RunLogWriter
@@ -54,7 +55,7 @@ def test_create_agent_states_initializes_each_profile_independently():
         app.processEvents()
 
 
-def test_main_window_lists_agent_profiles_and_updates_prompt_placeholder():
+def test_main_window_lists_agent_profiles_and_shows_shared_route_placeholder():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     try:
@@ -64,19 +65,31 @@ def test_main_window_lists_agent_profiles_and_updates_prompt_placeholder():
         ]
 
         assert labels == ["PowerShell", "Codex", "Claude", "Gemini"]
-        assert window.command_input.placeholderText() == "输入 PowerShell 命令"
+        placeholder = window.command_input.placeholderText()
+        assert "@codex" in placeholder
+        assert "默认 Codex" in placeholder
 
-        window.agent_combo.setCurrentIndex(1)
+        window.agent_list.setCurrentRow(3)
 
-        assert window.command_input.placeholderText() == "输入 Codex prompt"
+        assert window.command_input.placeholderText() == placeholder
+        assert "Gemini prompt" not in window.command_input.placeholderText()
+    finally:
+        window.close()
+        app.processEvents()
 
-        window.agent_combo.setCurrentIndex(2)
 
-        assert window.command_input.placeholderText() == "输入 Claude prompt"
+def test_main_window_constructs_without_profiles_with_clean_placeholder():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(profiles=())
+    try:
+        assert not window.start_button.isEnabled()
+        assert not window.stop_button.isEnabled()
+        assert not window.command_input.isEnabled()
+        assert not window.send_button.isEnabled()
 
-        window.agent_combo.setCurrentIndex(3)
-
-        assert window.command_input.placeholderText() == "输入 Gemini prompt"
+        placeholder = window.command_input.placeholderText()
+        assert "没有可用 Agent" in placeholder
+        assert "可用  定向发送" not in placeholder
     finally:
         window.close()
         app.processEvents()
@@ -355,6 +368,173 @@ def test_main_window_starts_multiple_different_agent_sessions(tmp_path):
         assert len(created) == 2
         records = RunIndexStore.for_workspace(workspace).list_records()
         assert sorted(record.profile_id for record in records) == ["codex", "powershell"]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_routes_at_agent_input_without_switching_view(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+
+    class FakeSession:
+        def __init__(self):
+            self.writes = []
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def is_alive(self):
+            return True
+
+        def drain(self):
+            return []
+
+        def stop(self):
+            pass
+
+    codex = FakeSession()
+    gemini = FakeSession()
+    window._agent_states["codex"].session = codex
+    window._agent_states["codex"].status = AgentSessionStatus.RUNNING
+    window._agent_states["gemini"].session = gemini
+    window._agent_states["gemini"].status = AgentSessionStatus.RUNNING
+    try:
+        window.agent_list.setCurrentRow(1)
+        window.command_input.setText("@gemini review current diff")
+
+        window.send_command()
+
+        assert codex.writes == []
+        assert gemini.writes == ["review current diff\r\n"]
+        timeline_text = window.chat_timeline.toPlainText()
+        assert "你 -> Gemini" in timeline_text
+        assert "review current diff" in timeline_text
+        assert window.agent_list.currentRow() == 1
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_routes_unprefixed_input_to_default_agent_without_switching_view(
+    tmp_path,
+):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+
+    class FakeSession:
+        def __init__(self):
+            self.writes = []
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def is_alive(self):
+            return True
+
+        def drain(self):
+            return []
+
+        def stop(self):
+            pass
+
+    codex = FakeSession()
+    gemini = FakeSession()
+    window._agent_states["codex"].session = codex
+    window._agent_states["codex"].status = AgentSessionStatus.RUNNING
+    window._agent_states["gemini"].session = gemini
+    window._agent_states["gemini"].status = AgentSessionStatus.RUNNING
+    try:
+        window.agent_list.setCurrentRow(3)
+        window.command_input.setText("please implement")
+
+        window.send_command()
+
+        assert codex.writes == ["please implement\r\n"]
+        assert gemini.writes == []
+        timeline_text = window.chat_timeline.toPlainText()
+        assert "你 -> Codex" in timeline_text
+        assert "please implement" in timeline_text
+        assert window.agent_list.currentRow() == 3
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_routes_unprefixed_input_to_first_custom_profile_without_codex(
+    tmp_path,
+):
+    app = QApplication.instance() or QApplication([])
+    profiles = (
+        AgentProfile(
+            id="alpha",
+            display_name="Alpha",
+            command=("alpha.exe",),
+            placeholder="Alpha prompt",
+        ),
+        AgentProfile(
+            id="gemini",
+            display_name="Gemini",
+            command=("gemini.exe",),
+            placeholder="Gemini prompt",
+        ),
+    )
+    window = MainWindow(profiles=profiles, log_root=tmp_path)
+
+    class FakeSession:
+        def __init__(self):
+            self.writes = []
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def is_alive(self):
+            return True
+
+        def drain(self):
+            return []
+
+        def stop(self):
+            pass
+
+    alpha = FakeSession()
+    gemini = FakeSession()
+    window._agent_states["alpha"].session = alpha
+    window._agent_states["alpha"].status = AgentSessionStatus.RUNNING
+    window._agent_states["gemini"].session = gemini
+    window._agent_states["gemini"].status = AgentSessionStatus.RUNNING
+    try:
+        window.agent_list.setCurrentRow(1)
+        window.command_input.setText("please implement")
+
+        window.send_command()
+
+        assert alpha.writes == ["please implement\r\n"]
+        assert gemini.writes == []
+        timeline_text = window.chat_timeline.toPlainText()
+        assert "你 -> Alpha" in timeline_text
+        assert "please implement" in timeline_text
+        assert window.agent_list.currentRow() == 1
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_rejects_unknown_or_offline_routed_agent(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+    try:
+        window.command_input.setText("@reviewer inspect")
+        window.send_command()
+
+        assert "未知 Agent: reviewer" in window.chat_timeline.toPlainText()
+        assert window.command_input.text() == "@reviewer inspect"
+
+        window.command_input.setText("@codex implement")
+        window.send_command()
+
+        assert "Codex 未启动" in window.chat_timeline.toPlainText()
+        assert window.command_input.text() == "@codex implement"
     finally:
         window.close()
         app.processEvents()
