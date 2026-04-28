@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -30,9 +31,10 @@ type RunMeta = {
 
 export class RunLogStore {
   private readonly runs = new Map<string, RunRecord>();
+  private readonly appendQueues = new Map<string, Promise<void>>();
 
   async createRun(input: CreateRunInput): Promise<RunRecord> {
-    const runId = this.createRunId(input.profileId);
+    const runId = this.createRunId();
     const runPath = path.join(input.workspacePath, ".agenthub", "runs", runId);
     const rawLogPath = path.join(runPath, "raw.log");
     const metaPath = path.join(runPath, "meta.json");
@@ -67,11 +69,20 @@ export class RunLogStore {
 
   async appendRaw(runId: string, chunk: string): Promise<void> {
     const run = this.requireRun(runId);
-    await appendFile(run.rawLogPath, chunk, "utf8");
+    const previous = this.appendQueues.get(runId) ?? Promise.resolve();
+    const next = previous.then(() => appendFile(run.rawLogPath, chunk, "utf8"));
+    this.appendQueues.set(
+      runId,
+      next.catch(() => {
+        // Keep later writes from being permanently blocked by one failed append.
+      }),
+    );
+    await next;
   }
 
   async markExited(runId: string, exitCode: number | null): Promise<void> {
     const run = this.requireRun(runId);
+    await this.waitForPendingAppends(runId);
     const meta = JSON.parse(await readFile(run.metaPath, "utf8")) as RunMeta;
     meta.status = "exited";
     meta.exitCode = exitCode;
@@ -87,9 +98,15 @@ export class RunLogStore {
     return run;
   }
 
-  private createRunId(profileId: string): string {
+  private createRunId(): string {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const suffix = Math.random().toString(16).slice(2, 10);
-    return `${stamp}-${profileId}-${suffix}`;
+    return `${stamp}-${randomUUID()}`;
+  }
+
+  private async waitForPendingAppends(runId: string): Promise<void> {
+    const pending = this.appendQueues.get(runId);
+    if (pending) {
+      await pending;
+    }
   }
 }
