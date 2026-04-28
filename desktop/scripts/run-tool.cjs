@@ -28,11 +28,18 @@ function quoteCmdArg(value) {
     throw new Error("Command arguments cannot contain newlines");
   }
 
-  return `"${value
-    .replace(/\^/g, "^^")
-    .replace(/"/g, '""')
-    .replace(/%/g, "^%")
-    .replace(/!/g, "^!")}"`;
+  let escaped = value.replace(/%/g, "^%");
+
+  if (escaped.includes('"')) {
+    escaped = escaped
+      .replace(/\^/g, "^^")
+      .replace(/&/g, "^&")
+      .replace(/\|/g, "^|")
+      .replace(/</g, "^<")
+      .replace(/>/g, "^>");
+  }
+
+  return `"${escaped.replace(/"/g, '\\"')}"`;
 }
 
 function run(command, args, options = {}) {
@@ -68,7 +75,7 @@ const commandBody = [
   ...toolArgs.map(quoteCmdArg),
 ].join(" ");
 
-run("cmd.exe", ["/v:on", "/d", "/s", "/c", `"${commandBody}"`], {
+run("cmd.exe", ["/d", "/s", "/c", `"${commandBody}"`], {
   cwd: process.env.SystemRoot || "C:\\Windows",
   windowsVerbatimArguments: true,
 });
