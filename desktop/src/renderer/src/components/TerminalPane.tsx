@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { fitAndReportTerminalSize } from "./terminal-size";
+import { fitAndReportTerminalSize, type TerminalSize } from "./terminal-size";
 
 type TerminalPaneProps = {
   sessionId: string | null;
@@ -13,11 +13,13 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const reportedSizeRef = useRef<TerminalSize | null>(null);
   const sessionIdRef = useRef(sessionId);
   const onResizeRef = useRef(onResize);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
+    reportedSizeRef.current = null;
   }, [sessionId]);
 
   useEffect(() => {
@@ -67,7 +69,6 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     fitAddonRef.current = fitAddon;
     terminal.loadAddon(fitAddon);
     terminal.open(container);
-    fitAddon.fit();
     terminal.focus();
 
     const dataSubscription = terminal.onData((data) => {
@@ -90,7 +91,13 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     });
 
     const fitAndReport = () => {
-      fitAndReportTerminalSize(sessionIdRef.current, terminal, fitAddon, onResizeRef.current);
+      reportedSizeRef.current = fitAndReportTerminalSize(
+        sessionIdRef.current,
+        terminal,
+        fitAddon,
+        onResizeRef.current,
+        reportedSizeRef.current,
+      );
     };
 
     const resizeObserver = new ResizeObserver(fitAndReport);
@@ -115,7 +122,13 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       return;
     }
 
-    fitAndReportTerminalSize(sessionId, terminal, fitAddon, onResizeRef.current);
+    reportedSizeRef.current = fitAndReportTerminalSize(
+      sessionId,
+      terminal,
+      fitAddon,
+      onResizeRef.current,
+      reportedSizeRef.current,
+    );
   }, [sessionId]);
 
   return <section className="terminal-pane" ref={containerRef} aria-label="Terminal" />;

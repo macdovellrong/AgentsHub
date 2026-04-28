@@ -23,6 +23,20 @@ Run the minimal desktop HMI:
 .\scripts\start-hmi.ps1
 ```
 
+## Electron terminal smoke
+
+The PyQt HMI remains available as the current Python prototype. The new terminal
+renderer is being built in `desktop/` with Electron, xterm.js, and node-pty.
+
+```powershell
+cd desktop
+npm install
+npm run dev
+```
+
+Click `Start PowerShell` to start a ConPTY-backed PowerShell session rendered by
+xterm.js. Raw terminal logs are written under `<workspace>/.agenthub/runs/`.
+
 ## HMI 共享聊天
 
 HMI 中间区域是共享聊天时间线。左侧 roster 可以分别启动

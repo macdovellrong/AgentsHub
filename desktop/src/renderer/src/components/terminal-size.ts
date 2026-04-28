@@ -1,4 +1,4 @@
-type TerminalSize = {
+export type TerminalSize = {
   cols: number;
   rows: number;
 };
@@ -12,11 +12,24 @@ export function fitAndReportTerminalSize(
   terminal: TerminalSize,
   fitAddon: FitAddonLike,
   onResize: (cols: number, rows: number) => void,
-): void {
+  lastReportedSize: TerminalSize | null = null,
+): TerminalSize | null {
   if (!sessionId) {
-    return;
+    return lastReportedSize;
   }
 
-  fitAddon.fit();
-  onResize(terminal.cols, terminal.rows);
+  try {
+    fitAddon.fit();
+  } catch {
+    return lastReportedSize;
+  }
+
+  const nextSize = { cols: terminal.cols, rows: terminal.rows };
+
+  if (lastReportedSize?.cols === nextSize.cols && lastReportedSize.rows === nextSize.rows) {
+    return lastReportedSize;
+  }
+
+  onResize(nextSize.cols, nextSize.rows);
+  return nextSize;
 }

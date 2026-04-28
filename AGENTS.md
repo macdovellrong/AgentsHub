@@ -2,12 +2,15 @@
 
 ## 项目结构与模块组织
 
-本仓库是 Python `src/` 布局。主代码在 `src/agenthub/`：
+本仓库当前包含 Python 原型和 Electron 终端 smoke。主代码位置：
 
 - `process/`：PTY、subprocess pipe、输出清洗、交互式终端会话。
 - `ui/`：PySide6 HMI、输出缓冲、workspace 选择、历史 runs UI。
 - `storage/`：run 日志、运行索引、任务模型、用户设置、最近 workspace。
 - `adapters/`：PowerShell、Codex、Claude、Gemini 等 agent 启动 profile。
+- `desktop/`：Electron + xterm.js + node-pty 桌面端终端 smoke。
+- `desktop/src/main/`：Electron 主进程、IPC、PTY session 管理、run log 持久化。
+- `desktop/src/renderer/`：React + xterm.js 终端 UI。
 - `tests/`：pytest 测试。
 - `docs/superpowers/`：设计 spec 和实现计划。
 
@@ -40,6 +43,23 @@ python -m agenthub.main pipe-smoke
 ```powershell
 $env:PYTHONPATH = "src"
 python -m agenthub.main hmi
+```
+
+运行 Electron 终端 smoke：
+
+```powershell
+cd desktop
+npm install
+npm run dev
+```
+
+Electron 侧校验命令：
+
+```powershell
+cd desktop
+npm run typecheck
+npm test
+npm run build
 ```
 
 ## 编码风格与命名约定
@@ -81,11 +101,11 @@ python -m agenthub.main hmi
 - 多 Agent 会话保护：每个 Agent 独立写入 run 日志，任一 Agent 在线时禁止切换 workspace。
 - Electron + xterm.js + node-pty 迁移设计 spec，目标是替代 PyQt 文本框终端渲染。
 - Electron 终端 smoke 实现计划。
+- Electron HMI 新桌面壳，目录为 `desktop/`。
+- xterm.js + node-pty PowerShell 终端 smoke：支持启动 ConPTY、xterm 输入输出、raw log 持久化。
 
 ## 未完成任务
 
-- Electron HMI 新桌面壳，目录计划为 `desktop/`。
-- xterm.js + node-pty PowerShell 终端 smoke。
 - 多 Agent 独立终端窗口/停靠面板。
 - Agent profile 与角色 prompt 编辑器，支持多个 profile 指向同一个 CLI。
 - 中央结果流与 `.agenthub/events.jsonl`。

@@ -6,4 +6,6 @@ __pycache__/
 .worktrees/
 node_modules/
 desktop/out/
+desktop/dev-smoke*.log
+desktop/electron-*.png
 *.egg-info/

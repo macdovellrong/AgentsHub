@@ -22,6 +22,8 @@ let mainWindow: BrowserWindow | null = null;
 app.commandLine.appendSwitch("disable-gpu");
 app.commandLine.appendSwitch("disable-gpu-compositing");
 app.commandLine.appendSwitch("in-process-gpu");
+// Source runs from Windows UNC/mapped drives can fail to launch Chromium child processes with the sandbox enabled.
+app.commandLine.appendSwitch("no-sandbox");
 app.disableHardwareAcceleration();
 
 function createWindow(): BrowserWindow {
@@ -37,10 +39,22 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
       preload: preloadPath,
     },
   });
+
+  if (process.env.NODE_ENV === "development") {
+    window.webContents.on("console-message", (details) => {
+      console.log(`[renderer:${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`);
+    });
+    window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+      console.error(`[renderer:load-failed] ${errorCode} ${errorDescription} ${validatedUrl}`);
+    });
+    window.webContents.on("render-process-gone", (_event, details) => {
+      console.error(`[renderer:gone] ${details.reason} exitCode=${details.exitCode}`);
+    });
+  }
 
   mainWindow = window;
   window.on("closed", () => {

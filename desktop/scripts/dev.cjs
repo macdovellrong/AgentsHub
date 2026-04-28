@@ -1,14 +1,5 @@
 const { spawnSync } = require("node:child_process");
 
-const electronCliArgs = JSON.parse(process.env.ELECTRON_CLI_ARGS || "[]");
-const gpuSafeArgs = ["--disable-gpu", "--disable-gpu-compositing", "--in-process-gpu"];
-
-for (const arg of gpuSafeArgs) {
-  if (!electronCliArgs.includes(arg)) {
-    electronCliArgs.push(arg);
-  }
-}
-
 const result = spawnSync(
   process.execPath,
   [
@@ -20,7 +11,7 @@ const result = spawnSync(
     stdio: "inherit",
     env: {
       ...process.env,
-      ELECTRON_CLI_ARGS: JSON.stringify(electronCliArgs),
+      NO_SANDBOX: process.env.NO_SANDBOX || "1",
     },
   },
 );
