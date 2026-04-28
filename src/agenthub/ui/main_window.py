@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from agenthub.adapters.profiles import DEFAULT_AGENT_PROFILES, AgentProfile
 from agenthub.process.interactive_pty import InteractivePtySession
+from agenthub.storage.run_index import RunIndexStore, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.ui.output_buffer import OutputBuffer
@@ -42,6 +43,8 @@ class MainWindow(QMainWindow):
         self._explicit_log_root = log_root is not None
         self._log_root = Path(log_root) if log_root is not None else self._default_log_root()
         self._log_writer: RunLogWriter | None = None
+        self._run_index_store: RunIndexStore | None = None
+        self._active_run_id: str | None = None
         self._active_profile: AgentProfile | None = None
         self._session: InteractivePtySession | None = None
         self._output_buffer = OutputBuffer(max_chars=200_000)
@@ -106,25 +109,37 @@ class MainWindow(QMainWindow):
         if self._session is not None and self._session.is_alive():
             return
         profile = self.selected_profile()
-        self._session = self._create_session(profile)
-        try:
-            self._session.start()
-        except Exception as exc:
-            self._session = None
-            self._append_text(f"启动失败: {exc}\n")
-            self._sync_controls()
-            return
         try:
             self._log_writer = RunLogWriter.create(
                 root=self._log_root,
                 profile_id=profile.id,
             )
+            self._run_index_store = RunIndexStore.for_workspace(self._workspace_path)
+            self._active_run_id = self._log_writer.paths.run_id
+            self._run_index_store.create_run(
+                profile_id=profile.id,
+                profile_name=profile.display_name,
+                workspace_path=self._workspace_path,
+                log_paths=self._log_writer.paths,
+                status=RunStatus.STARTING,
+            )
         except Exception as exc:
-            self._session.stop()
-            self._session = None
-            self._append_text(f"日志启动失败: {exc}\n")
+            self._cleanup_inactive_run()
+            self._append_text(f"运行记录启动失败: {exc}\n")
             self._sync_controls()
             return
+
+        self._session = self._create_session(profile, run_id=self._active_run_id)
+        try:
+            self._session.start()
+        except Exception as exc:
+            self._finish_active_run(RunStatus.START_FAILED, error_message=str(exc))
+            self._session = None
+            self._append_text(f"启动失败: {exc}\n")
+            self._sync_controls()
+            return
+
+        self._mark_active_run(RunStatus.RUNNING)
         self._active_profile = profile
         self.status_label.setText(f"{profile.display_name} 在线")
         self._append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
@@ -143,11 +158,9 @@ class MainWindow(QMainWindow):
                 self._session.write("exit\r\n")
         finally:
             self._session.stop()
-            self._drain_session()
+            self._drain_session(mark_exited=False)
             self._session = None
-            if self._log_writer is not None:
-                self._log_writer.close()
-                self._log_writer = None
+            self._finish_active_run(RunStatus.STOPPED)
             self._active_profile = None
             self._flush_timer.stop()
             self.status_label.setText("已停止")
@@ -196,14 +209,18 @@ class MainWindow(QMainWindow):
         if selected:
             self.set_workspace(selected)
 
-    def _create_session(self, profile: AgentProfile) -> InteractivePtySession:
+    def _create_session(
+        self,
+        profile: AgentProfile,
+        run_id: str | None = None,
+    ) -> InteractivePtySession:
         return InteractivePtySession(
-            run_id=f"hmi-{profile.id}",
+            run_id=run_id or f"hmi-{profile.id}",
             command=profile.command,
             cwd=self._workspace_path,
         )
 
-    def _drain_session(self) -> None:
+    def _drain_session(self, mark_exited: bool = True) -> None:
         if self._session is None:
             return
         for event in self._session.drain():
@@ -215,11 +232,43 @@ class MainWindow(QMainWindow):
             self._append_text(text)
         if not self._session.is_alive():
             self.status_label.setText("进程已退出")
-            if self._log_writer is not None:
-                self._log_writer.close()
-                self._log_writer = None
+            if mark_exited:
+                self._finish_active_run(RunStatus.EXITED)
             self._flush_timer.stop()
             self._sync_controls()
+
+    def _mark_active_run(
+        self,
+        status: RunStatus,
+        *,
+        error_message: str | None = None,
+    ) -> None:
+        if self._run_index_store is None or self._active_run_id is None:
+            return
+        try:
+            self._run_index_store.update_status(
+                self._active_run_id,
+                status,
+                error_message=error_message,
+            )
+        except Exception as exc:
+            self._append_text(f"运行记录更新失败: {exc}\n")
+
+    def _finish_active_run(
+        self,
+        status: RunStatus,
+        *,
+        error_message: str | None = None,
+    ) -> None:
+        self._mark_active_run(status, error_message=error_message)
+        self._cleanup_inactive_run()
+
+    def _cleanup_inactive_run(self) -> None:
+        if self._log_writer is not None:
+            self._log_writer.close()
+            self._log_writer = None
+        self._run_index_store = None
+        self._active_run_id = None
 
     def _append_text(self, text: str) -> None:
         cursor = self.terminal.textCursor()

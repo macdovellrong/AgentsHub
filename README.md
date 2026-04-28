@@ -32,3 +32,7 @@ Each HMI session writes logs under `<workspace>/.agenthub/runs/<run-id>/`:
 
 - `raw.log`: the original PTY terminal stream, including ANSI/control sequences.
 - `clean.log`: the display-safe text stream used by the HMI.
+
+Each workspace also keeps a queryable run index at
+`<workspace>/.agenthub/runs/runs.jsonl`. Each record includes the agent profile,
+workspace, start/end time, log paths, and status.

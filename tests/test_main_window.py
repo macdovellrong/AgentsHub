@@ -5,6 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from agenthub.process.base import OutputEvent, StreamName
+from agenthub.storage.run_index import RunIndexStore, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.ui.main_window import MainWindow
@@ -178,6 +179,125 @@ def test_main_window_lists_recent_workspaces_from_settings(tmp_path):
         ]
 
         assert items == [str(second), str(first)]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_indexes_started_and_stopped_sessions(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    window = MainWindow(workspace_path=workspace)
+
+    class FakeSession:
+        def __init__(self):
+            self.alive = False
+            self.writes = []
+
+        def start(self):
+            self.alive = True
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def drain(self):
+            return []
+
+        def is_alive(self):
+            return self.alive
+
+        def stop(self):
+            self.alive = False
+
+    fake_session = FakeSession()
+    window._create_session = lambda profile, run_id=None: fake_session
+    try:
+        window.start_session()
+
+        store = RunIndexStore.for_workspace(workspace)
+        records = store.list_records()
+        assert len(records) == 1
+        assert records[0].profile_id == "powershell"
+        assert records[0].profile_name == "PowerShell"
+        assert records[0].workspace_path == workspace
+        assert records[0].status == RunStatus.RUNNING
+        assert records[0].ended_at is None
+
+        window.stop_session()
+
+        records = store.list_records()
+        assert len(records) == 1
+        assert records[0].status == RunStatus.STOPPED
+        assert records[0].ended_at is not None
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_marks_index_exited_when_session_process_ends(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    window = MainWindow(workspace_path=workspace)
+
+    class FakeSession:
+        def __init__(self):
+            self.alive = False
+
+        def start(self):
+            self.alive = True
+
+        def drain(self):
+            return []
+
+        def is_alive(self):
+            return self.alive
+
+        def stop(self):
+            self.alive = False
+
+    fake_session = FakeSession()
+    window._create_session = lambda profile, run_id=None: fake_session
+    try:
+        window.start_session()
+        fake_session.alive = False
+
+        window._drain_session()
+
+        records = RunIndexStore.for_workspace(workspace).list_records()
+        assert len(records) == 1
+        assert records[0].status == RunStatus.EXITED
+        assert records[0].ended_at is not None
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_indexes_start_failure(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    window = MainWindow(workspace_path=workspace)
+
+    class FailingSession:
+        def start(self):
+            raise RuntimeError("boom")
+
+        def stop(self):
+            pass
+
+    window._create_session = lambda profile, run_id=None: FailingSession()
+    try:
+        window.start_session()
+
+        records = RunIndexStore.for_workspace(workspace).list_records()
+        assert len(records) == 1
+        assert records[0].status == RunStatus.START_FAILED
+        assert records[0].ended_at is not None
+        assert records[0].error_message == "boom"
+        assert window._log_writer is None
+        assert window._active_run_id is None
     finally:
         window.close()
         app.processEvents()

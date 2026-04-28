@@ -70,10 +70,10 @@ python -m agenthub.main hmi
 - PTY raw/clean 日志持久化。
 - workspace 选择器。
 - 最近 workspace 记忆，配置位于 `%APPDATA%\AgentHub\settings.json`。
+- 运行记录索引，位于 `<workspace>/.agenthub/runs/runs.jsonl`。
 
 ## 未完成任务
 
-- 运行记录索引：记录 agent、workspace、开始/结束时间、日志路径、状态。
 - 历史 runs UI：查看过去运行记录并打开 `raw.log` / `clean.log`。
 - Claude / Gemini profiles：加入手动 session 与 headless review。
 - 任务模型：标题、描述、状态、关联 run。
