@@ -19,6 +19,8 @@ const manager = new PtySessionManager({ logStore: new RunLogStore() });
 
 let mainWindow: BrowserWindow | null = null;
 
+app.disableHardwareAcceleration();
+
 function createWindow(): BrowserWindow {
   const jsPreloadPath = path.join(__dirname, "../preload/index.js");
   const preloadPath = existsSync(jsPreloadPath) ? jsPreloadPath : path.join(__dirname, "../preload/index.mjs");
