@@ -1,8 +1,7 @@
 const { spawnSync } = require("node:child_process");
 
 const cwd = process.cwd();
-const rebuildCommand =
-  "node .\\node_modules\\electron-rebuild\\lib\\src\\cli.js -f -w node-pty";
+const toolArgs = process.argv.slice(2);
 
 function toCmdUncPath(path) {
   if (path.startsWith("\\\\?\\UNC\\")) {
@@ -20,9 +19,24 @@ function toCmdUncPath(path) {
   return null;
 }
 
+function quoteCmdArg(value) {
+  if (value.length === 0) {
+    return '""';
+  }
+
+  if (/[\r\n]/.test(value)) {
+    throw new Error("Command arguments cannot contain newlines");
+  }
+
+  return `"${value
+    .replace(/\^/g, "^^")
+    .replace(/"/g, '""')
+    .replace(/%/g, "^%")
+    .replace(/!/g, "^!")}"`;
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
-    cwd,
     stdio: "inherit",
     ...options,
   });
@@ -35,21 +49,26 @@ function run(command, args, options = {}) {
   process.exit(result.status ?? 1);
 }
 
+if (toolArgs.length === 0) {
+  console.error("Usage: node ./scripts/run-tool.cjs <tool> [...args]");
+  process.exit(1);
+}
+
 const uncCwd = toCmdUncPath(cwd);
 
 if (!uncCwd) {
-  run("node", [
-    ".\\node_modules\\electron-rebuild\\lib\\src\\cli.js",
-    "-f",
-    "-w",
-    "node-pty",
-  ]);
+  run(process.execPath, toolArgs);
 }
 
-const escapedCwd = uncCwd.replace(/"/g, '""');
-const command = `"pushd "${escapedCwd}" && ${rebuildCommand} & set EXIT_CODE=!ERRORLEVEL! & popd & exit /b !EXIT_CODE!"`;
+const commandBody = [
+  "pushd",
+  quoteCmdArg(uncCwd),
+  "&&",
+  quoteCmdArg(process.execPath),
+  ...toolArgs.map(quoteCmdArg),
+].join(" ");
 
-run("cmd.exe", ["/v:on", "/d", "/s", "/c", command], {
+run("cmd.exe", ["/v:on", "/d", "/s", "/c", `"${commandBody}"`], {
   cwd: process.env.SystemRoot || "C:\\Windows",
   windowsVerbatimArguments: true,
 });

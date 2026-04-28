@@ -6,11 +6,11 @@
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "node ./node_modules/electron-vite/bin/electron-vite.js dev",
-    "build": "node ./node_modules/electron-vite/bin/electron-vite.js build",
-    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test": "node ./node_modules/vitest/vitest.mjs run",
-    "postinstall": "node ./scripts/rebuild-node-pty.cjs"
+    "dev": "node ./scripts/run-tool.cjs ./node_modules/electron-vite/bin/electron-vite.js dev",
+    "build": "node ./scripts/run-tool.cjs ./node_modules/electron-vite/bin/electron-vite.js build",
+    "typecheck": "node ./scripts/run-tool.cjs ./node_modules/typescript/bin/tsc --noEmit",
+    "test": "node ./scripts/run-tool.cjs ./node_modules/vitest/vitest.mjs run",
+    "postinstall": "node ./scripts/run-tool.cjs ./node_modules/electron-rebuild/lib/src/cli.js -f -w node-pty"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
