@@ -24,7 +24,11 @@ $env:PYTHONPATH = "src"
 python -m agenthub.main hmi
 ```
 
-The HMI currently supports manual PowerShell and Codex PTY sessions. Select the workspace directory, select the agent, start the session, then type commands or prompts into the input box.
+The HMI currently supports manual PowerShell, Codex, Claude, and Gemini PTY sessions. Select the workspace directory, select the agent, start the session, then type commands or prompts into the input box.
+
+Headless Claude/Gemini review is available through `agenthub.adapters.headless`.
+It uses `PipeBackend` to run one-shot non-interactive commands and returns a
+`ProcessResult` with separated stdout/stderr.
 
 AgentHub remembers the last selected workspace and recent workspaces in `%APPDATA%\AgentHub\settings.json`.
 

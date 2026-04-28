@@ -72,10 +72,10 @@ python -m agenthub.main hmi
 - 最近 workspace 记忆，配置位于 `%APPDATA%\AgentHub\settings.json`。
 - 运行记录索引，位于 `<workspace>/.agenthub/runs/runs.jsonl`。
 - 历史 runs UI：查看当前 workspace 的运行记录并加载 `raw.log` / `clean.log`。
+- Claude / Gemini profiles：加入手动 PTY session 与 headless review。
 
 ## 未完成任务
 
-- Claude / Gemini profiles：加入手动 session 与 headless review。
 - 任务模型：标题、描述、状态、关联 run。
 - 任务看板 UI：pending / running / review / done / failed。
 - 更强终端输出处理：从简单 ANSI 清洗升级到 terminal screen buffer。

@@ -5,6 +5,18 @@ from dataclasses import dataclass
 from agenthub.process.base import Command
 
 
+def _powershell_launcher(command_name: str) -> Command:
+    return (
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        command_name,
+    )
+
+
 @dataclass(frozen=True)
 class AgentProfile:
     id: str
@@ -23,16 +35,20 @@ DEFAULT_AGENT_PROFILES: tuple[AgentProfile, ...] = (
     AgentProfile(
         id="codex",
         display_name="Codex",
-        command=(
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            "codex",
-        ),
+        command=_powershell_launcher("codex"),
         placeholder="输入 Codex prompt",
+    ),
+    AgentProfile(
+        id="claude",
+        display_name="Claude",
+        command=_powershell_launcher("claude"),
+        placeholder="输入 Claude prompt",
+    ),
+    AgentProfile(
+        id="gemini",
+        display_name="Gemini",
+        command=_powershell_launcher("gemini"),
+        placeholder="输入 Gemini prompt",
     ),
 )
 

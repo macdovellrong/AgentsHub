@@ -35,12 +35,20 @@ def test_main_window_lists_agent_profiles_and_updates_prompt_placeholder():
             for index in range(window.agent_combo.count())
         ]
 
-        assert labels == ["PowerShell", "Codex"]
+        assert labels == ["PowerShell", "Codex", "Claude", "Gemini"]
         assert window.command_input.placeholderText() == "输入 PowerShell 命令"
 
         window.agent_combo.setCurrentIndex(1)
 
         assert window.command_input.placeholderText() == "输入 Codex prompt"
+
+        window.agent_combo.setCurrentIndex(2)
+
+        assert window.command_input.placeholderText() == "输入 Claude prompt"
+
+        window.agent_combo.setCurrentIndex(3)
+
+        assert window.command_input.placeholderText() == "输入 Gemini prompt"
     finally:
         window.close()
         app.processEvents()
