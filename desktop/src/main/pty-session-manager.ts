@@ -1,7 +1,6 @@
 import { EventEmitter } from "node:events";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
 import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
 
@@ -62,6 +61,7 @@ type StoredSession = {
   pty: PtyLike;
   dataSubscription: { dispose: () => void };
   exitSubscription: { dispose: () => void };
+  persistenceQueue: Promise<void>;
 };
 
 const POWERSHELL_COMMAND = "powershell.exe";
@@ -117,28 +117,25 @@ export class PtySessionManager extends EventEmitter {
       rawLogPath: run.rawLogPath,
     };
 
+    let storedSession: StoredSession;
     const dataSubscription = pty.onData((data) => {
-      appendFileSync(run.rawLogPath, data, "utf8");
-      this.emit("data", { sessionId: session.sessionId, data } satisfies PtyDataEvent);
+      storedSession.persistenceQueue = storedSession.persistenceQueue.then(async () => {
+        await this.logStore.appendRaw(session.runId, data);
+        this.emit("data", { sessionId: session.sessionId, data } satisfies PtyDataEvent);
+      });
     });
     const exitSubscription = pty.onExit((event) => {
-      session.status = "exited";
-      this.sessions.delete(session.sessionId);
-      dataSubscription.dispose();
-      exitSubscription.dispose();
-      void this.logStore.markExited(run.runId, event.exitCode);
-      this.emit("exit", {
-        sessionId: session.sessionId,
-        exitCode: event.exitCode,
-      } satisfies PtyExitEvent);
+      void this.handleExit(storedSession, event.exitCode);
     });
 
-    this.sessions.set(session.sessionId, {
+    storedSession = {
       session,
       pty,
       dataSubscription,
       exitSubscription,
-    });
+      persistenceQueue: Promise.resolve(),
+    };
+    this.sessions.set(session.sessionId, storedSession);
 
     return session;
   }
@@ -161,5 +158,18 @@ export class PtySessionManager extends EventEmitter {
       throw new Error(`Unknown session: ${sessionId}`);
     }
     return stored;
+  }
+
+  private async handleExit(stored: StoredSession, exitCode: number | null): Promise<void> {
+    stored.session.status = "exited";
+    await stored.persistenceQueue;
+    await this.logStore.markExited(stored.session.runId, exitCode);
+    this.sessions.delete(stored.session.sessionId);
+    stored.dataSubscription.dispose();
+    stored.exitSubscription.dispose();
+    this.emit("exit", {
+      sessionId: stored.session.sessionId,
+      exitCode,
+    } satisfies PtyExitEvent);
   }
 }

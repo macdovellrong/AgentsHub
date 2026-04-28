@@ -54,7 +54,61 @@ class FakeFactory implements PtyFactory {
   }
 }
 
+class DelayedLogStore extends RunLogStore {
+  appendedChunks: string[] = [];
+  appendStarted = false;
+  appendFinished = false;
+  markExitedStarted = false;
+  markExitedFinished = false;
+  private releaseAppend: (() => void) | undefined;
+  private releaseExit: (() => void) | undefined;
+
+  async appendRaw(runId: string, chunk: string): Promise<void> {
+    this.appendStarted = true;
+    this.appendedChunks.push(chunk);
+    await new Promise<void>((resolve) => {
+      this.releaseAppend = resolve;
+    });
+    await super.appendRaw(runId, chunk);
+    this.appendFinished = true;
+  }
+
+  async markExited(runId: string, exitCode: number | null): Promise<void> {
+    this.markExitedStarted = true;
+    await new Promise<void>((resolve) => {
+      this.releaseExit = resolve;
+    });
+    await super.markExited(runId, exitCode);
+    this.markExitedFinished = true;
+  }
+
+  unblockAppend(): void {
+    this.releaseAppend?.();
+  }
+
+  unblockExit(): void {
+    this.releaseExit?.();
+  }
+}
+
 let workspacePath: string | undefined;
+
+function waitForCondition(condition: () => boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (condition()) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (Date.now() - startedAt > 1000) {
+        clearInterval(timer);
+        reject(new Error("Timed out waiting for condition"));
+      }
+    }, 1);
+  });
+}
 
 afterEach(async () => {
   if (workspacePath) {
@@ -72,7 +126,12 @@ describe("PtySessionManager", () => {
       logStore: new RunLogStore(),
     });
     const chunks: string[] = [];
-    manager.on("data", (event) => chunks.push(event.data));
+    const dataEvent = new Promise<void>((resolve) => {
+      manager.on("data", (event) => {
+        chunks.push(event.data);
+        resolve();
+      });
+    });
 
     const session = await manager.startPowerShell({
       workspacePath,
@@ -81,6 +140,7 @@ describe("PtySessionManager", () => {
     });
 
     factory.pty.emit("data", "hello\r\n");
+    await dataEvent;
 
     expect(factory.command.toLowerCase()).toContain("powershell");
     expect(factory.args.join(" ")).toContain("OutputEncoding");
@@ -89,6 +149,70 @@ describe("PtySessionManager", () => {
     expect(session.status).toBe("online");
     expect(chunks).toEqual(["hello\r\n"]);
     await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("hello\r\n");
+  });
+
+  it("appends raw data through the log store before emitting data", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const logStore = new DelayedLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+    let emitted = false;
+    const dataEvent = new Promise<void>((resolve) => {
+      manager.on("data", () => {
+        emitted = true;
+        resolve();
+      });
+    });
+
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    factory.pty.emit("data", "queued\r\n");
+    await waitForCondition(() => logStore.appendStarted);
+
+    expect(logStore.appendedChunks).toEqual(["queued\r\n"]);
+    expect(emitted).toBe(false);
+
+    logStore.unblockAppend();
+    await dataEvent;
+
+    expect(logStore.appendFinished).toBe(true);
+    await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("queued\r\n");
+  });
+
+  it("persists exit metadata before emitting exit", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const logStore = new DelayedLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+    const metaPath = path.join(path.dirname(session.rawLogPath), "meta.json");
+    const exitEvent = new Promise<boolean>((resolve) => {
+      manager.on("exit", async () => {
+        const meta = JSON.parse(await readFile(metaPath, "utf8"));
+        resolve(logStore.markExitedFinished && meta.status === "exited" && meta.exitCode === 7);
+      });
+    });
+
+    factory.pty.emit("exit", { exitCode: 7 });
+    await waitForCondition(() => logStore.markExitedStarted);
+
+    logStore.unblockExit();
+
+    await expect(exitEvent).resolves.toBe(true);
   });
 
   it("writes, resizes, and stops a session", async () => {
