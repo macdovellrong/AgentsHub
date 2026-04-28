@@ -41,6 +41,10 @@ Each workspace also keeps a queryable run index at
 `<workspace>/.agenthub/runs/runs.jsonl`. Each record includes the agent profile,
 workspace, start/end time, log paths, and status.
 
+Tasks are persisted per workspace at `<workspace>/.agenthub/tasks/tasks.jsonl`.
+Use `agenthub.storage.tasks.TaskStore` to create tasks, update their status, and
+attach a related `run_id`.
+
 The HMI includes a history runs panel for the selected workspace. Use
 "刷新历史" to reload `runs.jsonl`, then select a run and load either `clean.log`
 or `raw.log` into the terminal area for review.

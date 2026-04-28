@@ -6,8 +6,8 @@
 
 - `process/`：PTY、subprocess pipe、输出清洗、交互式终端会话。
 - `ui/`：PySide6 HMI、输出缓冲、workspace 选择、历史 runs UI。
-- `storage/`：run 日志、运行索引、用户设置、最近 workspace。
-- `adapters/`：PowerShell、Codex 等 agent 启动 profile。
+- `storage/`：run 日志、运行索引、任务模型、用户设置、最近 workspace。
+- `adapters/`：PowerShell、Codex、Claude、Gemini 等 agent 启动 profile。
 - `tests/`：pytest 测试。
 - `docs/superpowers/`：设计 spec 和实现计划。
 
@@ -73,14 +73,14 @@ python -m agenthub.main hmi
 - 运行记录索引，位于 `<workspace>/.agenthub/runs/runs.jsonl`。
 - 历史 runs UI：查看当前 workspace 的运行记录并加载 `raw.log` / `clean.log`。
 - Claude / Gemini profiles：加入手动 PTY session 与 headless review。
+- 任务模型：标题、描述、状态、关联 run，位于 `<workspace>/.agenthub/tasks/tasks.jsonl`。
 
 ## 未完成任务
 
-- 任务模型：标题、描述、状态、关联 run。
 - 任务看板 UI：pending / running / review / done / failed。
 - 更强终端输出处理：从简单 ANSI 清洗升级到 terminal screen buffer。
 - 自动编排：Claude 拆任务、Codex 执行、Gemini review。
 
 ## 安全与配置提示
 
-不要提交 `.agenthub/`、日志、虚拟环境、缓存文件。workspace 日志位于 `<workspace>/.agenthub/runs/`。危险权限、自动写文件、自动编排必须显式可见并可控。
+不要提交 `.agenthub/`、日志、虚拟环境、缓存文件。workspace 日志位于 `<workspace>/.agenthub/runs/`，任务记录位于 `<workspace>/.agenthub/tasks/`。危险权限、自动写文件、自动编排必须显式可见并可控。
