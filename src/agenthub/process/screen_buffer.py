@@ -10,6 +10,8 @@ class TerminalScreenBuffer:
     _row: int = 0
     _col: int = 0
     _clear_line_on_write: bool = False
+    _saved_row: int = 0
+    _saved_col: int = 0
 
     def feed(self, text: str) -> None:
         index = 0
@@ -76,8 +78,17 @@ class TerminalScreenBuffer:
         if start + 1 >= len(text):
             return start
         marker = text[start + 1]
+        if marker == "]":
+            return _consume_osc(text, start + 2)
+        if marker == "7":
+            self._saved_row = self._row
+            self._saved_col = self._col
+            return start + 2
+        if marker == "8":
+            self._move_cursor(self._saved_row, self._saved_col)
+            return start + 2
         if marker != "[":
-            return min(start + 1, len(text) - 1)
+            return start + 2
 
         end = start + 2
         while end < len(text):
@@ -137,3 +148,14 @@ def _first_value(values: list[int | None], *, default: int) -> int:
     if not values or values[0] is None:
         return default
     return values[0]
+
+
+def _consume_osc(text: str, start: int) -> int:
+    index = start
+    while index < len(text):
+        if text[index] == "\x07":
+            return index + 1
+        if text[index] == "\x1b" and index + 1 < len(text) and text[index + 1] == "\\":
+            return index + 2
+        index += 1
+    return len(text)

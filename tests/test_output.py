@@ -6,6 +6,10 @@ def test_strip_ansi_removes_color_sequences():
     assert strip_ansi("\x1b[32mOK\x1b[0m") == "OK"
 
 
+def test_strip_ansi_removes_save_restore_and_osc_sequences():
+    assert strip_ansi("\x1b7\x1b]0;Title\x07OK\x1b8") == "OK"
+
+
 def test_normalize_chunk_keeps_raw_and_clean_text():
     event = normalize_chunk("run-1", StreamName.STDOUT, "\x1b[31mERR\x1b[0m")
 

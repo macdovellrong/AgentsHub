@@ -20,8 +20,7 @@ python -m agenthub.main pipe-smoke
 Run the minimal desktop HMI:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m agenthub.main hmi
+.\scripts\start-hmi.ps1
 ```
 
 ## HMI 共享聊天

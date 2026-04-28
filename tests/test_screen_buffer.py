@@ -39,3 +39,19 @@ def test_screen_buffer_limits_height_to_recent_lines():
     screen.feed("one\ntwo\nthree")
 
     assert screen.snapshot() == "two\nthree"
+
+
+def test_screen_buffer_consumes_save_and_restore_cursor_sequences():
+    screen = TerminalScreenBuffer()
+
+    screen.feed("\x1b7status\x1b8")
+
+    assert screen.snapshot() == "status"
+
+
+def test_screen_buffer_consumes_osc_title_sequences():
+    screen = TerminalScreenBuffer()
+
+    screen.feed("\x1b]0;Window title\x07ready")
+
+    assert screen.snapshot() == "ready"
