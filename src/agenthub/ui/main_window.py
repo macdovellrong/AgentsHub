@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
@@ -21,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from agenthub.adapters.profiles import DEFAULT_AGENT_PROFILES, AgentProfile
 from agenthub.process.interactive_pty import InteractivePtySession
-from agenthub.storage.run_index import RunIndexStore, RunStatus
+from agenthub.storage.run_index import RunIndexStore, RunRecord, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.ui.output_buffer import OutputBuffer
@@ -63,6 +65,11 @@ class MainWindow(QMainWindow):
         self.stop_button = QPushButton("停止")
         self.command_input = QLineEdit()
         self.send_button = QPushButton("发送")
+        self.refresh_history_button = QPushButton("刷新历史")
+        self.view_clean_button = QPushButton("查看 clean")
+        self.view_raw_button = QPushButton("查看 raw")
+        self.history_list = QListWidget()
+        self.history_list.setMaximumHeight(140)
         self.terminal = QPlainTextEdit()
         self.terminal.setReadOnly(True)
         self.terminal.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -84,9 +91,18 @@ class MainWindow(QMainWindow):
         input_bar.addWidget(self.command_input, 1)
         input_bar.addWidget(self.send_button)
 
+        history_bar = QHBoxLayout()
+        history_bar.addWidget(QLabel("历史 Runs"))
+        history_bar.addStretch(1)
+        history_bar.addWidget(self.refresh_history_button)
+        history_bar.addWidget(self.view_clean_button)
+        history_bar.addWidget(self.view_raw_button)
+
         layout = QVBoxLayout()
         layout.addLayout(top_bar)
         layout.addWidget(self.terminal, 1)
+        layout.addLayout(history_bar)
+        layout.addWidget(self.history_list)
         layout.addLayout(input_bar)
 
         container = QWidget()
@@ -97,11 +113,21 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.stop_session)
         self.send_button.clicked.connect(self.send_command)
         self.command_input.returnPressed.connect(self.send_command)
+        self.refresh_history_button.clicked.connect(self.refresh_run_history)
+        self.view_clean_button.clicked.connect(self.load_selected_clean_log)
+        self.view_raw_button.clicked.connect(self.load_selected_raw_log)
+        self.history_list.itemDoubleClicked.connect(
+            lambda _item: self.load_selected_clean_log()
+        )
+        self.history_list.currentItemChanged.connect(
+            lambda _current, _previous: self._sync_history_controls()
+        )
         self.choose_workspace_button.clicked.connect(self.choose_workspace)
         self.recent_workspace_combo.activated.connect(self._select_recent_workspace)
         self.agent_combo.currentIndexChanged.connect(self._sync_agent_placeholder)
         self._sync_workspace_label()
         self._sync_recent_workspaces()
+        self.refresh_run_history()
         self._sync_agent_placeholder()
         self._sync_controls()
 
@@ -140,6 +166,7 @@ class MainWindow(QMainWindow):
             return
 
         self._mark_active_run(RunStatus.RUNNING)
+        self.refresh_run_history()
         self._active_profile = profile
         self.status_label.setText(f"{profile.display_name} 在线")
         self._append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
@@ -199,6 +226,7 @@ class MainWindow(QMainWindow):
             self._settings_store.record_workspace(self._workspace_path)
         self._sync_workspace_label()
         self._sync_recent_workspaces()
+        self.refresh_run_history()
 
     def choose_workspace(self) -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -208,6 +236,39 @@ class MainWindow(QMainWindow):
         )
         if selected:
             self.set_workspace(selected)
+
+    def refresh_run_history(self) -> None:
+        self.history_list.clear()
+        try:
+            records = RunIndexStore.for_workspace(self._workspace_path).list_records()
+        except Exception as exc:
+            self._append_text(f"加载历史 runs 失败: {exc}\n")
+            self._sync_history_controls()
+            return
+
+        for record in sorted(records, key=lambda item: item.started_at, reverse=True):
+            list_item = QListWidgetItem(self._format_run_record(record))
+            list_item.setData(Qt.ItemDataRole.UserRole, record)
+            self.history_list.addItem(list_item)
+
+        if self.history_list.count() > 0:
+            self.history_list.setCurrentRow(0)
+        self._sync_history_controls()
+
+    def load_selected_clean_log(self) -> None:
+        self._load_selected_history_log("clean")
+
+    def load_selected_raw_log(self) -> None:
+        self._load_selected_history_log("raw")
+
+    def selected_history_record(self) -> RunRecord | None:
+        item = self.history_list.currentItem()
+        if item is None:
+            return None
+        record = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(record, RunRecord):
+            return record
+        return None
 
     def _create_session(
         self,
@@ -262,6 +323,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         self._mark_active_run(status, error_message=error_message)
         self._cleanup_inactive_run()
+        self.refresh_run_history()
 
     def _cleanup_inactive_run(self) -> None:
         if self._log_writer is not None:
@@ -288,6 +350,12 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(connected)
         self.command_input.setEnabled(connected)
         self.send_button.setEnabled(connected)
+        self._sync_history_controls()
+
+    def _sync_history_controls(self) -> None:
+        has_selection = self.selected_history_record() is not None
+        self.view_clean_button.setEnabled(has_selection)
+        self.view_raw_button.setEnabled(has_selection)
 
     def _sync_agent_placeholder(self) -> None:
         self.command_input.setPlaceholderText(self.selected_profile().placeholder)
@@ -308,6 +376,26 @@ class MainWindow(QMainWindow):
         selected = self.recent_workspace_combo.itemData(index)
         if selected:
             self.set_workspace(selected)
+
+    def _load_selected_history_log(self, kind: str) -> None:
+        record = self.selected_history_record()
+        if record is None:
+            return
+        path = record.clean_log_path if kind == "clean" else record.raw_log_path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            self.terminal.setPlainText(f"加载 {path.name} 失败: {exc}\n")
+            return
+        self.terminal.setPlainText(text)
+        self.terminal.moveCursor(QTextCursor.MoveOperation.End)
+
+    def _format_run_record(self, record: RunRecord) -> str:
+        ended_at = record.ended_at or "running"
+        return (
+            f"{record.started_at} | {record.profile_name} | "
+            f"{record.status.value} | {ended_at} | {record.run_id}"
+        )
 
     def _default_log_root(self) -> Path:
         return self._workspace_path / ".agenthub" / "runs"

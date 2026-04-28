@@ -2,11 +2,12 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from agenthub.process.base import OutputEvent, StreamName
 from agenthub.storage.run_index import RunIndexStore, RunStatus
-from agenthub.storage.run_logs import RunLogWriter
+from agenthub.storage.run_logs import RunLogPaths, RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.ui.main_window import MainWindow
 
@@ -301,3 +302,89 @@ def test_main_window_indexes_start_failure(tmp_path):
     finally:
         window.close()
         app.processEvents()
+
+
+def test_main_window_refreshes_run_history_for_current_workspace(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _create_indexed_run(
+        workspace,
+        run_id="codex-run",
+        profile_id="codex",
+        profile_name="Codex",
+        clean_text="clean output",
+        raw_text="raw output",
+    )
+
+    window = MainWindow(workspace_path=workspace)
+    try:
+        window.refresh_run_history()
+
+        assert window.history_list.count() == 1
+        item = window.history_list.item(0)
+        assert "Codex" in item.text()
+        assert "exited" in item.text()
+        assert item.data(Qt.ItemDataRole.UserRole).run_id == "codex-run"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_loads_selected_clean_and_raw_history_logs(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _create_indexed_run(
+        workspace,
+        run_id="powershell-run",
+        profile_id="powershell",
+        profile_name="PowerShell",
+        clean_text="CLEAN LOG\n",
+        raw_text="\x1b[32mRAW LOG\x1b[0m\n",
+    )
+
+    window = MainWindow(workspace_path=workspace)
+    try:
+        window.refresh_run_history()
+        window.history_list.setCurrentRow(0)
+
+        window.load_selected_clean_log()
+        assert window.terminal.toPlainText() == "CLEAN LOG\n"
+
+        window.load_selected_raw_log()
+        assert window.terminal.toPlainText() == "\x1b[32mRAW LOG\x1b[0m\n"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def _create_indexed_run(
+    workspace,
+    *,
+    run_id,
+    profile_id,
+    profile_name,
+    clean_text,
+    raw_text,
+):
+    run_dir = workspace / ".agenthub" / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    raw_log_path = run_dir / "raw.log"
+    clean_log_path = run_dir / "clean.log"
+    raw_log_path.write_text(raw_text, encoding="utf-8")
+    clean_log_path.write_text(clean_text, encoding="utf-8")
+
+    paths = RunLogPaths(
+        run_id=run_id,
+        run_dir=run_dir,
+        raw_log_path=raw_log_path,
+        clean_log_path=clean_log_path,
+    )
+    return RunIndexStore.for_workspace(workspace).create_run(
+        profile_id=profile_id,
+        profile_name=profile_name,
+        workspace_path=workspace,
+        log_paths=paths,
+        status=RunStatus.EXITED,
+    )

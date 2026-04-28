@@ -36,3 +36,7 @@ Each HMI session writes logs under `<workspace>/.agenthub/runs/<run-id>/`:
 Each workspace also keeps a queryable run index at
 `<workspace>/.agenthub/runs/runs.jsonl`. Each record includes the agent profile,
 workspace, start/end time, log paths, and status.
+
+The HMI includes a history runs panel for the selected workspace. Use
+"刷新历史" to reload `runs.jsonl`, then select a run and load either `clean.log`
+or `raw.log` into the terminal area for review.

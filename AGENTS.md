@@ -5,8 +5,8 @@
 本仓库是 Python `src/` 布局。主代码在 `src/agenthub/`：
 
 - `process/`：PTY、subprocess pipe、输出清洗、交互式终端会话。
-- `ui/`：PySide6 HMI、输出缓冲、workspace 选择。
-- `storage/`：run 日志、用户设置、最近 workspace。
+- `ui/`：PySide6 HMI、输出缓冲、workspace 选择、历史 runs UI。
+- `storage/`：run 日志、运行索引、用户设置、最近 workspace。
 - `adapters/`：PowerShell、Codex 等 agent 启动 profile。
 - `tests/`：pytest 测试。
 - `docs/superpowers/`：设计 spec 和实现计划。
@@ -71,10 +71,10 @@ python -m agenthub.main hmi
 - workspace 选择器。
 - 最近 workspace 记忆，配置位于 `%APPDATA%\AgentHub\settings.json`。
 - 运行记录索引，位于 `<workspace>/.agenthub/runs/runs.jsonl`。
+- 历史 runs UI：查看当前 workspace 的运行记录并加载 `raw.log` / `clean.log`。
 
 ## 未完成任务
 
-- 历史 runs UI：查看过去运行记录并打开 `raw.log` / `clean.log`。
 - Claude / Gemini profiles：加入手动 session 与 headless review。
 - 任务模型：标题、描述、状态、关联 run。
 - 任务看板 UI：pending / running / review / done / failed。
