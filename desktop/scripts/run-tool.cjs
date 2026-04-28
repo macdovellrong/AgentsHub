@@ -1,4 +1,6 @@
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const pathModule = require("node:path");
 
 const cwd = process.cwd();
 const toolArgs = process.argv.slice(2);
@@ -17,6 +19,49 @@ function toCmdUncPath(path) {
   }
 
   return null;
+}
+
+function normalizeUncPath(value) {
+  return value.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+}
+
+function findMappedDrivePath(uncPath) {
+  const normalizedUnc = normalizeUncPath(uncPath);
+  let bestMatch = null;
+
+  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    const driveRoot = `${letter}:\\`;
+    let mappedRoot;
+    try {
+      mappedRoot = fs.realpathSync.native(driveRoot);
+    } catch {
+      continue;
+    }
+
+    if (!mappedRoot.startsWith("\\\\")) {
+      continue;
+    }
+
+    const normalizedMappedRoot = normalizeUncPath(mappedRoot);
+    const isMatch =
+      normalizedUnc === normalizedMappedRoot ||
+      normalizedUnc.startsWith(`${normalizedMappedRoot}\\`);
+
+    if (!isMatch) {
+      continue;
+    }
+
+    if (!bestMatch || normalizedMappedRoot.length > bestMatch.normalizedMappedRoot.length) {
+      bestMatch = { driveRoot, mappedRoot, normalizedMappedRoot };
+    }
+  }
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  const tail = uncPath.slice(bestMatch.mappedRoot.length).replace(/^\\+/, "");
+  return tail ? pathModule.join(bestMatch.driveRoot, tail) : bestMatch.driveRoot;
 }
 
 function quoteCmdArg(value) {
@@ -57,6 +102,19 @@ const uncCwd = toCmdUncPath(cwd);
 
 if (!uncCwd) {
   run(process.execPath, toolArgs);
+}
+
+const mappedCwd = findMappedDrivePath(uncCwd);
+
+if (mappedCwd) {
+  run(process.execPath, toolArgs, {
+    cwd: mappedCwd,
+    env: {
+      ...process.env,
+      INIT_CWD: mappedCwd,
+      PWD: mappedCwd,
+    },
+  });
 }
 
 const commandBody = [
