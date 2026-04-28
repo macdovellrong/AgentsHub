@@ -169,7 +169,9 @@ describe("PtySessionManager", () => {
     await dataEvent;
 
     expect(factory.command.toLowerCase()).toContain("powershell");
+    expect(factory.args).toContain("-NoProfile");
     expect(factory.args.join(" ")).toContain("OutputEncoding");
+    expect(factory.args.join(" ")).toContain("Remove-Module PSReadLine");
     expect(factory.options?.cols).toBe(100);
     expect(factory.options?.rows).toBe(30);
     expect(session.status).toBe("online");

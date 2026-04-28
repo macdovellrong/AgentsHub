@@ -10,6 +10,7 @@ import {
   type PtyErrorEvent,
   type PtyExitEvent,
 } from "./pty-session-manager";
+import { shouldDisableElectronSandbox } from "./electron-sandbox";
 import { getAllowedDevRendererUrl } from "./renderer-url";
 import { resolveWorkspacePath } from "./workspace-path";
 
@@ -22,8 +23,16 @@ let mainWindow: BrowserWindow | null = null;
 app.commandLine.appendSwitch("disable-gpu");
 app.commandLine.appendSwitch("disable-gpu-compositing");
 app.commandLine.appendSwitch("in-process-gpu");
-// Source runs from Windows UNC/mapped drives can fail to launch Chromium child processes with the sandbox enabled.
-app.commandLine.appendSwitch("no-sandbox");
+const disableElectronSandbox = shouldDisableElectronSandbox({
+  isPackaged: app.isPackaged,
+  nodeEnv: process.env.NODE_ENV,
+  noSandbox: process.env.NO_SANDBOX,
+});
+
+if (disableElectronSandbox) {
+  // Source runs from Windows UNC/mapped drives can fail to launch Chromium child processes with the sandbox enabled.
+  app.commandLine.appendSwitch("no-sandbox");
+}
 app.disableHardwareAcceleration();
 
 function createWindow(): BrowserWindow {
@@ -39,7 +48,7 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: !disableElectronSandbox,
       preload: preloadPath,
     },
   });

@@ -72,9 +72,10 @@ type StoredSession = {
 const POWERSHELL_COMMAND = "powershell.exe";
 const POWERSHELL_ARGS = [
   "-NoLogo",
+  "-NoProfile",
   "-NoExit",
   "-Command",
-  "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; chcp 65001 | Out-Null; Write-Host 'AgentHub PowerShell ready'",
+  "Remove-Module PSReadLine -ErrorAction SilentlyContinue; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; chcp 65001 | Out-Null; Write-Host 'AgentHub PowerShell ready'",
 ];
 
 export class NodePtyFactory implements PtyFactory {
