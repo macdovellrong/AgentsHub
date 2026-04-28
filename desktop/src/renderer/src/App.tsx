@@ -313,7 +313,7 @@ export function App(): React.JSX.Element {
     setInputText("");
 
     try {
-      const routed = await window.agenthub.routeInput({ text });
+      const routed = await window.agenthub.routeInput({ workspacePath: workspacePath || undefined, text });
       await refreshWorkspaceData();
 
       if (!routed.targetProfileId) {

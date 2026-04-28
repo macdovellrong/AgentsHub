@@ -93,7 +93,7 @@ export type SessionErrorEvent = {
   message: string;
 };
 
-export type RouteInputRequest = {
+export type RouteInputRequest = WorkspaceRequest & {
   text: string;
 };
 

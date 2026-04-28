@@ -190,7 +190,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.RouteInput, async (_event, request: RouteInputRequest) => {
     const profiles = await getProfileStore().list();
     const routed = parseRoutedInput(request.text, profiles);
-    await eventStore.append(process.cwd(), {
+    await eventStore.append(resolveRequestWorkspace(request.workspacePath), {
       type: "user_message",
       message: routed.message,
       targetProfileId: routed.targetProfileId,
