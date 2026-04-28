@@ -21,6 +21,7 @@ let mainWindow: BrowserWindow | null = null;
 
 app.commandLine.appendSwitch("disable-gpu");
 app.commandLine.appendSwitch("disable-gpu-compositing");
+app.commandLine.appendSwitch("in-process-gpu");
 app.disableHardwareAcceleration();
 
 function createWindow(): BrowserWindow {

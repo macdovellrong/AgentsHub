@@ -1,7 +1,7 @@
 const { spawnSync } = require("node:child_process");
 
 const electronCliArgs = JSON.parse(process.env.ELECTRON_CLI_ARGS || "[]");
-const gpuSafeArgs = ["--disable-gpu", "--disable-gpu-compositing"];
+const gpuSafeArgs = ["--disable-gpu", "--disable-gpu-compositing", "--in-process-gpu"];
 
 for (const arg of gpuSafeArgs) {
   if (!electronCliArgs.includes(arg)) {
