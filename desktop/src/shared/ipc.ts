@@ -46,7 +46,7 @@ export type SessionExitEvent = {
 };
 
 export type SessionErrorEvent = {
-  sessionId: string;
+  sessionId?: string;
   message: string;
 };
 
@@ -66,5 +66,16 @@ export function isSessionExitEvent(value: unknown): value is SessionExitEvent {
   return (
     typeof candidate.sessionId === "string" &&
     (typeof candidate.exitCode === "number" || candidate.exitCode === null)
+  );
+}
+
+export function isSessionErrorEvent(value: unknown): value is SessionErrorEvent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    (typeof candidate.sessionId === "string" || candidate.sessionId === undefined) &&
+    typeof candidate.message === "string"
   );
 }

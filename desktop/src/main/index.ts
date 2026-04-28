@@ -10,6 +10,7 @@ import {
   type PtyErrorEvent,
   type PtyExitEvent,
 } from "./pty-session-manager";
+import { resolveWorkspacePath } from "./workspace-path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,7 +61,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.WorkspaceDefault, () => process.cwd());
 
   ipcMain.handle(IpcChannels.StartPowerShell, async (_event, request: StartPowerShellRequest) => {
-    const workspacePath = request.workspacePath || process.cwd();
+    const workspacePath = resolveWorkspacePath(request.workspacePath, process.cwd());
     const session = await manager.startPowerShell({
       workspacePath,
       cols: request.cols,

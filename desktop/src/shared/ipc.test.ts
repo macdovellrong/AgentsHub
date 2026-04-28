@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   IpcChannels,
+  isSessionErrorEvent,
   isTerminalDataEvent,
   isSessionExitEvent,
+  type SessionErrorEvent,
   type TerminalDataEvent,
 } from "./ipc";
 
@@ -26,5 +28,14 @@ describe("IPC contract", () => {
   it("recognizes session exit events", () => {
     expect(isSessionExitEvent({ sessionId: "session-1", exitCode: 0 })).toBe(true);
     expect(isSessionExitEvent({ sessionId: "session-1", exitCode: "0" })).toBe(false);
+  });
+
+  it("recognizes session error events without a session id", () => {
+    const event = {
+      message: "failed before session creation",
+    } satisfies SessionErrorEvent;
+
+    expect(isSessionErrorEvent(event)).toBe(true);
+    expect(isSessionErrorEvent({ sessionId: 123, message: "failed" })).toBe(false);
   });
 });
