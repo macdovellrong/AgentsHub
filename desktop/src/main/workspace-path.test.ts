@@ -6,6 +6,10 @@ describe("resolveWorkspacePath", () => {
     expect(resolveWorkspacePath("C:\\work", "C:\\fallback")).toBe("C:\\work");
   });
 
+  it("trims requested workspace path before using it", () => {
+    expect(resolveWorkspacePath("  C:\\work  ", "C:\\fallback")).toBe("C:\\work");
+  });
+
   it("falls back when requested workspace path is blank", () => {
     expect(resolveWorkspacePath("   ", "C:\\fallback")).toBe("C:\\fallback");
   });

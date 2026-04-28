@@ -1,6 +1,7 @@
 export function resolveWorkspacePath(requestedPath: string | undefined, fallbackPath: string): string {
-  if (requestedPath?.trim()) {
-    return requestedPath;
+  const trimmedPath = requestedPath?.trim();
+  if (trimmedPath) {
+    return trimmedPath;
   }
   return fallbackPath;
 }
