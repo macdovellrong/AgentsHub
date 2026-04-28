@@ -102,21 +102,22 @@ def test_main_window_writes_drained_events_to_run_log(tmp_path):
         def stop(self):
             pass
 
-    window._session = FakeSession()
-    window._log_writer = RunLogWriter.create(
+    state = window._agent_states["powershell"]
+    state.session = FakeSession()
+    state.log_writer = RunLogWriter.create(
         root=tmp_path,
         profile_id="powershell",
         run_id="hmi-powershell-test",
     )
     try:
         window._drain_session()
-        window._log_writer.close()
+        state.log_writer.close()
 
         run_dir = tmp_path / "hmi-powershell-test"
         assert (run_dir / "raw.log").read_bytes() == "\x1b[32mLOG\x1b[0m\r\n".encode()
         assert (run_dir / "clean.log").read_bytes() == "LOG\r\n".encode()
     finally:
-        window._session = None
+        state.session = None
         window.close()
         app.processEvents()
 
@@ -141,22 +142,110 @@ def test_main_window_renders_drained_events_as_screen_snapshot(tmp_path):
         def stop(self):
             pass
 
-    window._session = FakeSession()
-    window._log_writer = RunLogWriter.create(
+    state = window._agent_states["powershell"]
+    state.session = FakeSession()
+    state.log_writer = RunLogWriter.create(
         root=tmp_path,
         profile_id="powershell",
         run_id="hmi-powershell-screen-test",
     )
     try:
         window._drain_session()
-        window._log_writer.close()
+        state.log_writer.close()
 
         run_dir = tmp_path / "hmi-powershell-screen-test"
         assert (run_dir / "raw.log").read_bytes() == "\x1b[32mold\x1b[0m\rnew".encode()
         assert (run_dir / "clean.log").read_bytes() == "old\rnew".encode()
-        assert window.terminal.toPlainText() == "new"
+        timeline_text = window.terminal.toPlainText()
+        assert "PowerShell" in timeline_text
+        assert timeline_text.rstrip().endswith("new")
     finally:
-        window._session = None
+        state.session = None
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_drains_all_agent_sessions_into_shared_chat_timeline(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+    powershell_event = OutputEvent(
+        run_id="hmi-powershell",
+        stream=StreamName.PTY,
+        raw="\x1b[32mps output\x1b[0m\r\n",
+        clean="ps output\r\n",
+    )
+    codex_event = OutputEvent(
+        run_id="hmi-codex",
+        stream=StreamName.PTY,
+        raw="\x1b[36mcodex output\x1b[0m\r\n",
+        clean="codex output\r\n",
+    )
+
+    class FakeSession:
+        def __init__(self, events):
+            self.events = events
+
+        def drain(self):
+            events = self.events
+            self.events = []
+            return events
+
+        def is_alive(self):
+            return True
+
+        def stop(self):
+            pass
+
+    powershell_state = window._agent_states["powershell"]
+    codex_state = window._agent_states["codex"]
+    powershell_state.session = FakeSession([powershell_event])
+    codex_state.session = FakeSession([codex_event])
+    powershell_state.log_writer = RunLogWriter.create(
+        root=tmp_path,
+        profile_id="powershell",
+        run_id="hmi-powershell-drain-test",
+    )
+    codex_state.log_writer = RunLogWriter.create(
+        root=tmp_path,
+        profile_id="codex",
+        run_id="hmi-codex-drain-test",
+    )
+    try:
+        window._drain_session()
+        powershell_state.log_writer.close()
+        codex_state.log_writer.close()
+        powershell_state.log_writer = None
+        codex_state.log_writer = None
+
+        timeline_text = window.chat_timeline.toPlainText()
+        assert "PowerShell" in timeline_text
+        assert "ps output" in timeline_text
+        assert "Codex" in timeline_text
+        assert "codex output" in timeline_text
+
+        powershell_run_dir = tmp_path / "hmi-powershell-drain-test"
+        codex_run_dir = tmp_path / "hmi-codex-drain-test"
+        assert (powershell_run_dir / "raw.log").read_bytes() == (
+            "\x1b[32mps output\x1b[0m\r\n".encode()
+        )
+        assert (powershell_run_dir / "clean.log").read_bytes() == (
+            "ps output\r\n".encode()
+        )
+        assert (codex_run_dir / "raw.log").read_bytes() == (
+            "\x1b[36mcodex output\x1b[0m\r\n".encode()
+        )
+        assert (codex_run_dir / "clean.log").read_bytes() == (
+            "codex output\r\n".encode()
+        )
+    finally:
+        powershell_state.session = None
+        codex_state.session = None
+        if powershell_state.log_writer is not None:
+            powershell_state.log_writer.close()
+            powershell_state.log_writer = None
+        if codex_state.log_writer is not None:
+            codex_state.log_writer.close()
+            codex_state.log_writer = None
         window.close()
         app.processEvents()
 
@@ -182,7 +271,8 @@ def test_main_window_terminal_keys_write_directly_to_live_session(tmp_path):
             pass
 
     fake_session = FakeSession()
-    window._session = fake_session
+    state = window._agent_states["powershell"]
+    state.session = fake_session
     try:
         window._sync_controls()
         window.terminal.setFocus()
@@ -195,7 +285,7 @@ def test_main_window_terminal_keys_write_directly_to_live_session(tmp_path):
         assert "".join(fake_session.writes[:3]) == "abc"
         assert fake_session.writes[3:] == ["\r", "\x7f", "\x1b[A"]
     finally:
-        window._session = None
+        state.session = None
         window.close()
         app.processEvents()
 
@@ -214,6 +304,57 @@ def test_main_window_applies_shared_chat_layout():
             "Claude",
             "Gemini",
         ]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_starts_multiple_different_agent_sessions(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    window = MainWindow(workspace_path=workspace)
+
+    class FakeSession:
+        def __init__(self, profile_id):
+            self.profile_id = profile_id
+            self.alive = False
+            self.writes = []
+
+        def start(self):
+            self.alive = True
+
+        def write(self, text):
+            self.writes.append(text)
+
+        def drain(self):
+            return []
+
+        def is_alive(self):
+            return self.alive
+
+        def stop(self):
+            self.alive = False
+
+    created = []
+
+    def fake_create_session(profile, run_id=None):
+        session = FakeSession(profile.id)
+        created.append(session)
+        return session
+
+    window._create_session = fake_create_session
+    try:
+        window.agent_list.setCurrentRow(0)
+        window.start_session()
+        window.agent_list.setCurrentRow(1)
+        window.start_session()
+
+        assert window._agent_states["powershell"].is_alive()
+        assert window._agent_states["codex"].is_alive()
+        assert len(created) == 2
+        records = RunIndexStore.for_workspace(workspace).list_records()
+        assert sorted(record.profile_id for record in records) == ["codex", "powershell"]
     finally:
         window.close()
         app.processEvents()
@@ -431,8 +572,9 @@ def test_main_window_indexes_start_failure(tmp_path):
         assert records[0].status == RunStatus.START_FAILED
         assert records[0].ended_at is not None
         assert records[0].error_message == "boom"
-        assert window._log_writer is None
-        assert window._active_run_id is None
+        state = window._agent_states["powershell"]
+        assert state.log_writer is None
+        assert state.run_id is None
     finally:
         window.close()
         app.processEvents()

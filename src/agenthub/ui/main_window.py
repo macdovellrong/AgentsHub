@@ -30,8 +30,12 @@ from agenthub.storage.run_index import RunIndexStore, RunRecord, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.storage.tasks import TaskRecord, TaskStatus, TaskStore
-from agenthub.ui.agent_session import create_agent_states
-from agenthub.ui.output_buffer import OutputBuffer
+from agenthub.ui.agent_session import (
+    AgentSessionState,
+    AgentSessionStatus,
+    create_agent_states,
+)
+from agenthub.ui.chat import ChatMessageKind, format_chat_message, new_chat_message
 
 
 TASK_STATUS_LABELS = {
@@ -198,12 +202,6 @@ class MainWindow(QMainWindow):
         self._workspace_path = self._initial_workspace(workspace_path)
         self._explicit_log_root = log_root is not None
         self._log_root = Path(log_root) if log_root is not None else self._default_log_root()
-        self._log_writer: RunLogWriter | None = None
-        self._run_index_store: RunIndexStore | None = None
-        self._active_run_id: str | None = None
-        self._active_profile: AgentProfile | None = None
-        self._session: InteractivePtySession | None = None
-        self._output_buffer = OutputBuffer(max_chars=200_000)
         self._flush_timer = QTimer(self)
         self._flush_timer.setInterval(50)
         self._flush_timer.timeout.connect(self._drain_session)
@@ -360,91 +358,116 @@ class MainWindow(QMainWindow):
         self._sync_controls()
 
     def start_session(self) -> None:
-        if self._session is not None and self._session.is_alive():
+        state = self.selected_agent_state()
+        if state.is_alive():
             return
-        profile = self.selected_profile()
+        profile = state.profile
         try:
-            self._log_writer = RunLogWriter.create(
+            state.log_writer = RunLogWriter.create(
                 root=self._log_root,
                 profile_id=profile.id,
             )
-            self._run_index_store = RunIndexStore.for_workspace(self._workspace_path)
-            self._active_run_id = self._log_writer.paths.run_id
-            self._run_index_store.create_run(
+            state.run_index_store = RunIndexStore.for_workspace(self._workspace_path)
+            state.run_id = state.log_writer.paths.run_id
+            state.run_index_store.create_run(
                 profile_id=profile.id,
                 profile_name=profile.display_name,
                 workspace_path=self._workspace_path,
-                log_paths=self._log_writer.paths,
+                log_paths=state.log_writer.paths,
                 status=RunStatus.STARTING,
             )
+            state.status = AgentSessionStatus.STARTING
         except Exception as exc:
-            self._cleanup_inactive_run()
-            self._append_text(f"运行记录启动失败: {exc}\n")
+            self._finish_agent_run(state, RunStatus.START_FAILED, error_message=str(exc))
+            state.status = AgentSessionStatus.START_FAILED
+            self._append_system_message(
+                f"{profile.display_name} 运行记录启动失败: {exc}"
+            )
+            self._refresh_agent_roster()
             self._sync_controls()
             return
 
-        self._session = self._create_session(profile, run_id=self._active_run_id)
+        state.session = self._create_session(profile, run_id=state.run_id)
         try:
-            self._session.start()
+            state.session.start()
         except Exception as exc:
-            self._finish_active_run(RunStatus.START_FAILED, error_message=str(exc))
-            self._session = None
-            self._append_text(f"启动失败: {exc}\n")
+            self._finish_agent_run(state, RunStatus.START_FAILED, error_message=str(exc))
+            state.session = None
+            state.status = AgentSessionStatus.START_FAILED
+            self._append_system_message(f"{profile.display_name} 启动失败: {exc}")
+            self._refresh_agent_roster()
             self._sync_controls()
             return
 
-        self._mark_active_run(RunStatus.RUNNING)
+        self._mark_agent_run(state, RunStatus.RUNNING)
+        state.status = AgentSessionStatus.RUNNING
+        state.output_buffer.reset()
+        if state.log_writer is not None:
+            self._append_system_message(
+                f"{profile.display_name} 已启动，日志目录: {state.log_writer.paths.run_dir}"
+            )
         self.refresh_run_history()
-        self._active_profile = profile
-        self.status_label.setText(f"{profile.display_name} 在线")
-        self._output_buffer.reset()
-        self._output_buffer.append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
-        self._render_output_snapshot()
         self.terminal.setFocus()
         self._flush_timer.start()
+        self._refresh_agent_roster()
         self._sync_controls()
 
     def stop_session(self) -> None:
-        if self._session is None:
+        state = self.selected_agent_state()
+        if state.session is None:
             return
         try:
-            if (
-                self._session.is_alive()
-                and self._active_profile is not None
-                and self._active_profile.id == "powershell"
-            ):
-                self._session.write("exit\r\n")
+            if state.session.is_alive() and state.profile.id == "powershell":
+                state.session.write("exit\r\n")
         finally:
-            self._session.stop()
-            self._drain_session(mark_exited=False)
-            self._session = None
-            self._finish_active_run(RunStatus.STOPPED)
-            self._active_profile = None
-            self._flush_timer.stop()
-            self.status_label.setText("已停止")
+            state.session.stop()
+            self._drain_agent_state(state, mark_exited=False)
+            state.session = None
+            state.status = AgentSessionStatus.STOPPED
+            self._finish_agent_run(state, RunStatus.STOPPED)
+            if not self._any_session_alive():
+                self._flush_timer.stop()
+            self._refresh_agent_roster()
             self._sync_controls()
 
     def send_command(self) -> None:
-        if self._session is None or not self._session.is_alive():
+        state = self.selected_agent_state()
+        if state.session is None or not state.session.is_alive():
             return
         text = self.command_input.text().strip()
         if not text:
             return
-        self._session.write(text + "\r\n")
+        state.session.write(text + "\r\n")
         self.command_input.clear()
 
     def _write_terminal_input(self, text: str) -> None:
-        if self._session is None or not self._session.is_alive():
+        state = self.selected_agent_state()
+        if state.session is None or not state.session.is_alive():
             return
-        self._session.write(text)
+        state.session.write(text)
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        self.stop_session()
+        for state in self._agent_states.values():
+            if state.session is not None:
+                if state.session.is_alive():
+                    state.session.stop()
+                self._finish_agent_run(state, RunStatus.STOPPED)
+                state.session = None
+                state.status = AgentSessionStatus.STOPPED
         super().closeEvent(event)
 
     def selected_profile(self) -> AgentProfile:
         index = self.agent_combo.currentIndex()
         return self._profiles[index]
+
+    def selected_profile_id(self) -> str:
+        return self.selected_profile().id
+
+    def selected_agent_state(self) -> AgentSessionState:
+        return self._agent_states[self.selected_profile_id()]
+
+    def _any_session_alive(self) -> bool:
+        return any(state.is_alive() for state in self._agent_states.values())
 
     @property
     def workspace_path(self) -> Path:
@@ -536,54 +559,67 @@ class MainWindow(QMainWindow):
         )
 
     def _drain_session(self, mark_exited: bool = True) -> None:
-        if self._session is None:
-            return
-        for event in self._session.drain():
-            if self._log_writer is not None:
-                self._log_writer.append(event)
-            self._output_buffer.append(event)
-        if self._output_buffer.has_pending_snapshot():
-            self._render_output_snapshot()
-        if not self._session.is_alive():
-            self.status_label.setText("进程已退出")
-            if mark_exited:
-                self._finish_active_run(RunStatus.EXITED)
+        for state in self._agent_states.values():
+            self._drain_agent_state(state, mark_exited=mark_exited)
+        if not self._any_session_alive():
             self._flush_timer.stop()
-            self._sync_controls()
+        self._sync_controls()
 
-    def _mark_active_run(
+    def _drain_agent_state(
         self,
+        state: AgentSessionState,
+        mark_exited: bool = True,
+    ) -> None:
+        if state.session is None:
+            return
+        for event in state.session.drain():
+            if state.log_writer is not None:
+                state.log_writer.append(event)
+            state.output_buffer.append(event)
+        if state.output_buffer.has_pending_snapshot():
+            self._append_agent_snapshot(state)
+        if not state.session.is_alive():
+            if mark_exited:
+                self._finish_agent_run(state, RunStatus.EXITED)
+            state.status = AgentSessionStatus.EXITED
+            state.session = None
+            self._append_system_message(f"{state.profile.display_name} 进程已退出")
+            self._refresh_agent_roster()
+
+    def _mark_agent_run(
+        self,
+        state: AgentSessionState,
         status: RunStatus,
         *,
         error_message: str | None = None,
     ) -> None:
-        if self._run_index_store is None or self._active_run_id is None:
+        if state.run_index_store is None or state.run_id is None:
             return
         try:
-            self._run_index_store.update_status(
-                self._active_run_id,
+            state.run_index_store.update_status(
+                state.run_id,
                 status,
                 error_message=error_message,
             )
         except Exception as exc:
-            self._append_text(f"运行记录更新失败: {exc}\n")
+            self._append_system_message(
+                f"{state.profile.display_name} 运行记录更新失败: {exc}"
+            )
 
-    def _finish_active_run(
+    def _finish_agent_run(
         self,
+        state: AgentSessionState,
         status: RunStatus,
         *,
         error_message: str | None = None,
     ) -> None:
-        self._mark_active_run(status, error_message=error_message)
-        self._cleanup_inactive_run()
+        self._mark_agent_run(state, status, error_message=error_message)
+        if state.log_writer is not None:
+            state.log_writer.close()
+            state.log_writer = None
+        state.run_index_store = None
+        state.run_id = None
         self.refresh_run_history()
-
-    def _cleanup_inactive_run(self) -> None:
-        if self._log_writer is not None:
-            self._log_writer.close()
-            self._log_writer = None
-        self._run_index_store = None
-        self._active_run_id = None
 
     def _append_text(self, text: str) -> None:
         cursor = self.terminal.textCursor()
@@ -593,21 +629,64 @@ class MainWindow(QMainWindow):
         self.terminal.ensureCursorVisible()
 
     def _render_output_snapshot(self) -> None:
-        self.terminal.setPlainText(self._output_buffer.snapshot())
-        self.terminal.moveCursor(QTextCursor.MoveOperation.End)
+        self._append_agent_snapshot(self.selected_agent_state())
+
+    def _append_agent_snapshot(self, state: AgentSessionState) -> None:
+        text = state.output_buffer.snapshot()
+        if text:
+            self._append_chat_message(
+                sender_id=state.profile.id,
+                sender_name=state.profile.display_name,
+                text=text,
+                kind=ChatMessageKind.AGENT,
+            )
+
+    def _append_system_message(self, text: str) -> None:
+        self._append_chat_message(
+            sender_id="system",
+            sender_name="系统",
+            text=text,
+            kind=ChatMessageKind.SYSTEM,
+        )
+
+    def _append_chat_message(
+        self,
+        *,
+        sender_id: str,
+        sender_name: str,
+        text: str,
+        kind: ChatMessageKind,
+    ) -> None:
+        message = new_chat_message(
+            sender_id=sender_id,
+            sender_name=sender_name,
+            text=text,
+            kind=kind,
+        )
+        self.chat_timeline.appendPlainText(format_chat_message(message))
+        self.chat_timeline.appendPlainText("")
+        self.chat_timeline.moveCursor(QTextCursor.MoveOperation.End)
 
     def _sync_controls(self) -> None:
-        connected = self._session is not None and self._session.is_alive()
-        self.choose_workspace_button.setEnabled(not connected)
+        state = self.selected_agent_state()
+        selected_connected = state.is_alive()
+        any_connected = self._any_session_alive()
+        self.choose_workspace_button.setEnabled(not any_connected)
         self.recent_workspace_combo.setEnabled(
-            not connected and self.recent_workspace_combo.count() > 0
+            not any_connected and self.recent_workspace_combo.count() > 0
         )
-        self.agent_combo.setEnabled(not connected)
-        self.start_button.setEnabled(not connected)
-        self.stop_button.setEnabled(connected)
-        self.command_input.setEnabled(connected)
-        self.send_button.setEnabled(connected)
-        self.terminal.set_terminal_input_enabled(connected)
+        self.agent_combo.setEnabled(True)
+        self.start_button.setEnabled(not selected_connected)
+        self.stop_button.setEnabled(selected_connected)
+        self.command_input.setEnabled(selected_connected)
+        self.send_button.setEnabled(selected_connected)
+        self.terminal.set_terminal_input_enabled(selected_connected)
+        if selected_connected:
+            self.status_label.setText(f"{state.profile.display_name} 在线")
+        elif any_connected:
+            self.status_label.setText("有 Agent 在线")
+        else:
+            self.status_label.setText("离线")
         self._sync_history_controls()
 
     def _refresh_agent_roster(self) -> None:
@@ -619,7 +698,7 @@ class MainWindow(QMainWindow):
             self.agent_list.addItem(f"{profile.display_name}  {state.status.value}")
         self.agent_list.blockSignals(False)
         if self.agent_list.count() > 0:
-            self.agent_list.setCurrentRow(max(0, current))
+            self.agent_list.setCurrentRow(min(max(0, current), self.agent_list.count() - 1))
 
     def _select_agent_row(self, row: int) -> None:
         if 0 <= row < len(self._profiles):
