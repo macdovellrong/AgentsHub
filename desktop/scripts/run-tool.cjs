@@ -28,18 +28,10 @@ function quoteCmdArg(value) {
     throw new Error("Command arguments cannot contain newlines");
   }
 
-  let escaped = value.replace(/%/g, "^%");
-
-  if (escaped.includes('"')) {
-    escaped = escaped
-      .replace(/\^/g, "^^")
-      .replace(/&/g, "^&")
-      .replace(/\|/g, "^|")
-      .replace(/</g, "^<")
-      .replace(/>/g, "^>");
-  }
-
-  return `"${escaped.replace(/"/g, '\\"')}"`;
+  return value
+    .split("%")
+    .map((segment) => `"${segment.replace(/"/g, '""')}"`)
+    .join("^%");
 }
 
 function run(command, args, options = {}) {

@@ -10,6 +10,7 @@ describe("run-tool", () => {
 
   it.each([
     ['has"quote'],
+    ["%PATH%"],
     ["has!PATH!"],
     ["has^caret"],
   ])("preserves %s in arguments on UNC paths", (value) => {
