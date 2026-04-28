@@ -30,6 +30,7 @@ from agenthub.storage.run_index import RunIndexStore, RunRecord, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
 from agenthub.storage.tasks import TaskRecord, TaskStatus, TaskStore
+from agenthub.ui.agent_session import create_agent_states
 from agenthub.ui.output_buffer import OutputBuffer
 
 
@@ -97,7 +98,7 @@ QGroupBox::title {
 QSplitter::handle {
     background: #202833;
 }
-QPlainTextEdit#terminalPane {
+QPlainTextEdit#chatTimeline {
     background: #070a0d;
     color: #d8f3dc;
     border: 1px solid #28313d;
@@ -191,6 +192,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("AgentHub")
         self._profiles = profiles
+        self._agent_states = create_agent_states(self._profiles)
+        self._default_agent_id = "codex"
         self._settings_store = settings_store
         self._workspace_path = self._initial_workspace(workspace_path)
         self._explicit_log_root = log_root is not None
@@ -213,6 +216,7 @@ class MainWindow(QMainWindow):
         self.agent_combo = QComboBox()
         for profile in self._profiles:
             self.agent_combo.addItem(profile.display_name, profile.id)
+        self.agent_combo.hide()
         self.start_button = QPushButton("启动")
         self.stop_button = QPushButton("停止")
         self.command_input = QLineEdit()
@@ -229,12 +233,17 @@ class MainWindow(QMainWindow):
             task_list.setMinimumWidth(140)
             task_list.setMinimumHeight(72)
             self.task_lists[status] = task_list
-        self.terminal = TerminalPane()
-        self.terminal.setObjectName("terminalPane")
-        self.terminal.setFont(QFont("Consolas", 10))
-        self.terminal.set_input_handler(self._write_terminal_input)
-        self.terminal.setPlaceholderText("启动 Agent 后，可在这里直接输入与终端交互")
-        self.terminal.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.agent_list = QListWidget()
+        self.agent_list.setObjectName("agentRoster")
+        self.agent_list.setMinimumWidth(180)
+        self.chat_timeline = TerminalPane()
+        self.chat_timeline.setObjectName("chatTimeline")
+        self.chat_timeline.setFont(QFont("Consolas", 10))
+        self.chat_timeline.set_input_handler(self._write_terminal_input)
+        self.chat_timeline.setPlaceholderText("Agent 输出会显示在这里")
+        self.chat_timeline.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.terminal = self.chat_timeline
+        self.terminal.setPlaceholderText("Agent 输出会显示在这里")
 
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.status_label)
@@ -244,10 +253,7 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(QLabel("最近"))
         top_bar.addWidget(self.recent_workspace_combo)
         top_bar.addWidget(self.choose_workspace_button)
-        top_bar.addWidget(QLabel("Agent"))
         top_bar.addWidget(self.agent_combo)
-        top_bar.addWidget(self.start_button)
-        top_bar.addWidget(self.stop_button)
 
         input_bar = QHBoxLayout()
         input_bar.addWidget(self.command_input, 1)
@@ -273,10 +279,18 @@ class MainWindow(QMainWindow):
             group.setLayout(group_layout)
             task_board.addWidget(group)
 
+        agent_bar = QHBoxLayout()
+        agent_bar.addWidget(QLabel("Agent"))
+        agent_bar.addStretch(1)
+        agent_bar.addWidget(self.start_button)
+        agent_bar.addWidget(self.stop_button)
+
         left_panel = QWidget()
         left_panel.setObjectName("taskPanel")
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addLayout(agent_bar)
+        left_layout.addWidget(self.agent_list, 1)
         left_layout.addLayout(task_bar)
         left_layout.addLayout(task_board)
         left_panel.setLayout(left_layout)
@@ -285,8 +299,8 @@ class MainWindow(QMainWindow):
         terminal_panel.setObjectName("terminalPanel")
         terminal_layout = QVBoxLayout()
         terminal_layout.setContentsMargins(0, 0, 0, 0)
-        terminal_layout.addWidget(QLabel("实时终端"))
-        terminal_layout.addWidget(self.terminal, 1)
+        terminal_layout.addWidget(QLabel("共享聊天"))
+        terminal_layout.addWidget(self.chat_timeline, 1)
         terminal_layout.addLayout(input_bar)
         terminal_panel.setLayout(terminal_layout)
 
@@ -336,11 +350,13 @@ class MainWindow(QMainWindow):
         self.choose_workspace_button.clicked.connect(self.choose_workspace)
         self.recent_workspace_combo.activated.connect(self._select_recent_workspace)
         self.agent_combo.currentIndexChanged.connect(self._sync_agent_placeholder)
+        self.agent_list.currentRowChanged.connect(self._select_agent_row)
         self._sync_workspace_label()
         self._sync_recent_workspaces()
         self.refresh_tasks()
         self.refresh_run_history()
         self._sync_agent_placeholder()
+        self._refresh_agent_roster()
         self._sync_controls()
 
     def start_session(self) -> None:
@@ -593,6 +609,23 @@ class MainWindow(QMainWindow):
         self.send_button.setEnabled(connected)
         self.terminal.set_terminal_input_enabled(connected)
         self._sync_history_controls()
+
+    def _refresh_agent_roster(self) -> None:
+        current = self.agent_list.currentRow()
+        self.agent_list.blockSignals(True)
+        self.agent_list.clear()
+        for profile in self._profiles:
+            state = self._agent_states[profile.id]
+            self.agent_list.addItem(f"{profile.display_name}  {state.status.value}")
+        self.agent_list.blockSignals(False)
+        if self.agent_list.count() > 0:
+            self.agent_list.setCurrentRow(max(0, current))
+
+    def _select_agent_row(self, row: int) -> None:
+        if 0 <= row < len(self._profiles):
+            self.agent_combo.setCurrentIndex(row)
+            self._sync_agent_placeholder()
+            self._sync_controls()
 
     def _sync_history_controls(self) -> None:
         has_selection = self.selected_history_record() is not None

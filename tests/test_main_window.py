@@ -200,13 +200,20 @@ def test_main_window_terminal_keys_write_directly_to_live_session(tmp_path):
         app.processEvents()
 
 
-def test_main_window_applies_operational_layout_and_terminal_style():
+def test_main_window_applies_shared_chat_layout():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     try:
-        assert window.terminal.objectName() == "terminalPane"
+        assert window.agent_list.objectName() == "agentRoster"
+        assert window.chat_timeline.objectName() == "chatTimeline"
         assert window._workspace_splitter.count() == 3
-        assert "QPlainTextEdit#terminalPane" in window.styleSheet()
+        assert "QPlainTextEdit#chatTimeline" in window.styleSheet()
+        assert [window.agent_list.item(index).text().split()[0] for index in range(4)] == [
+            "PowerShell",
+            "Codex",
+            "Claude",
+            "Gemini",
+        ]
     finally:
         window.close()
         app.processEvents()
