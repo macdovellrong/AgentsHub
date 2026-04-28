@@ -45,8 +45,12 @@ class FakeFactory implements PtyFactory {
   command = "";
   args: string[] = [];
   options: PtySpawnOptions | undefined;
+  spawnError: Error | undefined;
 
   spawn(command: string, args: string[], options: PtySpawnOptions): PtyLike {
+    if (this.spawnError) {
+      throw this.spawnError;
+    }
     this.command = command;
     this.args = args;
     this.options = options;
@@ -88,6 +92,28 @@ class DelayedLogStore extends RunLogStore {
 
   unblockExit(): void {
     this.releaseExit?.();
+  }
+}
+
+class FailingLogStore extends RunLogStore {
+  failNextAppend = false;
+
+  async appendRaw(runId: string, chunk: string): Promise<void> {
+    if (this.failNextAppend) {
+      this.failNextAppend = false;
+      throw new Error(`append failed: ${chunk}`);
+    }
+    await super.appendRaw(runId, chunk);
+  }
+}
+
+class CapturingLogStore extends RunLogStore {
+  lastMetaPath: string | undefined;
+
+  async createRun(input: Parameters<RunLogStore["createRun"]>[0]): Promise<Awaited<ReturnType<RunLogStore["createRun"]>>> {
+    const run = await super.createRun(input);
+    this.lastMetaPath = run.metaPath;
+    return run;
   }
 }
 
@@ -213,6 +239,66 @@ describe("PtySessionManager", () => {
     logStore.unblockExit();
 
     await expect(exitEvent).resolves.toBe(true);
+  });
+
+  it("emits log errors without blocking later data or exit", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const logStore = new FailingLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+    const dataChunks: string[] = [];
+    const errors: string[] = [];
+    const exitCodes: Array<number | null> = [];
+    manager.on("data", (event) => dataChunks.push(event.data));
+    manager.on("error", (event) => errors.push(event.message));
+    manager.on("exit", (event) => exitCodes.push(event.exitCode));
+
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+    logStore.failNextAppend = true;
+
+    factory.pty.emit("data", "lost\r\n");
+    await waitForCondition(() => errors.length === 1);
+
+    factory.pty.emit("data", "kept\r\n");
+    await waitForCondition(() => dataChunks.length === 1);
+    factory.pty.emit("exit", { exitCode: 0 });
+    await waitForCondition(() => exitCodes.length === 1);
+
+    expect(errors[0]).toContain("append failed: lost");
+    expect(dataChunks).toEqual(["kept\r\n"]);
+    expect(exitCodes).toEqual([0]);
+    expect(() => manager.write(session.sessionId, "after-exit")).toThrow(`Unknown session: ${session.sessionId}`);
+  });
+
+  it("marks the run exited when PTY spawn fails after run creation", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    factory.spawnError = new Error("spawn failed");
+    const logStore = new CapturingLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+
+    await expect(
+      manager.startPowerShell({
+        workspacePath,
+        cols: 80,
+        rows: 24,
+      }),
+    ).rejects.toThrow("spawn failed");
+
+    expect(logStore.lastMetaPath).toBeDefined();
+    const meta = JSON.parse(await readFile(logStore.lastMetaPath!, "utf8"));
+    expect(meta.status).toBe("exited");
+    expect(meta.exitCode).toBeNull();
   });
 
   it("writes, resizes, and stops a session", async () => {

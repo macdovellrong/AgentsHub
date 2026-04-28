@@ -51,6 +51,11 @@ export type PtyExitEvent = {
   exitCode: number | null;
 };
 
+export type PtyErrorEvent = {
+  sessionId?: string;
+  message: string;
+};
+
 type PtySessionManagerOptions = {
   ptyFactory?: PtyFactory;
   logStore?: RunLogStore;
@@ -96,17 +101,27 @@ export class PtySessionManager extends EventEmitter {
       command: POWERSHELL_COMMAND,
       args: POWERSHELL_ARGS,
     });
-    const pty = this.ptyFactory.spawn(POWERSHELL_COMMAND, POWERSHELL_ARGS, {
-      name: "xterm-256color",
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.workspacePath,
-      env: {
-        ...process.env,
-        TERM: "xterm-256color",
-        COLORTERM: "truecolor",
-      },
-    });
+    let pty: PtyLike;
+    try {
+      pty = this.ptyFactory.spawn(POWERSHELL_COMMAND, POWERSHELL_ARGS, {
+        name: "xterm-256color",
+        cols: input.cols,
+        rows: input.rows,
+        cwd: input.workspacePath,
+        env: {
+          ...process.env,
+          TERM: "xterm-256color",
+          COLORTERM: "truecolor",
+        },
+      });
+    } catch (error) {
+      try {
+        await this.logStore.markExited(run.runId, null);
+      } catch (markError) {
+        this.emitPtyError(undefined, markError);
+      }
+      throw error;
+    }
     const session: PtySession = {
       sessionId: randomUUID(),
       runId: run.runId,
@@ -119,10 +134,7 @@ export class PtySessionManager extends EventEmitter {
 
     let storedSession: StoredSession;
     const dataSubscription = pty.onData((data) => {
-      storedSession.persistenceQueue = storedSession.persistenceQueue.then(async () => {
-        await this.logStore.appendRaw(session.runId, data);
-        this.emit("data", { sessionId: session.sessionId, data } satisfies PtyDataEvent);
-      });
+      storedSession.persistenceQueue = storedSession.persistenceQueue.then(() => this.persistAndEmitData(storedSession, data));
     });
     const exitSubscription = pty.onExit((event) => {
       void this.handleExit(storedSession, event.exitCode);
@@ -160,16 +172,43 @@ export class PtySessionManager extends EventEmitter {
     return stored;
   }
 
+  private async persistAndEmitData(stored: StoredSession, data: string): Promise<void> {
+    try {
+      await this.logStore.appendRaw(stored.session.runId, data);
+    } catch (error) {
+      this.emitPtyError(stored.session.sessionId, error);
+      return;
+    }
+    this.emit("data", { sessionId: stored.session.sessionId, data } satisfies PtyDataEvent);
+  }
+
   private async handleExit(stored: StoredSession, exitCode: number | null): Promise<void> {
     stored.session.status = "exited";
-    await stored.persistenceQueue;
-    await this.logStore.markExited(stored.session.runId, exitCode);
-    this.sessions.delete(stored.session.sessionId);
-    stored.dataSubscription.dispose();
-    stored.exitSubscription.dispose();
-    this.emit("exit", {
-      sessionId: stored.session.sessionId,
-      exitCode,
-    } satisfies PtyExitEvent);
+    try {
+      await stored.persistenceQueue;
+    } catch (error) {
+      this.emitPtyError(stored.session.sessionId, error);
+    }
+    try {
+      await this.logStore.markExited(stored.session.runId, exitCode);
+    } catch (error) {
+      this.emitPtyError(stored.session.sessionId, error);
+    } finally {
+      this.sessions.delete(stored.session.sessionId);
+      stored.dataSubscription.dispose();
+      stored.exitSubscription.dispose();
+      this.emit("exit", {
+        sessionId: stored.session.sessionId,
+        exitCode,
+      } satisfies PtyExitEvent);
+    }
+  }
+
+  private emitPtyError(sessionId: string | undefined, error: unknown): void {
+    if (this.listenerCount("error") === 0) {
+      return;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    this.emit("error", { sessionId, message } satisfies PtyErrorEvent);
   }
 }
