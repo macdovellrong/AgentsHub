@@ -3,4 +3,5 @@ __pycache__/
 *.py[cod]
 .venv/
 .agenthub/
+.worktrees/
 *.egg-info/
