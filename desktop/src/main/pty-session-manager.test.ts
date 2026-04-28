@@ -179,6 +179,45 @@ describe("PtySessionManager", () => {
     await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("hello\r\n");
   });
 
+  it("starts an arbitrary profile with session metadata", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+
+    const session = await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: ["--model", "gpt-5"],
+        aliases: ["code"],
+        rolePrompt: "Implement changes.",
+        env: { CODEX_HOME: "C:/codex" },
+        defaultCwd: null,
+        useWorkspaceWriteLock: true,
+      },
+      workspacePath,
+      120,
+      40,
+    );
+
+    expect(factory.command).toBe("codex.exe");
+    expect(factory.args).toEqual(["--model", "gpt-5"]);
+    expect(factory.options?.cwd).toBe(workspacePath);
+    expect(factory.options?.env.CODEX_HOME).toBe("C:/codex");
+    expect(session).toMatchObject({
+      profileId: "codex",
+      profileName: "Codex",
+      kind: "codex",
+      status: "online",
+      workspacePath,
+    });
+  });
+
   it("appends raw data through the log store before emitting data", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();

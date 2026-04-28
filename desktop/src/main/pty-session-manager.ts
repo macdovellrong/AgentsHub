@@ -3,6 +3,9 @@ import process from "node:process";
 import { randomUUID } from "node:crypto";
 import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
+import { EventStore } from "./event-store";
+import { getDefaultProfiles, type AgentProfile, type AgentProfileKind } from "./profile-store";
+import { WorkspaceWriteLockService } from "./workspace-write-lock";
 
 export type PtySpawnOptions = {
   name: string;
@@ -34,11 +37,14 @@ export type StartPowerShellInput = {
 export type PtySession = {
   sessionId: string;
   runId: string;
-  profileId: "powershell";
+  profileId: string;
+  profileName: string;
+  kind: AgentProfileKind;
   pid: number;
   status: "online" | "exited";
   workspacePath: string;
   rawLogPath: string;
+  metaPath: string;
 };
 
 export type PtyDataEvent = {
@@ -59,6 +65,8 @@ export type PtyErrorEvent = {
 type PtySessionManagerOptions = {
   ptyFactory?: PtyFactory;
   logStore?: RunLogStore;
+  eventStore?: EventStore;
+  writeLocks?: WorkspaceWriteLockService;
 };
 
 type StoredSession = {
@@ -87,30 +95,47 @@ export class NodePtyFactory implements PtyFactory {
 export class PtySessionManager extends EventEmitter {
   private readonly ptyFactory: PtyFactory;
   private readonly logStore: RunLogStore;
+  private readonly eventStore: EventStore;
+  private readonly writeLocks: WorkspaceWriteLockService;
   private readonly sessions = new Map<string, StoredSession>();
 
   constructor(options: PtySessionManagerOptions = {}) {
     super();
     this.ptyFactory = options.ptyFactory ?? new NodePtyFactory();
     this.logStore = options.logStore ?? new RunLogStore();
+    this.eventStore = options.eventStore ?? new EventStore();
+    this.writeLocks = options.writeLocks ?? new WorkspaceWriteLockService();
   }
 
   async startPowerShell(input: StartPowerShellInput): Promise<PtySession> {
+    const powerShellProfile = getDefaultProfiles().find((profile) => profile.id === "powershell");
+    if (!powerShellProfile) {
+      throw new Error("Default PowerShell profile is unavailable");
+    }
+    return this.startProfile(powerShellProfile, input.workspacePath, input.cols, input.rows);
+  }
+
+  async startProfile(profile: AgentProfile, workspacePath: string, cols: number, rows: number): Promise<PtySession> {
+    const lockDecision = this.writeLocks.canStart(workspacePath, profile.useWorkspaceWriteLock);
+    if (!lockDecision.ok) {
+      throw new Error(lockDecision.reason);
+    }
     const run = await this.logStore.createRun({
-      workspacePath: input.workspacePath,
-      profileId: "powershell",
-      command: POWERSHELL_COMMAND,
-      args: POWERSHELL_ARGS,
+      workspacePath,
+      profileId: profile.id,
+      command: profile.command,
+      args: profile.args,
     });
     let pty: PtyLike;
     try {
-      pty = this.ptyFactory.spawn(POWERSHELL_COMMAND, POWERSHELL_ARGS, {
+      pty = this.ptyFactory.spawn(profile.command, profile.args, {
         name: "xterm-256color",
-        cols: input.cols,
-        rows: input.rows,
-        cwd: input.workspacePath,
+        cols,
+        rows,
+        cwd: profile.defaultCwd ?? workspacePath,
         env: {
           ...process.env,
+          ...profile.env,
           TERM: "xterm-256color",
           COLORTERM: "truecolor",
         },
@@ -126,11 +151,14 @@ export class PtySessionManager extends EventEmitter {
     const session: PtySession = {
       sessionId: randomUUID(),
       runId: run.runId,
-      profileId: "powershell",
+      profileId: profile.id,
+      profileName: profile.name,
+      kind: profile.kind,
       pid: pty.pid,
       status: "online",
-      workspacePath: input.workspacePath,
+      workspacePath,
       rawLogPath: run.rawLogPath,
+      metaPath: run.metaPath,
     };
 
     let storedSession: StoredSession;
@@ -149,8 +177,26 @@ export class PtySessionManager extends EventEmitter {
       persistenceQueue: Promise.resolve(),
     };
     this.sessions.set(session.sessionId, storedSession);
+    this.writeLocks.register({
+      sessionId: session.sessionId,
+      workspacePath,
+      profileId: profile.id,
+      profileName: profile.name,
+      useWorkspaceWriteLock: profile.useWorkspaceWriteLock,
+    });
+    await this.eventStore.append(workspacePath, {
+      type: "session_started",
+      sessionId: session.sessionId,
+      runId: session.runId,
+      profileId: profile.id,
+      profileName: profile.name,
+    });
 
     return session;
+  }
+
+  listSessions(): PtySession[] {
+    return [...this.sessions.values()].map((stored) => ({ ...stored.session }));
   }
 
   write(sessionId: string, data: string): void {
@@ -176,6 +222,14 @@ export class PtySessionManager extends EventEmitter {
   private async persistAndEmitData(stored: StoredSession, data: string): Promise<void> {
     try {
       await this.logStore.appendRaw(stored.session.runId, data);
+      await this.eventStore.append(stored.session.workspacePath, {
+        type: "agent_output",
+        sessionId: stored.session.sessionId,
+        runId: stored.session.runId,
+        profileId: stored.session.profileId,
+        profileName: stored.session.profileName,
+        message: data,
+      });
     } catch (error) {
       this.emitPtyError(stored.session.sessionId, error);
       return;
@@ -196,8 +250,21 @@ export class PtySessionManager extends EventEmitter {
       this.emitPtyError(stored.session.sessionId, error);
     } finally {
       this.sessions.delete(stored.session.sessionId);
+      this.writeLocks.release(stored.session.sessionId);
       stored.dataSubscription.dispose();
       stored.exitSubscription.dispose();
+      try {
+        await this.eventStore.append(stored.session.workspacePath, {
+          type: "session_exited",
+          sessionId: stored.session.sessionId,
+          runId: stored.session.runId,
+          profileId: stored.session.profileId,
+          profileName: stored.session.profileName,
+          exitCode,
+        });
+      } catch (error) {
+        this.emitPtyError(stored.session.sessionId, error);
+      }
       this.emit("exit", {
         sessionId: stored.session.sessionId,
         exitCode,

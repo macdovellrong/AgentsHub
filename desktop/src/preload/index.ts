@@ -1,13 +1,30 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   IpcChannels,
+  type AgentHubEventDto,
+  type AgentProfileDto,
+  type AgentTaskDto,
+  type AppendEventRequest,
+  type CreateProfileRequest,
+  type CreateTaskRequest,
+  type DuplicateProfileRequest,
+  type ReadRunRawLogRequest,
+  type RouteInputRequest,
+  type RouteInputResponse,
+  type RunHistoryDto,
   type SessionErrorEvent,
   type SessionExitEvent,
+  type StartOrchestrationRequest,
+  type StartProfileRequest,
   type StartPowerShellRequest,
   type StartPowerShellResponse,
   type TerminalDataEvent,
   type TerminalInputRequest,
   type TerminalResizeRequest,
+  type UpdateProfileRequest,
+  type UpdateTaskRequest,
+  type WorkspaceLockStatusResponse,
+  type WorkspaceRequest,
 } from "../shared/ipc";
 
 const agenthub = {
@@ -17,6 +34,34 @@ const agenthub = {
 
   startPowerShell(request: StartPowerShellRequest): Promise<StartPowerShellResponse> {
     return ipcRenderer.invoke(IpcChannels.StartPowerShell, request) as Promise<StartPowerShellResponse>;
+  },
+
+  listProfiles(): Promise<AgentProfileDto[]> {
+    return ipcRenderer.invoke(IpcChannels.ProfilesList) as Promise<AgentProfileDto[]>;
+  },
+
+  createProfile(request: CreateProfileRequest): Promise<AgentProfileDto> {
+    return ipcRenderer.invoke(IpcChannels.ProfilesCreate, request) as Promise<AgentProfileDto>;
+  },
+
+  updateProfile(request: UpdateProfileRequest): Promise<AgentProfileDto> {
+    return ipcRenderer.invoke(IpcChannels.ProfilesUpdate, request) as Promise<AgentProfileDto>;
+  },
+
+  deleteProfile(id: string): Promise<void> {
+    return ipcRenderer.invoke(IpcChannels.ProfilesDelete, id) as Promise<void>;
+  },
+
+  duplicateProfile(request: DuplicateProfileRequest): Promise<AgentProfileDto> {
+    return ipcRenderer.invoke(IpcChannels.ProfilesDuplicate, request) as Promise<AgentProfileDto>;
+  },
+
+  startProfile(request: StartProfileRequest): Promise<StartPowerShellResponse> {
+    return ipcRenderer.invoke(IpcChannels.StartProfile, request) as Promise<StartPowerShellResponse>;
+  },
+
+  listSessions(): Promise<StartPowerShellResponse[]> {
+    return ipcRenderer.invoke(IpcChannels.SessionsList) as Promise<StartPowerShellResponse[]>;
   },
 
   terminalInput(request: TerminalInputRequest): Promise<void> {
@@ -29,6 +74,46 @@ const agenthub = {
 
   stopSession(sessionId: string): Promise<void> {
     return ipcRenderer.invoke(IpcChannels.StopSession, sessionId) as Promise<void>;
+  },
+
+  routeInput(request: RouteInputRequest): Promise<RouteInputResponse> {
+    return ipcRenderer.invoke(IpcChannels.RouteInput, request) as Promise<RouteInputResponse>;
+  },
+
+  listEvents(request: WorkspaceRequest = {}): Promise<AgentHubEventDto[]> {
+    return ipcRenderer.invoke(IpcChannels.EventsList, request) as Promise<AgentHubEventDto[]>;
+  },
+
+  appendEvent(request: AppendEventRequest): Promise<AgentHubEventDto> {
+    return ipcRenderer.invoke(IpcChannels.EventsAppend, request) as Promise<AgentHubEventDto>;
+  },
+
+  listRuns(request: WorkspaceRequest = {}): Promise<RunHistoryDto[]> {
+    return ipcRenderer.invoke(IpcChannels.RunsList, request) as Promise<RunHistoryDto[]>;
+  },
+
+  readRunRawLog(request: ReadRunRawLogRequest): Promise<string> {
+    return ipcRenderer.invoke(IpcChannels.RunRawLog, request) as Promise<string>;
+  },
+
+  listTasks(request: WorkspaceRequest = {}): Promise<AgentTaskDto[]> {
+    return ipcRenderer.invoke(IpcChannels.TasksList, request) as Promise<AgentTaskDto[]>;
+  },
+
+  createTask(request: CreateTaskRequest): Promise<AgentTaskDto> {
+    return ipcRenderer.invoke(IpcChannels.TasksCreate, request) as Promise<AgentTaskDto>;
+  },
+
+  updateTask(request: UpdateTaskRequest): Promise<AgentTaskDto> {
+    return ipcRenderer.invoke(IpcChannels.TasksUpdate, request) as Promise<AgentTaskDto>;
+  },
+
+  startOrchestration(request: StartOrchestrationRequest): Promise<{ tasks: AgentTaskDto[] }> {
+    return ipcRenderer.invoke(IpcChannels.OrchestrationStart, request) as Promise<{ tasks: AgentTaskDto[] }>;
+  },
+
+  getWorkspaceLockStatus(): Promise<WorkspaceLockStatusResponse> {
+    return ipcRenderer.invoke(IpcChannels.WorkspaceLockStatus) as Promise<WorkspaceLockStatusResponse>;
   },
 
   onTerminalData(callback: (event: TerminalDataEvent) => void): () => void {
