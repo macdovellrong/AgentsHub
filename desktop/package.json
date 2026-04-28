@@ -10,7 +10,7 @@
     "build": "node ./node_modules/electron-vite/bin/electron-vite.js build",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "test": "node ./node_modules/vitest/vitest.mjs run",
-    "postinstall": "node ./node_modules/electron-rebuild/lib/src/cli.js -f -w node-pty"
+    "postinstall": "node ./scripts/rebuild-node-pty.cjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
