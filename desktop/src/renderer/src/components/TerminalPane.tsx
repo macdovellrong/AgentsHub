@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { fitAndReportTerminalSize } from "./terminal-size";
 
 type TerminalPaneProps = {
   sessionId: string | null;
@@ -10,6 +11,8 @@ type TerminalPaneProps = {
 
 export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef(sessionId);
   const onResizeRef = useRef(onResize);
 
@@ -60,6 +63,8 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     });
     const fitAddon = new FitAddon();
 
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     fitAddon.fit();
@@ -85,11 +90,7 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     });
 
     const fitAndReport = () => {
-      fitAddon.fit();
-
-      if (sessionIdRef.current) {
-        onResizeRef.current(terminal.cols, terminal.rows);
-      }
+      fitAndReportTerminalSize(sessionIdRef.current, terminal, fitAddon, onResizeRef.current);
     };
 
     const resizeObserver = new ResizeObserver(fitAndReport);
@@ -101,8 +102,21 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       removeTerminalDataListener();
       dataSubscription.dispose();
       terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+
+    if (!sessionId || !terminal || !fitAddon) {
+      return;
+    }
+
+    fitAndReportTerminalSize(sessionId, terminal, fitAddon, onResizeRef.current);
+  }, [sessionId]);
 
   return <section className="terminal-pane" ref={containerRef} aria-label="Terminal" />;
 }

@@ -118,10 +118,10 @@ export function App(): React.JSX.Element {
         <div className="actions">
           <span className={`status-pill status-${status}`}>{status}</span>
           <button type="button" onClick={startPowerShell} disabled={isOnline}>
-            启动 PowerShell
+            Start PowerShell
           </button>
           <button type="button" onClick={stopSession} disabled={!session || status !== "online"}>
-            停止
+            Stop
           </button>
         </div>
       </header>
