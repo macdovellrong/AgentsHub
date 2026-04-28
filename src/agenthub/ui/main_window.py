@@ -204,7 +204,9 @@ class MainWindow(QMainWindow):
         self.refresh_run_history()
         self._active_profile = profile
         self.status_label.setText(f"{profile.display_name} 在线")
-        self._append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
+        self._output_buffer.reset()
+        self._output_buffer.append_text(f"日志目录: {self._log_writer.paths.run_dir}\n")
+        self._render_output_snapshot()
         self._flush_timer.start()
         self._sync_controls()
 
@@ -341,9 +343,8 @@ class MainWindow(QMainWindow):
             if self._log_writer is not None:
                 self._log_writer.append(event)
             self._output_buffer.append(event)
-        text = self._output_buffer.flush_text()
-        if text:
-            self._append_text(text)
+        if self._output_buffer.has_pending_snapshot():
+            self._render_output_snapshot()
         if not self._session.is_alive():
             self.status_label.setText("进程已退出")
             if mark_exited:
@@ -391,6 +392,10 @@ class MainWindow(QMainWindow):
         cursor.insertText(text)
         self.terminal.setTextCursor(cursor)
         self.terminal.ensureCursorVisible()
+
+    def _render_output_snapshot(self) -> None:
+        self.terminal.setPlainText(self._output_buffer.snapshot())
+        self.terminal.moveCursor(QTextCursor.MoveOperation.End)
 
     def _sync_controls(self) -> None:
         connected = self._session is not None and self._session.is_alive()

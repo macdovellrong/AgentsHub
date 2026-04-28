@@ -102,6 +102,46 @@ def test_main_window_writes_drained_events_to_run_log(tmp_path):
         app.processEvents()
 
 
+def test_main_window_renders_drained_events_as_screen_snapshot(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(log_root=tmp_path)
+    event = OutputEvent(
+        run_id="hmi-powershell",
+        stream=StreamName.PTY,
+        raw="\x1b[32mold\x1b[0m\rnew",
+        clean="old\rnew",
+    )
+
+    class FakeSession:
+        def drain(self):
+            return [event]
+
+        def is_alive(self):
+            return True
+
+        def stop(self):
+            pass
+
+    window._session = FakeSession()
+    window._log_writer = RunLogWriter.create(
+        root=tmp_path,
+        profile_id="powershell",
+        run_id="hmi-powershell-screen-test",
+    )
+    try:
+        window._drain_session()
+        window._log_writer.close()
+
+        run_dir = tmp_path / "hmi-powershell-screen-test"
+        assert (run_dir / "raw.log").read_bytes() == "\x1b[32mold\x1b[0m\rnew".encode()
+        assert (run_dir / "clean.log").read_bytes() == "old\rnew".encode()
+        assert window.terminal.toPlainText() == "new"
+    finally:
+        window._session = None
+        window.close()
+        app.processEvents()
+
+
 def test_main_window_uses_workspace_for_default_log_root(tmp_path):
     app = QApplication.instance() or QApplication([])
     window = MainWindow(workspace_path=tmp_path)
