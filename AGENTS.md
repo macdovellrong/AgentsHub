@@ -2,13 +2,13 @@
 
 ## 项目结构与模块组织
 
-本仓库当前包含 Python 原型和 Electron 终端 smoke。主代码位置：
+本仓库当前包含 Python 原型和 Electron 终端 smoke。Electron `desktop/` 是当前主线 UI；PyQt/Python HMI 仅作为归档和参考原型保留。
 
 - `process/`：PTY、subprocess pipe、输出清洗、交互式终端会话。
 - `ui/`：PySide6 HMI、输出缓冲、workspace 选择、历史 runs UI。
 - `storage/`：run 日志、运行索引、任务模型、用户设置、最近 workspace。
 - `adapters/`：PowerShell、Codex、Claude、Gemini 等 agent 启动 profile。
-- `desktop/`：Electron + xterm.js + node-pty 桌面端终端 smoke。
+- `desktop/`：Electron + xterm.js + node-pty 桌面端终端 smoke，也是当前主线 UI。
 - `desktop/src/main/`：Electron 主进程、IPC、PTY session 管理、run log 持久化。
 - `desktop/src/renderer/`：React + xterm.js 终端 UI。
 - `tests/`：pytest 测试。
@@ -18,40 +18,28 @@
 
 ## 开发、测试与运行命令
 
-创建开发环境：
+创建 Python 参考环境：
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 ```
 
-运行全部测试：
+运行全部 Python 测试：
 
 ```powershell
 python -m pytest -v
 ```
 
-运行 pipe smoke：
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m agenthub.main pipe-smoke
-```
-
-启动 HMI：
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m agenthub.main hmi
-```
-
-运行 Electron 终端 smoke：
+运行当前主线 Electron UI：
 
 ```powershell
 cd desktop
 npm install
 npm run dev
 ```
+
+如果 node-pty 安装或构建在 UNC 路径下失败，建议把仓库共享映射为盘符后从该盘符路径运行同样命令。
 
 Electron 侧校验命令：
 
@@ -60,6 +48,20 @@ cd desktop
 npm run typecheck
 npm test
 npm run build
+```
+
+运行 legacy pipe smoke：
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m agenthub.main pipe-smoke
+```
+
+启动 legacy PyQt HMI：
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m agenthub.main hmi
 ```
 
 ## 编码风格与命名约定
@@ -103,6 +105,7 @@ npm run build
 - Electron 终端 smoke 实现计划。
 - Electron HMI 新桌面壳，目录为 `desktop/`。
 - xterm.js + node-pty PowerShell 终端 smoke：支持启动 ConPTY、xterm 输入输出、raw log 持久化。
+- E13：旧 PyQt 原型归档。保留 Python 代码作为参考，不再作为主入口；README 和 AGENTS.md 明确 Electron 是当前主线。
 
 ## 未完成任务
 
@@ -118,7 +121,6 @@ npm run build
 - E10：受控 planner -> implementer -> reviewer 编排。提供可手动触发的流程：Claude 拆任务，Codex 执行，Gemini/Claude 审查，全程写入 tasks/runs/events。
 - E11：并发安全。实现同 profile 多实例命名、workspace 写入锁、危险操作提示和可选 git worktree 隔离，避免多个 Agent 同时改同一文件集合。
 - E12：自主 Agent-to-Agent 转发。允许受控规则下把某个 Agent 的结果转发给另一个 Agent，并在中央时间线中可见、可暂停、可停止。
-- E13：旧 PyQt 原型归档。保留 Python 代码作为参考，不再作为主入口；README 和 AGENTS.md 明确 Electron 是当前主线。
 - E14：端到端 smoke。验证 Windows 上可同时启动至少 PowerShell + Codex 两个 profile，中央输入可 `@profile` 路由，独立终端可交互，events/runs/tasks 都落盘。
 
 ## 安全与配置提示

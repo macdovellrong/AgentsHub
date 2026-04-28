@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+# Legacy PyQt/Python HMI entrypoint. The current mainline UI is desktop/.
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $src = Join-Path $repoRoot "src"
