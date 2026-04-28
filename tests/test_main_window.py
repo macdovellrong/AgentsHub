@@ -9,6 +9,7 @@ from agenthub.process.base import OutputEvent, StreamName
 from agenthub.storage.run_index import RunIndexStore, RunStatus
 from agenthub.storage.run_logs import RunLogPaths, RunLogWriter
 from agenthub.storage.settings import SettingsStore
+from agenthub.storage.tasks import TaskStatus, TaskStore
 from agenthub.ui.main_window import MainWindow
 
 
@@ -21,6 +22,14 @@ def test_main_window_constructs_with_initial_controls_disabled():
         assert not window.stop_button.isEnabled()
         assert not window.command_input.isEnabled()
         assert not window.send_button.isEnabled()
+        assert window.refresh_tasks_button.text() == "刷新任务"
+        assert set(window.task_lists) == {
+            TaskStatus.PENDING,
+            TaskStatus.RUNNING,
+            TaskStatus.REVIEW,
+            TaskStatus.DONE,
+            TaskStatus.FAILED,
+        }
     finally:
         window.close()
         app.processEvents()
@@ -367,6 +376,54 @@ def test_main_window_loads_selected_clean_and_raw_history_logs(tmp_path):
         app.processEvents()
 
 
+def test_main_window_groups_tasks_by_status(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = TaskStore.for_workspace(workspace)
+    pending = store.create_task(title="写规格", description="整理需求")
+    running = store.create_task(title="实现 UI", description="")
+    review = store.create_task(title="复查", description="检查行为")
+    done = store.create_task(title="合并文档", description="")
+    failed = store.create_task(title="失败任务", description="需要处理")
+    store.update_status(running.id, TaskStatus.RUNNING)
+    store.update_status(review.id, TaskStatus.REVIEW)
+    store.update_status(done.id, TaskStatus.DONE)
+    store.update_status(failed.id, TaskStatus.FAILED)
+
+    window = MainWindow(workspace_path=workspace)
+    try:
+        assert _task_list_texts(window, TaskStatus.PENDING) == ["写规格\n整理需求"]
+        assert _task_list_texts(window, TaskStatus.RUNNING) == ["实现 UI"]
+        assert _task_list_texts(window, TaskStatus.REVIEW) == ["复查\n检查行为"]
+        assert _task_list_texts(window, TaskStatus.DONE) == ["合并文档"]
+        assert _task_list_texts(window, TaskStatus.FAILED) == ["失败任务\n需要处理"]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_refreshes_tasks_after_workspace_change(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    TaskStore.for_workspace(first).create_task(title="第一个 workspace", description="")
+    TaskStore.for_workspace(second).create_task(title="第二个 workspace", description="")
+
+    window = MainWindow(workspace_path=first)
+    try:
+        assert _task_list_texts(window, TaskStatus.PENDING) == ["第一个 workspace"]
+
+        window.set_workspace(second)
+
+        assert _task_list_texts(window, TaskStatus.PENDING) == ["第二个 workspace"]
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def _create_indexed_run(
     workspace,
     *,
@@ -396,3 +453,8 @@ def _create_indexed_run(
         log_paths=paths,
         status=RunStatus.EXITED,
     )
+
+
+def _task_list_texts(window, status):
+    task_list = window.task_lists[status]
+    return [task_list.item(index).text() for index in range(task_list.count())]

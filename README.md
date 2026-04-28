@@ -45,6 +45,10 @@ Tasks are persisted per workspace at `<workspace>/.agenthub/tasks/tasks.jsonl`.
 Use `agenthub.storage.tasks.TaskStore` to create tasks, update their status, and
 attach a related `run_id`.
 
+The HMI shows a task board for the selected workspace, grouped by pending,
+running, review, done, and failed status. Use "刷新任务" to reload
+`tasks.jsonl` after external changes.
+
 The HMI includes a history runs panel for the selected workspace. Use
 "刷新历史" to reload `runs.jsonl`, then select a run and load either `clean.log`
 or `raw.log` into the terminal area for review.

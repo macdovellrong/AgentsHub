@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,7 +27,17 @@ from agenthub.process.interactive_pty import InteractivePtySession
 from agenthub.storage.run_index import RunIndexStore, RunRecord, RunStatus
 from agenthub.storage.run_logs import RunLogWriter
 from agenthub.storage.settings import SettingsStore
+from agenthub.storage.tasks import TaskRecord, TaskStatus, TaskStore
 from agenthub.ui.output_buffer import OutputBuffer
+
+
+TASK_STATUS_LABELS = {
+    TaskStatus.PENDING: "待处理",
+    TaskStatus.RUNNING: "运行中",
+    TaskStatus.REVIEW: "复查",
+    TaskStatus.DONE: "完成",
+    TaskStatus.FAILED: "失败",
+}
 
 
 class MainWindow(QMainWindow):
@@ -70,6 +81,13 @@ class MainWindow(QMainWindow):
         self.view_raw_button = QPushButton("查看 raw")
         self.history_list = QListWidget()
         self.history_list.setMaximumHeight(140)
+        self.refresh_tasks_button = QPushButton("刷新任务")
+        self.task_lists: dict[TaskStatus, QListWidget] = {}
+        for status in TaskStatus:
+            task_list = QListWidget()
+            task_list.setMinimumWidth(140)
+            task_list.setMaximumHeight(160)
+            self.task_lists[status] = task_list
         self.terminal = QPlainTextEdit()
         self.terminal.setReadOnly(True)
         self.terminal.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -98,8 +116,23 @@ class MainWindow(QMainWindow):
         history_bar.addWidget(self.view_clean_button)
         history_bar.addWidget(self.view_raw_button)
 
+        task_bar = QHBoxLayout()
+        task_bar.addWidget(QLabel("任务看板"))
+        task_bar.addStretch(1)
+        task_bar.addWidget(self.refresh_tasks_button)
+
+        task_board = QHBoxLayout()
+        for status in TaskStatus:
+            group = QGroupBox(TASK_STATUS_LABELS[status])
+            group_layout = QVBoxLayout()
+            group_layout.addWidget(self.task_lists[status])
+            group.setLayout(group_layout)
+            task_board.addWidget(group)
+
         layout = QVBoxLayout()
         layout.addLayout(top_bar)
+        layout.addLayout(task_bar)
+        layout.addLayout(task_board)
         layout.addWidget(self.terminal, 1)
         layout.addLayout(history_bar)
         layout.addWidget(self.history_list)
@@ -113,6 +146,7 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.stop_session)
         self.send_button.clicked.connect(self.send_command)
         self.command_input.returnPressed.connect(self.send_command)
+        self.refresh_tasks_button.clicked.connect(self.refresh_tasks)
         self.refresh_history_button.clicked.connect(self.refresh_run_history)
         self.view_clean_button.clicked.connect(self.load_selected_clean_log)
         self.view_raw_button.clicked.connect(self.load_selected_raw_log)
@@ -127,6 +161,7 @@ class MainWindow(QMainWindow):
         self.agent_combo.currentIndexChanged.connect(self._sync_agent_placeholder)
         self._sync_workspace_label()
         self._sync_recent_workspaces()
+        self.refresh_tasks()
         self.refresh_run_history()
         self._sync_agent_placeholder()
         self._sync_controls()
@@ -226,6 +261,7 @@ class MainWindow(QMainWindow):
             self._settings_store.record_workspace(self._workspace_path)
         self._sync_workspace_label()
         self._sync_recent_workspaces()
+        self.refresh_tasks()
         self.refresh_run_history()
 
     def choose_workspace(self) -> None:
@@ -236,6 +272,23 @@ class MainWindow(QMainWindow):
         )
         if selected:
             self.set_workspace(selected)
+
+    def refresh_tasks(self) -> None:
+        for task_list in self.task_lists.values():
+            task_list.clear()
+        try:
+            records = TaskStore.for_workspace(self._workspace_path).list_tasks()
+        except Exception as exc:
+            self._append_text(f"加载任务失败: {exc}\n")
+            return
+
+        for record in records:
+            task_list = self.task_lists.get(record.status)
+            if task_list is None:
+                continue
+            list_item = QListWidgetItem(self._format_task_record(record))
+            list_item.setData(Qt.ItemDataRole.UserRole, record)
+            task_list.addItem(list_item)
 
     def refresh_run_history(self) -> None:
         self.history_list.clear()
@@ -396,6 +449,12 @@ class MainWindow(QMainWindow):
             f"{record.started_at} | {record.profile_name} | "
             f"{record.status.value} | {ended_at} | {record.run_id}"
         )
+
+    def _format_task_record(self, record: TaskRecord) -> str:
+        description = record.description.strip()
+        if description:
+            return f"{record.title}\n{description}"
+        return record.title
 
     def _default_log_root(self) -> Path:
         return self._workspace_path / ".agenthub" / "runs"
