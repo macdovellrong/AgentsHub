@@ -10,6 +10,7 @@ import {
   type PtyErrorEvent,
   type PtyExitEvent,
 } from "./pty-session-manager";
+import { getAllowedDevRendererUrl } from "./renderer-url";
 import { resolveWorkspacePath } from "./workspace-path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +44,10 @@ function createWindow(): BrowserWindow {
     }
   });
 
-  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+  const rendererUrl = getAllowedDevRendererUrl(process.env.ELECTRON_RENDERER_URL, {
+    isPackaged: app.isPackaged,
+    nodeEnv: process.env.NODE_ENV,
+  });
   if (rendererUrl) {
     void window.loadURL(rendererUrl);
   } else {
