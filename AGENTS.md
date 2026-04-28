@@ -79,13 +79,20 @@ python -m agenthub.main hmi
 - 自动编排：Claude 拆任务、Codex 执行、Gemini review。
 - 共享聊天式多 Agent HMI：同一 workspace 下并行运行 PowerShell / Codex / Claude / Gemini，并通过 `@agent` 定向发送。
 - 多 Agent 会话保护：每个 Agent 独立写入 run 日志，任一 Agent 在线时禁止切换 workspace。
+- Electron + xterm.js + node-pty 迁移设计 spec，目标是替代 PyQt 文本框终端渲染。
 
 ## 未完成任务
 
-- 角色 prompt 编辑器。
-- 自主 Agent-to-Agent 编排与转发。
+- Electron HMI 新桌面壳，目录计划为 `desktop/`。
+- xterm.js + node-pty PowerShell 终端 smoke。
+- 多 Agent 独立终端窗口/停靠面板。
+- Agent profile 与角色 prompt 编辑器，支持多个 profile 指向同一个 CLI。
+- 中央结果流与 `.agenthub/events.jsonl`。
+- `@profile` 路由迁移到 Electron IPC。
+- run history 与任务看板迁移到 Electron UI。
+- 受控 planner -> implementer -> reviewer 编排流程。
 - 同 profile 多实例、写入锁与 git worktree 隔离。
-- 超出功能性共享时间线的富文本聊天渲染。
+- 自主 Agent-to-Agent 编排与转发。
 
 ## 安全与配置提示
 
