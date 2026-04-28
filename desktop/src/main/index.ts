@@ -19,6 +19,8 @@ const manager = new PtySessionManager({ logStore: new RunLogStore() });
 
 let mainWindow: BrowserWindow | null = null;
 
+app.commandLine.appendSwitch("disable-gpu");
+app.commandLine.appendSwitch("disable-gpu-compositing");
 app.disableHardwareAcceleration();
 
 function createWindow(): BrowserWindow {
