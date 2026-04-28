@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from agenthub.process.base import OutputEvent, StreamName
 from agenthub.storage.run_logs import RunLogWriter
+from agenthub.storage.settings import SettingsStore
 from agenthub.ui.main_window import MainWindow
 
 
@@ -119,6 +120,64 @@ def test_main_window_creates_sessions_in_selected_workspace(tmp_path):
         session = window._create_session(window.selected_profile())
 
         assert session.cwd == tmp_path
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_restores_last_workspace_from_settings(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    store = SettingsStore(tmp_path / "settings.json")
+    workspace = tmp_path / "remembered"
+    workspace.mkdir()
+    store.record_workspace(workspace)
+
+    window = MainWindow(settings_store=store)
+    try:
+        assert window.workspace_path == workspace
+        assert window.log_root == workspace / ".agenthub" / "runs"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_set_workspace_persists_recent_workspaces(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    store = SettingsStore(tmp_path / "settings.json")
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    window = MainWindow(workspace_path=first, settings_store=store)
+    try:
+        window.set_workspace(second)
+
+        settings = store.load()
+        assert settings.last_workspace == second
+        assert settings.recent_workspaces == (second,)
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_main_window_lists_recent_workspaces_from_settings(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    store = SettingsStore(tmp_path / "settings.json")
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    store.record_workspace(first)
+    store.record_workspace(second)
+
+    window = MainWindow(settings_store=store)
+    try:
+        items = [
+            window.recent_workspace_combo.itemText(index)
+            for index in range(window.recent_workspace_combo.count())
+        ]
+
+        assert items == [str(second), str(first)]
     finally:
         window.close()
         app.processEvents()

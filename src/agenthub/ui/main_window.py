@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from agenthub.adapters.profiles import DEFAULT_AGENT_PROFILES, AgentProfile
 from agenthub.process.interactive_pty import InteractivePtySession
 from agenthub.storage.run_logs import RunLogWriter
+from agenthub.storage.settings import SettingsStore
 from agenthub.ui.output_buffer import OutputBuffer
 
 
@@ -31,11 +32,13 @@ class MainWindow(QMainWindow):
         profiles: tuple[AgentProfile, ...] = DEFAULT_AGENT_PROFILES,
         workspace_path: Path | str | None = None,
         log_root: Path | str | None = None,
+        settings_store: SettingsStore | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("AgentHub")
         self._profiles = profiles
-        self._workspace_path = Path.cwd() if workspace_path is None else Path(workspace_path)
+        self._settings_store = settings_store
+        self._workspace_path = self._initial_workspace(workspace_path)
         self._explicit_log_root = log_root is not None
         self._log_root = Path(log_root) if log_root is not None else self._default_log_root()
         self._log_writer: RunLogWriter | None = None
@@ -48,6 +51,7 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel("未连接")
         self.workspace_label = QLabel()
+        self.recent_workspace_combo = QComboBox()
         self.choose_workspace_button = QPushButton("选择目录")
         self.agent_combo = QComboBox()
         for profile in self._profiles:
@@ -65,6 +69,8 @@ class MainWindow(QMainWindow):
         top_bar.addStretch(1)
         top_bar.addWidget(QLabel("Workspace"))
         top_bar.addWidget(self.workspace_label, 1)
+        top_bar.addWidget(QLabel("最近"))
+        top_bar.addWidget(self.recent_workspace_combo)
         top_bar.addWidget(self.choose_workspace_button)
         top_bar.addWidget(QLabel("Agent"))
         top_bar.addWidget(self.agent_combo)
@@ -89,8 +95,10 @@ class MainWindow(QMainWindow):
         self.send_button.clicked.connect(self.send_command)
         self.command_input.returnPressed.connect(self.send_command)
         self.choose_workspace_button.clicked.connect(self.choose_workspace)
+        self.recent_workspace_combo.activated.connect(self._select_recent_workspace)
         self.agent_combo.currentIndexChanged.connect(self._sync_agent_placeholder)
         self._sync_workspace_label()
+        self._sync_recent_workspaces()
         self._sync_agent_placeholder()
         self._sync_controls()
 
@@ -174,7 +182,10 @@ class MainWindow(QMainWindow):
         self._workspace_path = Path(path)
         if not self._explicit_log_root:
             self._log_root = self._default_log_root()
+        if self._settings_store is not None:
+            self._settings_store.record_workspace(self._workspace_path)
         self._sync_workspace_label()
+        self._sync_recent_workspaces()
 
     def choose_workspace(self) -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -220,6 +231,9 @@ class MainWindow(QMainWindow):
     def _sync_controls(self) -> None:
         connected = self._session is not None and self._session.is_alive()
         self.choose_workspace_button.setEnabled(not connected)
+        self.recent_workspace_combo.setEnabled(
+            not connected and self.recent_workspace_combo.count() > 0
+        )
         self.agent_combo.setEnabled(not connected)
         self.start_button.setEnabled(not connected)
         self.stop_button.setEnabled(connected)
@@ -232,13 +246,36 @@ class MainWindow(QMainWindow):
     def _sync_workspace_label(self) -> None:
         self.workspace_label.setText(str(self._workspace_path))
 
+    def _sync_recent_workspaces(self) -> None:
+        self.recent_workspace_combo.blockSignals(True)
+        self.recent_workspace_combo.clear()
+        if self._settings_store is not None:
+            for path in self._settings_store.load().recent_workspaces:
+                self.recent_workspace_combo.addItem(str(path), str(path))
+        self.recent_workspace_combo.blockSignals(False)
+        self.recent_workspace_combo.setEnabled(self.recent_workspace_combo.count() > 0)
+
+    def _select_recent_workspace(self, index: int) -> None:
+        selected = self.recent_workspace_combo.itemData(index)
+        if selected:
+            self.set_workspace(selected)
+
     def _default_log_root(self) -> Path:
         return self._workspace_path / ".agenthub" / "runs"
+
+    def _initial_workspace(self, explicit_workspace: Path | str | None) -> Path:
+        if explicit_workspace is not None:
+            return Path(explicit_workspace)
+        if self._settings_store is not None:
+            last_workspace = self._settings_store.load().last_workspace
+            if last_workspace is not None:
+                return last_workspace
+        return Path.cwd()
 
 
 def run_hmi(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
-    window = MainWindow()
+    window = MainWindow(settings_store=SettingsStore.default())
     window.resize(1000, 680)
     window.show()
     return app.exec()
