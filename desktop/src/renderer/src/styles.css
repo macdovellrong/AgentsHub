@@ -129,7 +129,8 @@ label {
 .input-row,
 .filter-row,
 .task-create,
-.session-tabs {
+.session-tabs,
+.forward-create {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -160,14 +161,18 @@ label {
 .status-running,
 .status-starting,
 .status-review,
-.status-pending {
+.status-pending,
+.status-paused,
+.status-blocked {
   background: #302716;
   border-color: #836633;
   color: #f0cd80;
 }
 
 .status-exited,
-.status-done {
+.status-done,
+.status-sent,
+.status-stopped {
   background: #172434;
   border-color: #3b638d;
   color: #9ccaff;
@@ -235,7 +240,7 @@ label {
 }
 
 .center-stack {
-  grid-template-rows: minmax(260px, 1fr) auto minmax(260px, 0.95fr);
+  grid-template-rows: minmax(230px, 1fr) auto minmax(170px, 0.55fr) minmax(230px, 0.85fr);
 }
 
 .right-stack {
@@ -371,6 +376,68 @@ label {
 .orchestration {
   display: grid;
   grid-template-rows: auto auto;
+}
+
+.forwarding {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.forward-create {
+  border-bottom: 1px solid #27303a;
+  padding: 10px;
+}
+
+.forward-create select {
+  flex: 0 0 115px;
+}
+
+.forward-create input {
+  min-width: 0;
+}
+
+.forward-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.forward-card {
+  background: #111820;
+  border: 1px solid #28313c;
+  border-radius: 7px;
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+}
+
+.forward-meta {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.forward-meta strong {
+  color: #f3f6fa;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.forward-card p {
+  color: #c7d0dc;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.forward-error {
+  color: #ffa4ad;
 }
 
 .task-create {

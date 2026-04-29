@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  AgentForwardDto,
   AgentHubEventDto,
   AgentProfileDto,
   AgentTaskDto,
+  ForwardStatus,
   RunHistoryDto,
   SessionStatus,
   StartPowerShellResponse,
@@ -37,7 +39,7 @@ function formatTime(value: string): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function statusClass(status: SessionStatus | RunHistoryDto["status"] | TaskStatus): string {
+function statusClass(status: SessionStatus | RunHistoryDto["status"] | TaskStatus | ForwardStatus): string {
   return `status-${status}`;
 }
 
@@ -64,6 +66,7 @@ export function App(): React.JSX.Element {
   const [events, setEvents] = useState<AgentHubEventDto[]>([]);
   const [runs, setRuns] = useState<RunHistoryDto[]>([]);
   const [tasks, setTasks] = useState<AgentTaskDto[]>([]);
+  const [forwards, setForwards] = useState<AgentForwardDto[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [editorFields, setEditorFields] = useState<ProfileEditorFields>(emptyEditorFields);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -77,6 +80,9 @@ export function App(): React.JSX.Element {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [orchestrationGoal, setOrchestrationGoal] = useState("");
+  const [forwardSourceProfileId, setForwardSourceProfileId] = useState("");
+  const [forwardTargetProfileId, setForwardTargetProfileId] = useState("");
+  const [forwardMessage, setForwardMessage] = useState("");
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null,
@@ -92,6 +98,10 @@ export function App(): React.JSX.Element {
     const statusMatches = runStatusFilter === "all" || run.status === runStatusFilter;
     return profileMatches && statusMatches;
   });
+  const profileNameById = useMemo(
+    () => new Map(profiles.map((profile) => [profile.id, profile.name])),
+    [profiles],
+  );
 
   const refreshProfilesAndSessions = useCallback(async () => {
     const [nextProfiles, nextSessions] = await Promise.all([
@@ -106,14 +116,16 @@ export function App(): React.JSX.Element {
 
   const refreshWorkspaceData = useCallback(async (workspace = workspacePath) => {
     const request = workspace ? { workspacePath: workspace } : {};
-    const [nextEvents, nextRuns, nextTasks] = await Promise.all([
+    const [nextEvents, nextRuns, nextTasks, nextForwards] = await Promise.all([
       window.agenthub.listEvents(request),
       window.agenthub.listRuns(request),
       window.agenthub.listTasks(request),
+      window.agenthub.listForwards(request),
     ]);
     setEvents(nextEvents);
     setRuns(nextRuns);
     setTasks(nextTasks);
+    setForwards(nextForwards);
   }, [workspacePath]);
 
   const refreshAll = useCallback(async () => {
@@ -150,6 +162,16 @@ export function App(): React.JSX.Element {
       setEditorFields(emptyEditorFields);
     }
   }, [selectedProfile]);
+
+  useEffect(() => {
+    if (profiles.length === 0) {
+      return;
+    }
+    setForwardSourceProfileId((current) => current || (profiles.find((profile) => profile.kind === "claude")?.id ?? ""));
+    setForwardTargetProfileId(
+      (current) => current || (profiles.find((profile) => profile.kind === "codex")?.id ?? profiles[0].id),
+    );
+  }, [profiles]);
 
   useEffect(() => {
     return window.agenthub.onSessionExit((event) => {
@@ -417,6 +439,86 @@ export function App(): React.JSX.Element {
     }
   }, [orchestrationGoal, profiles, refreshWorkspaceData, workspacePath]);
 
+  const createForward = useCallback(async () => {
+    const message = forwardMessage.trim();
+    const targetProfileId = forwardTargetProfileId || selectedProfile?.id || profiles[0]?.id;
+    if (!message || !targetProfileId) {
+      return;
+    }
+    setError(null);
+    try {
+      await window.agenthub.createForward({
+        workspacePath: workspacePath || undefined,
+        sourceProfileId: forwardSourceProfileId || null,
+        targetProfileId,
+        message,
+      });
+      setForwardMessage("");
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [
+    forwardMessage,
+    forwardSourceProfileId,
+    forwardTargetProfileId,
+    profiles,
+    refreshWorkspaceData,
+    selectedProfile,
+    workspacePath,
+  ]);
+
+  const sendForward = useCallback(
+    async (forwardId: string) => {
+      setError(null);
+      try {
+        const updated = await window.agenthub.sendForward({
+          workspacePath: workspacePath || undefined,
+          forwardId,
+        });
+        if (updated.sessionId) {
+          setSelectedSessionId(updated.sessionId);
+        }
+        await refreshWorkspaceData();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [refreshWorkspaceData, workspacePath],
+  );
+
+  const pauseForward = useCallback(
+    async (forwardId: string) => {
+      setError(null);
+      try {
+        await window.agenthub.pauseForward({
+          workspacePath: workspacePath || undefined,
+          forwardId,
+        });
+        await refreshWorkspaceData();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [refreshWorkspaceData, workspacePath],
+  );
+
+  const stopForward = useCallback(
+    async (forwardId: string) => {
+      setError(null);
+      try {
+        await window.agenthub.stopForward({
+          workspacePath: workspacePath || undefined,
+          forwardId,
+        });
+        await refreshWorkspaceData();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [refreshWorkspaceData, workspacePath],
+  );
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -592,6 +694,79 @@ export function App(): React.JSX.Element {
               <button type="button" onClick={() => void startOrchestration()}>
                 Start
               </button>
+            </div>
+          </section>
+
+          <section className="forwarding panel">
+            <div className="panel-header">
+              <h2>Forwarding</h2>
+              <span>{forwards.length} forwards</span>
+            </div>
+            <div className="forward-create">
+              <select value={forwardSourceProfileId} onChange={(event) => setForwardSourceProfileId(event.target.value)}>
+                <option value="">source</option>
+                {profiles.map((profile) => (
+                  <option value={profile.id} key={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <select value={forwardTargetProfileId} onChange={(event) => setForwardTargetProfileId(event.target.value)}>
+                {profiles.map((profile) => (
+                  <option value={profile.id} key={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={forwardMessage}
+                onChange={(event) => setForwardMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void createForward();
+                  }
+                }}
+                placeholder="Forward result or review request"
+              />
+              <button type="button" onClick={() => void createForward()}>
+                Queue
+              </button>
+            </div>
+            <div className="forward-list">
+              {forwards.length === 0 ? <p className="empty-state">No forwards for this workspace.</p> : null}
+              {forwards.map((forward) => (
+                <article className="forward-card" key={forward.id}>
+                  <div className="forward-meta">
+                    <strong>
+                      {forward.sourceProfileId ? profileNameById.get(forward.sourceProfileId) ?? forward.sourceProfileId : "Manual"}
+                      {" -> "}
+                      {profileNameById.get(forward.targetProfileId) ?? forward.targetProfileId}
+                    </strong>
+                    <span className={`status-pill ${statusClass(forward.status)}`}>{forward.status}</span>
+                  </div>
+                  <p>{forward.message}</p>
+                  {forward.lastError ? <p className="forward-error">{forward.lastError}</p> : null}
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      onClick={() => void sendForward(forward.id)}
+                      disabled={forward.status === "sent" || forward.status === "stopped"}
+                    >
+                      Send
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void pauseForward(forward.id)}
+                      disabled={forward.status === "sent" || forward.status === "paused" || forward.status === "stopped"}
+                    >
+                      Pause
+                    </button>
+                    <button type="button" onClick={() => void stopForward(forward.id)} disabled={forward.status === "stopped"}>
+                      Stop
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
 
