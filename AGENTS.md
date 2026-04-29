@@ -105,23 +105,24 @@ python -m agenthub.main hmi
 - Electron 终端 smoke 实现计划。
 - Electron HMI 新桌面壳，目录为 `desktop/`。
 - xterm.js + node-pty PowerShell 终端 smoke：支持启动 ConPTY、xterm 输入输出、raw log 持久化。
+- E1：Electron 多 Agent profile 模型。已建立 PowerShell / Codex / Claude / Gemini 默认 profile，支持同一 CLI 多 profile、角色 prompt、命令、参数、默认目录、环境变量和写入锁配置。
+- E2：Electron profile 编辑器。左侧 profile 列表支持创建、复制、删除、角色 prompt、命令参数和写入锁编辑，并持久化到本地配置。
+- E3：Electron 多 Agent 并行 PTY。后端支持按 profile 启动多个 session，每个 session 独立 run_id、状态、日志和停止控制。
+- E4：多终端停靠面板。界面支持每个 Agent 独立 xterm.js 终端、标签切换、焦点保持和单独停止。
+- E5：中央聊天与结果流。中间区域只展示用户消息、任务、编排、转发、错误等事件；raw PTY 输出只进入 run log 和独立终端。
+- E6：`.agenthub/events.jsonl`。事件模型已持久化用户消息、状态变化、任务流转、编排步骤、转发记录和错误。
+- E7：`@profile` 路由迁移到 Electron IPC。输入框支持 `@codex` / `@claude` / `@gemini` / 自定义 profile 定向发送。
+- E8：run history 迁移到 Electron UI。展示当前 workspace 的 runs，支持按 profile/status 过滤并加载 raw log。
+- E9：任务看板迁移到 Electron UI。展示 pending / running / review / done / failed，支持任务创建、状态更新、关联 run 和刷新。
+- E10：受控 planner -> implementer -> reviewer 编排。手动触发后创建任务，在线 profile 会收到单步 prompt，离线 profile 会写入 waiting_session 事件。
+- E11：并发安全。实现 workspace 写入锁、在线 session 阻止 workspace 切换、独立 run 日志和多 session 停止控制；git worktree 隔离保留为后续增强选项。
+- E12：自主 Agent-to-Agent 转发。新增转发存储、IPC/API 和 HMI 控制，支持创建、发送/继续、暂停、停止，并写入中央事件时间线。
 - E13：旧 PyQt 原型归档。保留 Python 代码作为参考，不再作为主入口；README 和 AGENTS.md 明确 Electron 是当前主线。
+- E14：端到端 smoke。验证 Windows 上可同时启动 PowerShell + Codex，中央输入可 `@profile` 路由，独立终端可交互，events/runs/tasks/forwards 都落盘。
 
 ## 未完成任务
 
-- E1：Electron 多 Agent profile 模型。建立 PowerShell / Codex / Claude / Gemini 默认 profile，支持同一 CLI 的多 profile、角色 prompt、启动命令、参数、默认工作目录和环境变量。
-- E2：Electron profile 编辑器。左侧提供 profile 列表、创建/复制/删除、角色 prompt 编辑、命令参数编辑，并持久化到本地配置。
-- E3：Electron 多 Agent 并行 PTY。后端支持按 profile 启动多个 session，每个 session 独立 run_id、状态、日志和停止控制。
-- E4：多终端停靠面板。界面支持每个 Agent 独立终端、显示/隐藏、焦点切换、分屏停靠和单独停止，不再只显示一个 PowerShell。
-- E5：中央聊天与结果流。中间区域改为 Agent 消息时间线，只展示用户输入、Agent 结果、系统事件和摘要；raw 终端输出留在独立终端面板。
-- E6：`.agenthub/events.jsonl`。定义事件模型并持久化用户消息、Agent 输出摘要、状态变化、任务流转、错误和审查结果。
-- E7：`@profile` 路由迁移到 Electron IPC。输入框支持 `@codex` / `@claude` / `@gemini` / 自定义 profile 定向发送；无前缀时使用默认目标。
-- E8：run history 迁移到 Electron UI。展示当前 workspace 的 runs，支持按 profile/status 过滤，加载 raw log 到终端面板，加载结果事件到中央时间线。
-- E9：任务看板迁移到 Electron UI。展示 pending / running / review / done / failed，支持任务创建、状态更新、关联 run 和刷新。
-- E10：受控 planner -> implementer -> reviewer 编排。提供可手动触发的流程：Claude 拆任务，Codex 执行，Gemini/Claude 审查，全程写入 tasks/runs/events。
-- E11：并发安全。实现同 profile 多实例命名、workspace 写入锁、危险操作提示和可选 git worktree 隔离，避免多个 Agent 同时改同一文件集合。
-- E12：自主 Agent-to-Agent 转发。允许受控规则下把某个 Agent 的结果转发给另一个 Agent，并在中央时间线中可见、可暂停、可停止。
-- E14：端到端 smoke。验证 Windows 上可同时启动至少 PowerShell + Codex 两个 profile，中央输入可 `@profile` 路由，独立终端可交互，events/runs/tasks 都落盘。
+暂无。后续增强项包括更细粒度文件级冲突检测、自动 worktree 隔离、Agent 输出摘要提取和更完整的编排状态机。
 
 ## 安全与配置提示
 
