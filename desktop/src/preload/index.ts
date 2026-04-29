@@ -35,6 +35,10 @@ const agenthub = {
     return ipcRenderer.invoke(IpcChannels.WorkspaceDefault) as Promise<string>;
   },
 
+  selectWorkspace(request: WorkspaceRequest = {}): Promise<string> {
+    return ipcRenderer.invoke(IpcChannels.WorkspaceSelect, request) as Promise<string>;
+  },
+
   startPowerShell(request: StartPowerShellRequest): Promise<StartPowerShellResponse> {
     return ipcRenderer.invoke(IpcChannels.StartPowerShell, request) as Promise<StartPowerShellResponse>;
   },

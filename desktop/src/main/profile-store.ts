@@ -65,7 +65,7 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     rolePrompt: "Plan and decompose implementation work.",
     env: {},
     defaultCwd: null,
-    useWorkspaceWriteLock: true,
+    useWorkspaceWriteLock: false,
   },
   {
     id: "gemini",
@@ -80,6 +80,8 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     useWorkspaceWriteLock: false,
   },
 ];
+
+const DEFAULT_CLAUDE_ROLE_PROMPT = "Plan and decompose implementation work.";
 
 export class ProfileStore {
   private readonly configPath: string;
@@ -172,7 +174,7 @@ export class ProfileStore {
     if (!profile.id || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(profile.id)) {
       throw new Error(`Invalid profile id: ${profile.id}`);
     }
-    return {
+    const normalized = {
       id: profile.id,
       name: profile.name,
       kind: profile.kind,
@@ -184,6 +186,25 @@ export class ProfileStore {
       defaultCwd: profile.defaultCwd ?? null,
       useWorkspaceWriteLock: Boolean(profile.useWorkspaceWriteLock),
     };
+    if (this.isLegacyWritableClaudeDefault(normalized)) {
+      return { ...normalized, useWorkspaceWriteLock: false };
+    }
+    return normalized;
+  }
+
+  private isLegacyWritableClaudeDefault(profile: AgentProfile): boolean {
+    return (
+      profile.id === "claude" &&
+      profile.name === "Claude" &&
+      profile.kind === "claude" &&
+      profile.command === "claude" &&
+      profile.args.length === 0 &&
+      profile.aliases.length === 0 &&
+      profile.rolePrompt === DEFAULT_CLAUDE_ROLE_PROMPT &&
+      Object.keys(profile.env).length === 0 &&
+      profile.defaultCwd === null &&
+      profile.useWorkspaceWriteLock
+    );
   }
 
   private createProfileId(name: string): string {

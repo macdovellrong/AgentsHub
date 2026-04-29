@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,10 @@ describe("ProfileStore", () => {
       kind: "codex",
       command: "codex.cmd",
       useWorkspaceWriteLock: true,
+    });
+    expect(profiles.find((profile) => profile.id === "claude")).toMatchObject({
+      kind: "claude",
+      useWorkspaceWriteLock: false,
     });
     expect(profiles.find((profile) => profile.id === "gemini")).toMatchObject({
       kind: "gemini",
@@ -68,5 +72,37 @@ describe("ProfileStore", () => {
       args: ["--fast"],
     });
     await expect(readFile(configPath, "utf8")).resolves.toContain("reviewer-copy");
+  });
+
+  it("migrates the legacy built-in Claude profile to read-only planning", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agenthub-profiles-"));
+    const configPath = path.join(tempDir, "profiles.json");
+    await writeFile(
+      configPath,
+      `${JSON.stringify({
+        profiles: [
+          {
+            id: "claude",
+            name: "Claude",
+            kind: "claude",
+            command: "claude",
+            args: [],
+            aliases: [],
+            rolePrompt: "Plan and decompose implementation work.",
+            env: {},
+            defaultCwd: null,
+            useWorkspaceWriteLock: true,
+          },
+        ],
+      })}\n`,
+      "utf8",
+    );
+    const store = new ProfileStore({ configPath });
+
+    const profiles = await store.list();
+
+    expect(profiles.find((profile) => profile.id === "claude")).toMatchObject({
+      useWorkspaceWriteLock: false,
+    });
   });
 });

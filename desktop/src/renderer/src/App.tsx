@@ -134,6 +134,19 @@ export function App(): React.JSX.Element {
     await Promise.all([refreshProfilesAndSessions(), refreshWorkspaceData()]);
   }, [refreshProfilesAndSessions, refreshWorkspaceData]);
 
+  const openWorkspace = useCallback(async () => {
+    setError(null);
+    try {
+      const nextWorkspace = await window.agenthub.selectWorkspace({ workspacePath: workspacePath || undefined });
+      setWorkspacePath(nextWorkspace);
+      setSelectedRunId(null);
+      setRawLog("");
+      await refreshWorkspaceData(nextWorkspace);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [refreshWorkspaceData, workspacePath]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -532,6 +545,9 @@ export function App(): React.JSX.Element {
           <p>{workspacePath || "Loading workspace..."}</p>
         </div>
         <div className="topbar-actions">
+          <button type="button" onClick={() => void openWorkspace()}>
+            Open Workspace
+          </button>
           <button type="button" onClick={() => void refreshAll()}>
             Refresh
           </button>

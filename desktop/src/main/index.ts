@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +38,7 @@ import { TaskStore } from "./task-store";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
 import { shouldDisableElectronSandbox } from "./electron-sandbox";
 import { getAllowedDevRendererUrl } from "./renderer-url";
+import { selectWorkspacePath } from "./workspace-dialog";
 import { getDefaultWorkspacePath, resolveWorkspacePath } from "./workspace-path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,7 +50,7 @@ const writeLocks = new WorkspaceWriteLockService();
 const manager = new PtySessionManager({ logStore: new RunLogStore(), eventStore, writeLocks });
 const forwardService = new ForwardService(new ForwardStore(), eventStore, manager);
 const orchestration = new OrchestrationService(taskStore, eventStore, manager);
-const defaultWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
+let activeWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -127,7 +128,7 @@ function getProfileStore(): ProfileStore {
 }
 
 function resolveRequestWorkspace(workspacePath?: string): string {
-  return resolveWorkspacePath(workspacePath, defaultWorkspacePath);
+  return resolveWorkspacePath(workspacePath, activeWorkspacePath);
 }
 
 function toSessionResponse(session: PtySession): {
@@ -155,7 +156,24 @@ function toSessionResponse(session: PtySession): {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IpcChannels.WorkspaceDefault, () => defaultWorkspacePath);
+  ipcMain.handle(IpcChannels.WorkspaceDefault, () => activeWorkspacePath);
+
+  ipcMain.handle(IpcChannels.WorkspaceSelect, async (_event, request: WorkspaceRequest = {}) => {
+    const decision = writeLocks.canChangeWorkspace();
+    if (!decision.ok) {
+      throw new Error(decision.reason);
+    }
+    const currentWorkspacePath = resolveRequestWorkspace(request.workspacePath);
+    activeWorkspacePath = await selectWorkspacePath(currentWorkspacePath, async (defaultPath) => {
+      const options: OpenDialogOptions = {
+        title: "Open Workspace",
+        defaultPath,
+        properties: ["openDirectory", "createDirectory"],
+      };
+      return mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options);
+    });
+    return activeWorkspacePath;
+  });
 
   ipcMain.handle(IpcChannels.StartPowerShell, async (_event, request: StartPowerShellRequest) => {
     const workspacePath = resolveRequestWorkspace(request.workspacePath);

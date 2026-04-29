@@ -1,5 +1,6 @@
 export const IpcChannels = {
   WorkspaceDefault: "workspace:getDefault",
+  WorkspaceSelect: "workspace:select",
   StartPowerShell: "agent:startPowerShell",
   ProfilesList: "profiles:list",
   ProfilesCreate: "profiles:create",
