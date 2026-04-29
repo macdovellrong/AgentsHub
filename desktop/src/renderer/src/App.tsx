@@ -20,6 +20,7 @@ import {
   type ProfileEditorFields,
 } from "./dashboard-helpers";
 import { TerminalPane } from "./components/TerminalPane";
+import { UI_TEXT, formatEventTypeLabel, formatStatusLabel } from "./ui-text";
 
 const TASK_STATUSES: TaskStatus[] = ["pending", "running", "review", "done", "failed"];
 const RUN_STATUSES: Array<RunHistoryDto["status"] | "all"> = ["all", "running", "exited"];
@@ -53,10 +54,10 @@ function describeEvent(event: AgentHubEventDto): string {
     return event.error;
   }
   if (event.type === "session_started") {
-    return `${event.profileName ?? event.profileId ?? "Session"} started`;
+    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.started}`;
   }
   if (event.type === "session_exited") {
-    return `${event.profileName ?? event.profileId ?? "Session"} exited`;
+    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.exited}`;
   }
   return event.type.replace(/_/g, " ");
 }
@@ -354,7 +355,7 @@ export function App(): React.JSX.Element {
       await refreshWorkspaceData();
 
       if (!routed.targetProfileId) {
-        await appendErrorEvent("Add an @profile target such as @codex before sending.");
+        await appendErrorEvent(UI_TEXT.errors.addTargetPrefix);
         return;
       }
 
@@ -364,7 +365,7 @@ export function App(): React.JSX.Element {
 
       if (!targetSession) {
         const profile = profiles.find((candidate) => candidate.id === routed.targetProfileId);
-        await appendErrorEvent(`${profile?.name ?? routed.targetProfileId} is not online. Start the profile before routing input.`);
+        await appendErrorEvent(UI_TEXT.errors.targetNotOnline(profile?.name ?? routed.targetProfileId));
         return;
       }
 
@@ -542,16 +543,18 @@ export function App(): React.JSX.Element {
       <header className="topbar">
         <div className="brand-block">
           <h1>AgentHub</h1>
-          <p>{workspacePath || "Loading workspace..."}</p>
+          <p title={UI_TEXT.currentWorkspaceHint}>{workspacePath || UI_TEXT.loadingWorkspace}</p>
         </div>
         <div className="topbar-actions">
           <button type="button" onClick={() => void openWorkspace()}>
-            Open Workspace
+            {UI_TEXT.buttons.openWorkspace}
           </button>
           <button type="button" onClick={() => void refreshAll()}>
-            Refresh
+            {UI_TEXT.buttons.refresh}
           </button>
-          <span className="summary-pill">{activeSessions.length} online</span>
+          <span className="summary-pill">
+            {activeSessions.length} {UI_TEXT.summaries.onlineSuffix}
+          </span>
         </div>
       </header>
 
@@ -560,9 +563,9 @@ export function App(): React.JSX.Element {
       <section className="dashboard-grid">
         <aside className="sidebar panel">
           <div className="panel-header">
-            <h2>Profiles</h2>
+            <h2>{UI_TEXT.sections.profiles}</h2>
             <button type="button" onClick={() => void createCustomProfile()}>
-              New
+              {UI_TEXT.buttons.new}
             </button>
           </div>
 
@@ -584,14 +587,14 @@ export function App(): React.JSX.Element {
                   </div>
                   <div className="profile-actions">
                     <span className={`status-pill ${onlineSessions.length > 0 ? "status-online" : "status-exited"}`}>
-                      {isStarting ? "starting" : onlineSessions.length > 0 ? "online" : "offline"}
+                      {formatStatusLabel(isStarting ? "starting" : onlineSessions.length > 0 ? "online" : "offline")}
                     </span>
                     <button type="button" onClick={() => void startProfile(profile.id)} disabled={isStarting}>
-                      Start
+                      {UI_TEXT.buttons.start}
                     </button>
                     {onlineSessions.map((session) => (
                       <button type="button" key={session.sessionId} onClick={() => void stopSession(session.sessionId)}>
-                        Stop
+                        {UI_TEXT.buttons.stop}
                       </button>
                     ))}
                   </div>
@@ -602,32 +605,32 @@ export function App(): React.JSX.Element {
 
           <section className="editor-block">
             <div className="panel-header">
-              <h2>Profile Editor</h2>
+              <h2>{UI_TEXT.sections.profileEditor}</h2>
               <div className="button-row">
                 <button type="button" onClick={() => void duplicateSelectedProfile()} disabled={!selectedProfile}>
-                  Duplicate
+                  {UI_TEXT.buttons.duplicate}
                 </button>
                 <button type="button" onClick={() => void deleteSelectedProfile()} disabled={!selectedProfile}>
-                  Delete
+                  {UI_TEXT.buttons.delete}
                 </button>
               </div>
             </div>
             <label>
-              Name
+              {UI_TEXT.labels.name}
               <input
                 value={editorFields.name}
                 onChange={(event) => setEditorFields((current) => ({ ...current, name: event.target.value }))}
               />
             </label>
             <label>
-              Command
+              {UI_TEXT.labels.command}
               <input
                 value={editorFields.command}
                 onChange={(event) => setEditorFields((current) => ({ ...current, command: event.target.value }))}
               />
             </label>
             <label>
-              Args
+              {UI_TEXT.labels.args}
               <textarea
                 rows={3}
                 value={editorFields.argsText}
@@ -635,14 +638,14 @@ export function App(): React.JSX.Element {
               />
             </label>
             <label>
-              Aliases
+              {UI_TEXT.labels.aliases}
               <input
                 value={editorFields.aliasesText}
                 onChange={(event) => setEditorFields((current) => ({ ...current, aliasesText: event.target.value }))}
               />
             </label>
             <label>
-              Role Prompt
+              {UI_TEXT.labels.rolePrompt}
               <textarea
                 rows={5}
                 value={editorFields.rolePrompt}
@@ -657,10 +660,10 @@ export function App(): React.JSX.Element {
                   setEditorFields((current) => ({ ...current, useWorkspaceWriteLock: event.target.checked }))
                 }
               />
-              Workspace write lock
+              {UI_TEXT.labels.workspaceWriteLock}
             </label>
             <button type="button" onClick={() => void saveSelectedProfile()} disabled={!selectedProfile}>
-              Save Profile
+              {UI_TEXT.buttons.saveProfile}
             </button>
           </section>
         </aside>
@@ -668,16 +671,16 @@ export function App(): React.JSX.Element {
         <section className="center-stack">
           <section className="timeline panel">
             <div className="panel-header">
-              <h2>Conversation</h2>
-              <span>{events.length} events</span>
+              <h2>{UI_TEXT.sections.conversation}</h2>
+              <span>{events.length} 条事件</span>
             </div>
             <div className="event-list">
-              {events.length === 0 ? <p className="empty-state">No events for this workspace.</p> : null}
+              {events.length === 0 ? <p className="empty-state">{UI_TEXT.empty.events}</p> : null}
               {events.map((event) => (
                 <article className={`event-card event-${event.type}`} key={event.id}>
                   <div className="event-meta">
                     <span>{formatTime(event.timestamp)}</span>
-                    <strong>{event.type.replace(/_/g, " ")}</strong>
+                    <strong>{formatEventTypeLabel(event.type)}</strong>
                     {event.profileName ?? event.profileId ? <span>{event.profileName ?? event.profileId}</span> : null}
                   </div>
                   <p>{describeEvent(event)}</p>
@@ -693,39 +696,39 @@ export function App(): React.JSX.Element {
                     void routeMessage();
                   }
                 }}
-                placeholder="@codex implement the next task"
+                placeholder={UI_TEXT.placeholders.routedInput}
               />
               <button type="button" onClick={() => void routeMessage()}>
-                Send
+                {UI_TEXT.buttons.send}
               </button>
             </div>
           </section>
 
           <section className="orchestration panel">
             <div className="panel-header">
-              <h2>Controlled Orchestration</h2>
-              <span>manual trigger</span>
+              <h2>{UI_TEXT.sections.orchestration}</h2>
+              <span>{UI_TEXT.labels.manualTrigger}</span>
             </div>
             <div className="input-row">
               <input
                 value={orchestrationGoal}
                 onChange={(event) => setOrchestrationGoal(event.target.value)}
-                placeholder="Goal for planner -> implementer -> reviewer"
+                placeholder={UI_TEXT.placeholders.orchestrationGoal}
               />
               <button type="button" onClick={() => void startOrchestration()}>
-                Start
+                {UI_TEXT.buttons.start}
               </button>
             </div>
           </section>
 
           <section className="forwarding panel">
             <div className="panel-header">
-              <h2>Forwarding</h2>
-              <span>{forwards.length} forwards</span>
+              <h2>{UI_TEXT.sections.forwarding}</h2>
+              <span>{forwards.length} 条转发</span>
             </div>
             <div className="forward-create">
               <select value={forwardSourceProfileId} onChange={(event) => setForwardSourceProfileId(event.target.value)}>
-                <option value="">source</option>
+                <option value="">{UI_TEXT.labels.source}</option>
                 {profiles.map((profile) => (
                   <option value={profile.id} key={profile.id}>
                     {profile.name}
@@ -747,23 +750,23 @@ export function App(): React.JSX.Element {
                     void createForward();
                   }
                 }}
-                placeholder="Forward result or review request"
+                placeholder={UI_TEXT.placeholders.forwardMessage}
               />
               <button type="button" onClick={() => void createForward()}>
-                Queue
+                {UI_TEXT.buttons.queue}
               </button>
             </div>
             <div className="forward-list">
-              {forwards.length === 0 ? <p className="empty-state">No forwards for this workspace.</p> : null}
+              {forwards.length === 0 ? <p className="empty-state">{UI_TEXT.empty.forwards}</p> : null}
               {forwards.map((forward) => (
                 <article className="forward-card" key={forward.id}>
                   <div className="forward-meta">
                     <strong>
-                      {forward.sourceProfileId ? profileNameById.get(forward.sourceProfileId) ?? forward.sourceProfileId : "Manual"}
+                      {forward.sourceProfileId ? profileNameById.get(forward.sourceProfileId) ?? forward.sourceProfileId : UI_TEXT.labels.manual}
                       {" -> "}
                       {profileNameById.get(forward.targetProfileId) ?? forward.targetProfileId}
                     </strong>
-                    <span className={`status-pill ${statusClass(forward.status)}`}>{forward.status}</span>
+                    <span className={`status-pill ${statusClass(forward.status)}`}>{formatStatusLabel(forward.status)}</span>
                   </div>
                   <p>{forward.message}</p>
                   {forward.lastError ? <p className="forward-error">{forward.lastError}</p> : null}
@@ -773,17 +776,17 @@ export function App(): React.JSX.Element {
                       onClick={() => void sendForward(forward.id)}
                       disabled={forward.status === "sent" || forward.status === "stopped"}
                     >
-                      Send
+                      {UI_TEXT.buttons.send}
                     </button>
                     <button
                       type="button"
                       onClick={() => void pauseForward(forward.id)}
                       disabled={forward.status === "sent" || forward.status === "paused" || forward.status === "stopped"}
                     >
-                      Pause
+                      {UI_TEXT.buttons.pause}
                     </button>
                     <button type="button" onClick={() => void stopForward(forward.id)} disabled={forward.status === "stopped"}>
-                      Stop
+                      {UI_TEXT.buttons.stop}
                     </button>
                   </div>
                 </article>
@@ -793,28 +796,28 @@ export function App(): React.JSX.Element {
 
           <section className="tasks panel">
             <div className="panel-header">
-              <h2>Tasks</h2>
-              <span>{tasks.length} total</span>
+              <h2>{UI_TEXT.sections.tasks}</h2>
+              <span>{tasks.length} 个任务</span>
             </div>
             <div className="task-create">
               <input
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
-                placeholder="Task title"
+                placeholder={UI_TEXT.placeholders.taskTitle}
               />
               <input
                 value={newTaskDescription}
                 onChange={(event) => setNewTaskDescription(event.target.value)}
-                placeholder="Description"
+                placeholder={UI_TEXT.placeholders.taskDescription}
               />
               <button type="button" onClick={() => void createTask()}>
-                Create
+                {UI_TEXT.buttons.create}
               </button>
             </div>
             <div className="task-columns">
               {TASK_STATUSES.map((status) => (
                 <section className="task-column" key={status}>
-                  <h3>{status}</h3>
+                  <h3>{formatStatusLabel(status)}</h3>
                   {tasks
                     .filter((task) => task.status === status)
                     .map((task) => (
@@ -824,7 +827,7 @@ export function App(): React.JSX.Element {
                         <select value={task.status} onChange={(event) => void updateTaskStatus(task, event.target.value as TaskStatus)}>
                           {TASK_STATUSES.map((option) => (
                             <option value={option} key={option}>
-                              {option}
+                              {formatStatusLabel(option)}
                             </option>
                           ))}
                         </select>
@@ -839,10 +842,10 @@ export function App(): React.JSX.Element {
         <aside className="right-stack">
           <section className="terminal-dock panel">
             <div className="panel-header">
-              <h2>Terminals</h2>
+              <h2>{UI_TEXT.sections.terminals}</h2>
               {selectedSession ? (
                 <button type="button" onClick={() => void stopSession(selectedSession.sessionId)}>
-                  Stop Selected
+                  {UI_TEXT.buttons.stopSelected}
                 </button>
               ) : null}
             </div>
@@ -859,7 +862,7 @@ export function App(): React.JSX.Element {
               ))}
             </div>
             <div className="terminal-host">
-              {activeSessions.length === 0 ? <p className="empty-state">Start a profile to open a terminal.</p> : null}
+              {activeSessions.length === 0 ? <p className="empty-state">{UI_TEXT.empty.terminals}</p> : null}
               {activeSessions.map((session) => (
                 <div
                   className={`terminal-wrap ${selectedSessionId === session.sessionId ? "is-visible" : ""}`}
@@ -876,12 +879,12 @@ export function App(): React.JSX.Element {
 
           <section className="runs panel">
             <div className="panel-header">
-              <h2>Runs</h2>
-              <span>{filteredRuns.length}</span>
+              <h2>{UI_TEXT.sections.runs}</h2>
+              <span>{filteredRuns.length} 条记录</span>
             </div>
             <div className="filter-row">
               <select value={runProfileFilter} onChange={(event) => setRunProfileFilter(event.target.value)}>
-                <option value="all">all profiles</option>
+                <option value="all">{UI_TEXT.labels.allProfiles}</option>
                 {profiles.map((profile) => (
                   <option value={profile.id} key={profile.id}>
                     {profile.name}
@@ -894,7 +897,7 @@ export function App(): React.JSX.Element {
               >
                 {RUN_STATUSES.map((status) => (
                   <option value={status} key={status}>
-                    {status}
+                    {formatStatusLabel(status)}
                   </option>
                 ))}
               </select>
@@ -908,11 +911,11 @@ export function App(): React.JSX.Element {
                   onClick={() => void loadRunRawLog(run.runId)}
                 >
                   <span>{run.profileId}</span>
-                  <span className={`status-pill ${statusClass(run.status)}`}>{run.status}</span>
+                  <span className={`status-pill ${statusClass(run.status)}`}>{formatStatusLabel(run.status)}</span>
                 </button>
               ))}
             </div>
-            <pre className="raw-log">{rawLog || "Select a run to inspect raw.log."}</pre>
+            <pre className="raw-log">{rawLog || UI_TEXT.empty.rawLog}</pre>
           </section>
         </aside>
       </section>

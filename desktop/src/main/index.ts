@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, type OpenDialogOptions } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,7 @@ import {
   type WorkspaceRequest,
 } from "../shared/ipc";
 import { EventStore } from "./event-store";
+import { hideDefaultApplicationMenu } from "./application-menu";
 import { ForwardService } from "./forward-service";
 import { ForwardStore } from "./forward-store";
 import { RunLogStore } from "./log-store";
@@ -68,6 +69,7 @@ if (disableElectronSandbox) {
   app.commandLine.appendSwitch("no-sandbox");
 }
 app.disableHardwareAcceleration();
+hideDefaultApplicationMenu((menu) => Menu.setApplicationMenu(menu));
 
 function createWindow(): BrowserWindow {
   const jsPreloadPath = path.join(__dirname, "../preload/index.js");
