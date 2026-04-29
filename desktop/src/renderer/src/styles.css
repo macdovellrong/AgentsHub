@@ -260,7 +260,6 @@ label {
 
 .workspace-row,
 .profile-row,
-.event-card,
 .task-card {
   background: #111820;
   border: 1px solid #28313c;
@@ -374,8 +373,59 @@ label {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.event-card {
-  padding: 9px;
+.chat-list {
+  align-content: end;
+}
+
+.chat-message {
+  display: flex;
+  min-width: 0;
+}
+
+.chat-message-user {
+  justify-content: flex-end;
+}
+
+.chat-message-agent {
+  justify-content: flex-start;
+}
+
+.chat-message-system,
+.chat-message-error {
+  justify-content: center;
+}
+
+.chat-bubble {
+  background: #111820;
+  border: 1px solid #28313c;
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  max-width: min(680px, 82%);
+  min-width: 180px;
+  padding: 9px 10px;
+}
+
+.chat-message-user .chat-bubble {
+  background: #193047;
+  border-color: #3f6c9c;
+}
+
+.chat-message-agent .chat-bubble {
+  background: #111c24;
+  border-color: #2f5265;
+}
+
+.chat-message-system .chat-bubble {
+  background: #171d24;
+  border-color: #34404c;
+  max-width: min(560px, 88%);
+}
+
+.chat-message-error .chat-bubble {
+  background: #37181c;
+  border-color: #8a3b44;
+  max-width: min(560px, 88%);
 }
 
 .event-meta {
@@ -389,11 +439,16 @@ label {
   text-transform: uppercase;
 }
 
+.chat-meta {
+  margin-bottom: 0;
+  text-transform: none;
+}
+
 .event-meta strong {
   color: #dce5ef;
 }
 
-.event-card p,
+.chat-bubble p,
 .task-card p,
 .empty-state {
   color: #c7d0dc;
@@ -407,7 +462,6 @@ label {
 .event-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 8px;
 }
 
 .event-error {
@@ -419,8 +473,67 @@ label {
   padding: 10px;
 }
 
+.composer-row {
+  position: relative;
+}
+
 .input-row input {
   min-width: 0;
+}
+
+.mention-menu {
+  background: #111820;
+  border: 1px solid #3a4654;
+  border-radius: 8px;
+  bottom: 48px;
+  box-shadow: 0 16px 42px rgb(0 0 0 / 38%);
+  display: grid;
+  gap: 4px;
+  left: 10px;
+  max-height: 260px;
+  min-width: 300px;
+  overflow: auto;
+  padding: 6px;
+  position: absolute;
+  z-index: 5;
+}
+
+.mention-option {
+  align-items: center;
+  background: transparent;
+  border-color: transparent;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(90px, 1fr) minmax(70px, 0.8fr) auto;
+  justify-items: start;
+  min-height: 36px;
+  text-align: left;
+}
+
+.mention-option.is-selected,
+.mention-option:hover {
+  background: #1b2836;
+  border-color: #5f86b6;
+}
+
+.mention-option strong {
+  color: #f4f7fb;
+  font-size: 12px;
+}
+
+.mention-option span,
+.mention-option small,
+.mention-empty {
+  color: #9aa5b3;
+  font-size: 11px;
+}
+
+.mention-option small.is-online {
+  color: #8ee0b2;
+}
+
+.mention-empty {
+  padding: 9px;
 }
 
 .orchestration {

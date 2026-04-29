@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { StartPowerShellResponse } from "../../shared/ipc";
 import {
   appendTerminalPreview,
+  applyMentionSelection,
   buildRoutedTerminalMessage,
   buildProfileSavePayload,
   countOnlineSessionsForWorkspace,
   filterSessionsForWorkspace,
+  findMentionQuery,
+  getMentionCandidates,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
@@ -124,6 +127,52 @@ describe("findOnlineSessionForTarget", () => {
   });
 });
 
+describe("mention helpers", () => {
+  const profiles = [
+    {
+      id: "codex",
+      name: "Codex",
+      kind: "codex" as const,
+      command: "codex",
+      args: [],
+      aliases: ["@coder"],
+      rolePrompt: "",
+      env: {},
+      defaultCwd: null,
+      useWorkspaceWriteLock: true,
+    },
+    {
+      id: "gemini",
+      name: "Gemini Reviewer",
+      kind: "gemini" as const,
+      command: "gemini",
+      args: [],
+      aliases: ["review"],
+      rolePrompt: "",
+      env: {},
+      defaultCwd: null,
+      useWorkspaceWriteLock: false,
+    },
+  ];
+
+  it("finds the active mention query before the cursor", () => {
+    expect(findMentionQuery("ask @co", 7)).toEqual({ start: 4, end: 7, query: "co" });
+    expect(findMentionQuery("ask @co later", 13)).toBeNull();
+  });
+
+  it("matches mention candidates by id, name, and aliases", () => {
+    expect(getMentionCandidates("co", profiles).map((profile) => profile.id)).toEqual(["codex"]);
+    expect(getMentionCandidates("review", profiles).map((profile) => profile.id)).toEqual(["gemini"]);
+  });
+
+  it("replaces the current mention query with a profile token", () => {
+    expect(applyMentionSelection("ask @co now", { start: 4, end: 7, query: "co" }, "codex")).toEqual({
+      text: "ask @codex now",
+      cursor: 11,
+    });
+  });
+});
+
 describe("workspace session helpers", () => {
   it("filters sessions to the active workspace", () => {
     const sessions = [
@@ -148,7 +197,7 @@ describe("appendTerminalPreview", () => {
 });
 
 describe("buildRoutedTerminalMessage", () => {
-  it("wraps central routed messages with profile role instructions", () => {
+  it("sends only the routed user message without profile instruction wrappers", () => {
     expect(
       buildRoutedTerminalMessage(
         {
@@ -165,15 +214,7 @@ describe("buildRoutedTerminalMessage", () => {
         },
         "Build the feature.",
       ),
-    ).toBe(
-      [
-        "AgentHub profile instructions:",
-        "Implement only focused changes.",
-        "",
-        "User message:",
-        "Build the feature.",
-      ].join("\r\n"),
-    );
+    ).toBe("Build the feature.");
   });
 
   it("leaves routed messages unchanged when the profile has no role prompt", () => {

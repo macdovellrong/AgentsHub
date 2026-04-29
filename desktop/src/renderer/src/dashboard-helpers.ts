@@ -9,6 +9,12 @@ export type ProfileEditorFields = {
   useWorkspaceWriteLock: boolean;
 };
 
+export type MentionQuery = {
+  start: number;
+  end: number;
+  query: string;
+};
+
 export function splitListInput(value: string): string[] {
   return value
     .split(/\s+/)
@@ -120,17 +126,8 @@ export function findOnlineSessionForTarget(
 }
 
 export function buildRoutedTerminalMessage(profile: AgentProfileDto | undefined, message: string): string {
-  const rolePrompt = profile?.rolePrompt.trim();
-  if (!rolePrompt) {
-    return message;
-  }
-  return [
-    "AgentHub profile instructions:",
-    rolePrompt,
-    "",
-    "User message:",
-    message,
-  ].join("\r\n");
+  void profile;
+  return message;
 }
 
 export function pickSelectedSessionId(
@@ -151,4 +148,46 @@ export function appendTerminalPreview(current: string, chunk: string, maxLength 
   const normalized = withoutAnsi.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const combined = `${current}${normalized}`;
   return combined.length > maxLength ? combined.slice(combined.length - maxLength) : combined;
+}
+
+export function findMentionQuery(text: string, cursor: number): MentionQuery | null {
+  const beforeCursor = text.slice(0, cursor);
+  const match = /(?:^|\s)@([a-zA-Z0-9_.-]*)$/.exec(beforeCursor);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  const prefixOffset = beforeCursor[match.index] === "@" ? 0 : 1;
+  const start = match.index + prefixOffset;
+  return {
+    start,
+    end: cursor,
+    query: match[1] ?? "",
+  };
+}
+
+export function getMentionCandidates(query: string, profiles: AgentProfileDto[]): AgentProfileDto[] {
+  const normalizedQuery = query.trim().replace(/^@/, "").toLowerCase();
+  return profiles.filter((profile) => {
+    const searchValues = [
+      profile.id,
+      profile.name,
+      ...profile.aliases.map((alias) => alias.replace(/^@/, "")),
+    ].map((value) => value.toLowerCase());
+    return normalizedQuery.length === 0 || searchValues.some((value) => value.includes(normalizedQuery));
+  });
+}
+
+export function applyMentionSelection(
+  text: string,
+  mention: MentionQuery,
+  profileId: string,
+): { text: string; cursor: number } {
+  const token = `@${profileId}`;
+  const needsTrailingSpace = text[mention.end] !== " ";
+  const replacement = needsTrailingSpace ? `${token} ` : token;
+  const nextText = `${text.slice(0, mention.start)}${replacement}${text.slice(mention.end)}`;
+  return {
+    text: nextText,
+    cursor: mention.start + replacement.length + (needsTrailingSpace ? 0 : 1),
+  };
 }

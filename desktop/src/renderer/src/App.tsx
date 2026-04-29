@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type {
   AgentForwardDto,
   AgentHubEventDto,
@@ -13,13 +13,17 @@ import type {
 } from "../../shared/ipc";
 import {
   appendTerminalPreview,
+  applyMentionSelection,
   buildProfileSavePayload,
   buildRoutedTerminalMessage,
   countOnlineSessionsForWorkspace,
   filterSessionsForWorkspace,
+  findMentionQuery,
+  getMentionCandidates,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
+  type MentionQuery,
   profileToFields,
   type ProfileEditorFields,
 } from "./dashboard-helpers";
@@ -66,7 +70,32 @@ function describeEvent(event: AgentHubEventDto): string {
   return event.type.replace(/_/g, " ");
 }
 
+function chatMessageClass(event: AgentHubEventDto): string {
+  if (event.type === "user_message") {
+    return "chat-message-user";
+  }
+  if (event.type === "error") {
+    return "chat-message-error";
+  }
+  if (event.type === "agent_output" || event.type === "agent_forward") {
+    return "chat-message-agent";
+  }
+  return "chat-message-system";
+}
+
+function chatSenderLabel(event: AgentHubEventDto): string {
+  if (event.type === "user_message") {
+    return "你";
+  }
+  if (event.type === "error") {
+    return "系统";
+  }
+  return event.profileName ?? event.profileId ?? formatEventTypeLabel(event.type);
+}
+
 export function App(): React.JSX.Element {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const eventListRef = useRef<HTMLDivElement | null>(null);
   const [workspacePath, setWorkspacePath] = useState("");
   const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([]);
   const [profiles, setProfiles] = useState<AgentProfileDto[]>([]);
@@ -80,6 +109,8 @@ export function App(): React.JSX.Element {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [startingProfileIds, setStartingProfileIds] = useState<Set<string>>(() => new Set());
   const [inputText, setInputText] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [runProfileFilter, setRunProfileFilter] = useState("all");
   const [runStatusFilter, setRunStatusFilter] = useState<(typeof RUN_STATUSES)[number]>("all");
@@ -109,6 +140,20 @@ export function App(): React.JSX.Element {
     () => new Map(profiles.map((profile) => [profile.id, profile.name])),
     [profiles],
   );
+  const mentionCandidates = useMemo(
+    () => (mentionQuery ? getMentionCandidates(mentionQuery.query, profiles).slice(0, 8) : []),
+    [mentionQuery, profiles],
+  );
+
+  const refreshMentionQuery = useCallback((text: string, cursor: number | null) => {
+    if (cursor === null) {
+      setMentionQuery(null);
+      return;
+    }
+    const nextMention = findMentionQuery(text, cursor);
+    setMentionQuery(nextMention);
+    setSelectedMentionIndex(0);
+  }, []);
 
   const refreshProfilesAndSessions = useCallback(async () => {
     const [nextProfiles, nextSessions] = await Promise.all([
@@ -208,6 +253,17 @@ export function App(): React.JSX.Element {
       }));
     });
   }, []);
+
+  useEffect(() => {
+    const list = eventListRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [events]);
+
+  useEffect(() => {
+    setSelectedMentionIndex((current) => Math.min(current, Math.max(mentionCandidates.length - 1, 0)));
+  }, [mentionCandidates.length]);
 
   useEffect(() => {
     if (selectedProfile) {
@@ -391,6 +447,7 @@ export function App(): React.JSX.Element {
 
     setError(null);
     setInputText("");
+    setMentionQuery(null);
 
     try {
       const routed = await window.agenthub.routeInput({ workspacePath: workspacePath || undefined, text });
@@ -425,6 +482,55 @@ export function App(): React.JSX.Element {
       await appendErrorEvent(message);
     }
   }, [appendErrorEvent, inputText, profiles, refreshWorkspaceData, sessions, workspacePath]);
+
+  const selectMentionCandidate = useCallback(
+    (profileId: string) => {
+      if (!mentionQuery) {
+        return;
+      }
+      const next = applyMentionSelection(inputText, mentionQuery, profileId);
+      setInputText(next.text);
+      setMentionQuery(null);
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(next.cursor, next.cursor);
+      });
+    },
+    [inputText, mentionQuery],
+  );
+
+  const handleComposerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (mentionQuery && mentionCandidates.length > 0) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSelectedMentionIndex((current) => (current + 1) % mentionCandidates.length);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSelectedMentionIndex((current) => (current - 1 + mentionCandidates.length) % mentionCandidates.length);
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          selectMentionCandidate(mentionCandidates[selectedMentionIndex]?.id ?? mentionCandidates[0].id);
+          return;
+        }
+      }
+
+      if (event.key === "Escape" && mentionQuery) {
+        event.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+
+      if (event.key === "Enter") {
+        void routeMessage();
+      }
+    },
+    [mentionCandidates, mentionQuery, routeMessage, selectMentionCandidate, selectedMentionIndex],
+  );
 
   const loadRunRawLog = useCallback(
     async (runId: string) => {
@@ -821,33 +927,63 @@ export function App(): React.JSX.Element {
               <h2>{UI_TEXT.sections.conversation}</h2>
               <span>{events.length} 条事件</span>
             </div>
-            <div className="event-list">
+            <div className="event-list chat-list" ref={eventListRef}>
               {events.length === 0 ? <p className="empty-state">{UI_TEXT.empty.events}</p> : null}
               {events.map((event) => (
-                <article className={`event-card event-${event.type}`} key={event.id}>
-                  <div className="event-meta">
-                    <span>{formatTime(event.timestamp)}</span>
-                    <strong>{formatEventTypeLabel(event.type)}</strong>
-                    {event.profileName ?? event.profileId ? <span>{event.profileName ?? event.profileId}</span> : null}
-                  </div>
-                  <p>{describeEvent(event)}</p>
-                  <div className="event-actions">
-                    <button type="button" onClick={() => prepareForwardFromEvent(event)}>
-                      转发
-                    </button>
+                <article className={`chat-message ${chatMessageClass(event)} event-${event.type}`} key={event.id}>
+                  <div className="chat-bubble">
+                    <div className="event-meta chat-meta">
+                      <strong>{chatSenderLabel(event)}</strong>
+                      <span>{formatTime(event.timestamp)}</span>
+                    </div>
+                    <p>{describeEvent(event)}</p>
+                    <div className="event-actions">
+                      <button type="button" onClick={() => prepareForwardFromEvent(event)}>
+                        转发
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}
             </div>
-            <div className="input-row">
+            <div className="input-row composer-row">
+              {mentionQuery ? (
+                <div className="mention-menu">
+                  {mentionCandidates.length === 0 ? <div className="mention-empty">没有匹配的 Agent</div> : null}
+                  {mentionCandidates.map((profile, index) => {
+                    const online = findOnlineSessionForProfile(profile.id, sessions, workspacePath);
+                    return (
+                      <button
+                        type="button"
+                        className={`mention-option ${index === selectedMentionIndex ? "is-selected" : ""}`}
+                        key={profile.id}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectMentionCandidate(profile.id);
+                        }}
+                      >
+                        <strong>{profile.name}</strong>
+                        <span>@{profile.id}</span>
+                        <small className={online ? "is-online" : ""}>{online ? "在线" : "离线"}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
               <input
+                ref={inputRef}
                 value={inputText}
-                onChange={(event) => setInputText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    void routeMessage();
+                onChange={(event) => {
+                  setInputText(event.target.value);
+                  refreshMentionQuery(event.target.value, event.target.selectionStart);
+                }}
+                onClick={(event) => refreshMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
+                onKeyUp={(event) => {
+                  if (!["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key)) {
+                    refreshMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart);
                   }
                 }}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={UI_TEXT.placeholders.routedInput}
               />
               <button type="button" onClick={() => void routeMessage()}>
