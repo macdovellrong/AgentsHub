@@ -1,6 +1,18 @@
 import { EventStore } from "./event-store";
 import { TaskStore, type AgentTask } from "./task-store";
 
+export type OrchestrationSession = {
+  sessionId: string;
+  profileId: string;
+  workspacePath: string;
+  status: "online" | "exited";
+};
+
+export type OrchestrationSessionGateway = {
+  listSessions(): OrchestrationSession[];
+  write(sessionId: string, data: string): void;
+};
+
 export type StartOrchestrationInput = {
   workspacePath: string;
   goal: string;
@@ -17,6 +29,7 @@ export class OrchestrationService {
   constructor(
     private readonly taskStore = new TaskStore(),
     private readonly eventStore = new EventStore(),
+    private readonly sessions?: OrchestrationSessionGateway,
   ) {}
 
   async start(input: StartOrchestrationInput): Promise<OrchestrationResult> {
@@ -58,8 +71,72 @@ export class OrchestrationService {
         message: `Queued ${task.title}`,
         metadata: { autoExecute: false },
       });
+      await this.sendRolePrompt(input.workspacePath, input.goal, task);
     }
 
     return { tasks: [planner, implementer, reviewer] };
+  }
+
+  private async sendRolePrompt(workspacePath: string, goal: string, task: AgentTask): Promise<void> {
+    if (!this.sessions || !task.profileId) {
+      await this.appendWaitingSession(workspacePath, task);
+      return;
+    }
+
+    const session = this.sessions
+      .listSessions()
+      .find(
+        (candidate) =>
+          candidate.status === "online" &&
+          candidate.profileId === task.profileId &&
+          candidate.workspacePath === workspacePath,
+      );
+    if (!session) {
+      await this.appendWaitingSession(workspacePath, task);
+      return;
+    }
+
+    this.sessions.write(session.sessionId, this.buildPrompt(goal, task));
+    await this.eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      taskId: task.id,
+      profileId: task.profileId,
+      sessionId: session.sessionId,
+      status: "prompt_sent",
+      message: `Sent prompt for ${task.title}`,
+      metadata: { autoExecute: false },
+    });
+  }
+
+  private async appendWaitingSession(workspacePath: string, task: AgentTask): Promise<void> {
+    await this.eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      taskId: task.id,
+      profileId: task.profileId ?? undefined,
+      status: "waiting_session",
+      message: `Waiting for online session: ${task.profileId ?? "unassigned"}`,
+      metadata: { autoExecute: false },
+    });
+  }
+
+  private buildPrompt(goal: string, task: AgentTask): string {
+    return [
+      "AgentHub controlled orchestration step.",
+      `Role: ${this.roleName(task.title)}`,
+      `Task: ${task.title}`,
+      `Goal: ${goal}`,
+      "Produce one bounded response for this step. Do not start additional agent-to-agent loops.",
+      "",
+    ].join("\r\n");
+  }
+
+  private roleName(title: string): string {
+    if (title.toLowerCase().startsWith("plan")) {
+      return "planner";
+    }
+    if (title.toLowerCase().startsWith("implement")) {
+      return "implementer";
+    }
+    return "reviewer";
   }
 }

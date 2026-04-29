@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 import {
   IpcChannels,
   type AppendEventRequest,
+  type CreateForwardRequest,
   type CreateProfileRequest,
   type CreateTaskRequest,
   type DuplicateProfileRequest,
+  type ForwardActionRequest,
   type ReadRunRawLogRequest,
   type RouteInputRequest,
   type StartOrchestrationRequest,
@@ -18,6 +20,8 @@ import {
   type WorkspaceRequest,
 } from "../shared/ipc";
 import { EventStore } from "./event-store";
+import { ForwardService } from "./forward-service";
+import { ForwardStore } from "./forward-store";
 import { RunLogStore } from "./log-store";
 import { OrchestrationService } from "./orchestration";
 import { ProfileStore } from "./profile-store";
@@ -43,7 +47,8 @@ const taskStore = new TaskStore();
 const runHistoryStore = new RunHistoryStore();
 const writeLocks = new WorkspaceWriteLockService();
 const manager = new PtySessionManager({ logStore: new RunLogStore(), eventStore, writeLocks });
-const orchestration = new OrchestrationService(taskStore, eventStore);
+const forwardService = new ForwardService(new ForwardStore(), eventStore, manager);
+const orchestration = new OrchestrationService(taskStore, eventStore, manager);
 const defaultWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
 
 let mainWindow: BrowserWindow | null = null;
@@ -255,6 +260,27 @@ function registerIpcHandlers(): void {
       implementerProfileId: request.implementerProfileId,
       reviewerProfileId: request.reviewerProfileId,
     }),
+  );
+
+  ipcMain.handle(IpcChannels.ForwardsCreate, (_event, request: CreateForwardRequest) => {
+    const { workspacePath, ...forward } = request;
+    return forwardService.create(resolveRequestWorkspace(workspacePath), forward);
+  });
+
+  ipcMain.handle(IpcChannels.ForwardsList, (_event, request: WorkspaceRequest = {}) =>
+    forwardService.list(resolveRequestWorkspace(request.workspacePath)),
+  );
+
+  ipcMain.handle(IpcChannels.ForwardsPause, (_event, request: ForwardActionRequest) =>
+    forwardService.pause(resolveRequestWorkspace(request.workspacePath), request.forwardId),
+  );
+
+  ipcMain.handle(IpcChannels.ForwardsStop, (_event, request: ForwardActionRequest) =>
+    forwardService.stop(resolveRequestWorkspace(request.workspacePath), request.forwardId),
+  );
+
+  ipcMain.handle(IpcChannels.ForwardsSend, (_event, request: ForwardActionRequest) =>
+    forwardService.send(resolveRequestWorkspace(request.workspacePath), request.forwardId),
   );
 
   ipcMain.handle(IpcChannels.WorkspaceLockStatus, () => {

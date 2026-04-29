@@ -2,12 +2,15 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   IpcChannels,
   type AgentHubEventDto,
+  type AgentForwardDto,
   type AgentProfileDto,
   type AgentTaskDto,
   type AppendEventRequest,
+  type CreateForwardRequest,
   type CreateProfileRequest,
   type CreateTaskRequest,
   type DuplicateProfileRequest,
+  type ForwardActionRequest,
   type ReadRunRawLogRequest,
   type RouteInputRequest,
   type RouteInputResponse,
@@ -110,6 +113,26 @@ const agenthub = {
 
   startOrchestration(request: StartOrchestrationRequest): Promise<{ tasks: AgentTaskDto[] }> {
     return ipcRenderer.invoke(IpcChannels.OrchestrationStart, request) as Promise<{ tasks: AgentTaskDto[] }>;
+  },
+
+  createForward(request: CreateForwardRequest): Promise<AgentForwardDto> {
+    return ipcRenderer.invoke(IpcChannels.ForwardsCreate, request) as Promise<AgentForwardDto>;
+  },
+
+  listForwards(request: WorkspaceRequest = {}): Promise<AgentForwardDto[]> {
+    return ipcRenderer.invoke(IpcChannels.ForwardsList, request) as Promise<AgentForwardDto[]>;
+  },
+
+  pauseForward(request: ForwardActionRequest): Promise<AgentForwardDto> {
+    return ipcRenderer.invoke(IpcChannels.ForwardsPause, request) as Promise<AgentForwardDto>;
+  },
+
+  stopForward(request: ForwardActionRequest): Promise<AgentForwardDto> {
+    return ipcRenderer.invoke(IpcChannels.ForwardsStop, request) as Promise<AgentForwardDto>;
+  },
+
+  sendForward(request: ForwardActionRequest): Promise<AgentForwardDto> {
+    return ipcRenderer.invoke(IpcChannels.ForwardsSend, request) as Promise<AgentForwardDto>;
   },
 
   getWorkspaceLockStatus(): Promise<WorkspaceLockStatusResponse> {

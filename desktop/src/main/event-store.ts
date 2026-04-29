@@ -10,6 +10,7 @@ export type AgentHubEventType =
   | "task_created"
   | "task_updated"
   | "orchestration_step"
+  | "agent_forward"
   | "error";
 
 export type AgentHubEvent = {

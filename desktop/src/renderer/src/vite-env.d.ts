@@ -2,12 +2,15 @@
 
 import type {
   AgentHubEventDto,
+  AgentForwardDto,
   AgentProfileDto,
   AgentTaskDto,
   AppendEventRequest,
+  CreateForwardRequest,
   CreateProfileRequest,
   CreateTaskRequest,
   DuplicateProfileRequest,
+  ForwardActionRequest,
   ReadRunRawLogRequest,
   RouteInputRequest,
   RouteInputResponse,
@@ -51,6 +54,11 @@ declare global {
       createTask(request: CreateTaskRequest): Promise<AgentTaskDto>;
       updateTask(request: UpdateTaskRequest): Promise<AgentTaskDto>;
       startOrchestration(request: StartOrchestrationRequest): Promise<{ tasks: AgentTaskDto[] }>;
+      createForward(request: CreateForwardRequest): Promise<AgentForwardDto>;
+      listForwards(request?: WorkspaceRequest): Promise<AgentForwardDto[]>;
+      pauseForward(request: ForwardActionRequest): Promise<AgentForwardDto>;
+      stopForward(request: ForwardActionRequest): Promise<AgentForwardDto>;
+      sendForward(request: ForwardActionRequest): Promise<AgentForwardDto>;
       getWorkspaceLockStatus(): Promise<WorkspaceLockStatusResponse>;
       onTerminalData(callback: (event: TerminalDataEvent) => void): () => void;
       onSessionExit(callback: (event: SessionExitEvent) => void): () => void;

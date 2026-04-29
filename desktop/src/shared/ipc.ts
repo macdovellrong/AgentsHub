@@ -23,6 +23,11 @@ export const IpcChannels = {
   TasksCreate: "tasks:create",
   TasksUpdate: "tasks:update",
   OrchestrationStart: "orchestration:start",
+  ForwardsCreate: "forwards:create",
+  ForwardsList: "forwards:list",
+  ForwardsPause: "forwards:pause",
+  ForwardsStop: "forwards:stop",
+  ForwardsSend: "forwards:send",
   WorkspaceLockStatus: "workspace-lock:status",
 } as const;
 
@@ -150,6 +155,7 @@ export type AgentHubEventDto = {
     | "task_created"
     | "task_updated"
     | "orchestration_step"
+    | "agent_forward"
     | "error";
   timestamp: string;
   message?: string;
@@ -172,6 +178,28 @@ export type StartOrchestrationRequest = WorkspaceRequest & {
   plannerProfileId?: string;
   implementerProfileId?: string;
   reviewerProfileId?: string;
+};
+
+export type ForwardStatus = "pending" | "sent" | "paused" | "stopped" | "blocked";
+export type AgentForwardDto = {
+  id: string;
+  sourceProfileId: string | null;
+  targetProfileId: string;
+  message: string;
+  status: ForwardStatus;
+  sessionId: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+};
+export type CreateForwardRequest = WorkspaceRequest & {
+  sourceProfileId?: string | null;
+  targetProfileId: string;
+  message: string;
+};
+export type ForwardActionRequest = WorkspaceRequest & {
+  forwardId: string;
 };
 
 export type WorkspaceLockStatusResponse = {
