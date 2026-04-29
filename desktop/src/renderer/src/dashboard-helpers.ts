@@ -52,10 +52,40 @@ export function getInputTargetToken(text: string): string | null {
   return trimmed.split(/\s+/, 1)[0].toLowerCase();
 }
 
+export function normalizeWorkspacePath(workspacePath: string | undefined): string | null {
+  const trimmed = workspacePath?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.replace(/[\\/]+$/g, "").replace(/\\/g, "/").toLowerCase();
+}
+
+export function isSessionInWorkspace(session: StartPowerShellResponse, workspacePath: string | undefined): boolean {
+  const targetWorkspace = normalizeWorkspacePath(workspacePath);
+  if (!targetWorkspace) {
+    return true;
+  }
+  return normalizeWorkspacePath(session.workspacePath) === targetWorkspace;
+}
+
+export function findOnlineSessionForProfile(
+  profileId: string,
+  sessions: StartPowerShellResponse[],
+  workspacePath?: string,
+): StartPowerShellResponse | null {
+  return (
+    sessions.find(
+      (session) =>
+        session.profileId === profileId && session.status === "online" && isSessionInWorkspace(session, workspacePath),
+    ) ?? null
+  );
+}
+
 export function findOnlineSessionForTarget(
   text: string,
   sessions: StartPowerShellResponse[],
   profiles: AgentProfileDto[],
+  workspacePath?: string,
 ): StartPowerShellResponse | null {
   const targetToken = getInputTargetToken(text);
 
@@ -72,7 +102,21 @@ export function findOnlineSessionForTarget(
     return null;
   }
 
-  return sessions.find((session) => session.profileId === profile.id && session.status === "online") ?? null;
+  return findOnlineSessionForProfile(profile.id, sessions, workspacePath);
+}
+
+export function buildRoutedTerminalMessage(profile: AgentProfileDto | undefined, message: string): string {
+  const rolePrompt = profile?.rolePrompt.trim();
+  if (!rolePrompt) {
+    return message;
+  }
+  return [
+    "AgentHub profile instructions:",
+    rolePrompt,
+    "",
+    "User message:",
+    message,
+  ].join("\r\n");
 }
 
 export function pickSelectedSessionId(

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { StartPowerShellResponse } from "../../shared/ipc";
 import {
+  buildRoutedTerminalMessage,
   buildProfileSavePayload,
+  findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
   splitListInput,
@@ -86,12 +88,70 @@ describe("findOnlineSessionForTarget", () => {
       },
     ];
 
-    expect(findOnlineSessionForTarget("@coder build this", sessions, profiles)?.sessionId).toBe("session-1");
-    expect(findOnlineSessionForTarget("@codex build this", sessions, profiles)?.sessionId).toBe("session-1");
+    expect(findOnlineSessionForTarget("@coder build this", sessions, profiles, "C:/work")?.sessionId).toBe("session-1");
+    expect(findOnlineSessionForTarget("@codex build this", sessions, profiles, "C:/work")?.sessionId).toBe("session-1");
   });
 
   it("returns null when the target profile has no online session", () => {
     expect(findOnlineSessionForTarget("@codex build this", [{ ...baseSession, status: "exited" }], [])).toBeNull();
+  });
+
+  it("does not route to an online session in another workspace", () => {
+    const sessions = [
+      { ...baseSession, sessionId: "wrong-workspace", workspacePath: "C:/other" },
+      { ...baseSession, sessionId: "right-workspace", workspacePath: "C:\\work\\" },
+    ];
+    const profiles = [
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex" as const,
+        command: "codex",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: true,
+      },
+    ];
+
+    expect(findOnlineSessionForTarget("@codex build this", sessions, profiles, "C:/work")?.sessionId).toBe("right-workspace");
+    expect(findOnlineSessionForProfile("codex", sessions, "C:/missing")).toBeNull();
+  });
+});
+
+describe("buildRoutedTerminalMessage", () => {
+  it("wraps central routed messages with profile role instructions", () => {
+    expect(
+      buildRoutedTerminalMessage(
+        {
+          id: "codex",
+          name: "Codex",
+          kind: "codex",
+          command: "codex",
+          args: [],
+          aliases: [],
+          rolePrompt: "Implement only focused changes.",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: true,
+        },
+        "Build the feature.",
+      ),
+    ).toBe(
+      [
+        "AgentHub profile instructions:",
+        "Implement only focused changes.",
+        "",
+        "User message:",
+        "Build the feature.",
+      ].join("\r\n"),
+    );
+  });
+
+  it("leaves routed messages unchanged when the profile has no role prompt", () => {
+    expect(buildRoutedTerminalMessage(undefined, "dir")).toBe("dir");
   });
 });
 

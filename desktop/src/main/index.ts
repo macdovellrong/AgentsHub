@@ -252,15 +252,18 @@ function registerIpcHandlers(): void {
     return updated;
   });
 
-  ipcMain.handle(IpcChannels.OrchestrationStart, (_event, request: StartOrchestrationRequest) =>
-    orchestration.start({
+  ipcMain.handle(IpcChannels.OrchestrationStart, async (_event, request: StartOrchestrationRequest) => {
+    const profiles = await getProfileStore().list();
+    const rolePrompts = Object.fromEntries(profiles.map((profile) => [profile.id, profile.rolePrompt]));
+    return orchestration.start({
       workspacePath: resolveRequestWorkspace(request.workspacePath),
       goal: request.goal,
       plannerProfileId: request.plannerProfileId,
       implementerProfileId: request.implementerProfileId,
       reviewerProfileId: request.reviewerProfileId,
-    }),
-  );
+      rolePrompts,
+    });
+  });
 
   ipcMain.handle(IpcChannels.ForwardsCreate, (_event, request: CreateForwardRequest) => {
     const { workspacePath, ...forward } = request;

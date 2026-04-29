@@ -12,6 +12,8 @@ import type {
 } from "../../shared/ipc";
 import {
   buildProfileSavePayload,
+  buildRoutedTerminalMessage,
+  findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
   profileToFields,
@@ -344,8 +346,8 @@ export function App(): React.JSX.Element {
       }
 
       const targetSession =
-        sessions.find((session) => session.profileId === routed.targetProfileId && session.status === "online") ??
-        findOnlineSessionForTarget(text, sessions, profiles);
+        findOnlineSessionForProfile(routed.targetProfileId, sessions, workspacePath) ??
+        findOnlineSessionForTarget(text, sessions, profiles, workspacePath);
 
       if (!targetSession) {
         const profile = profiles.find((candidate) => candidate.id === routed.targetProfileId);
@@ -355,7 +357,10 @@ export function App(): React.JSX.Element {
 
       await window.agenthub.terminalInput({
         sessionId: targetSession.sessionId,
-        data: `${routed.message}\r`,
+        data: `${buildRoutedTerminalMessage(
+          profiles.find((profile) => profile.id === targetSession.profileId),
+          routed.message,
+        )}\r`,
       });
       setSelectedSessionId(targetSession.sessionId);
     } catch (reason) {
@@ -363,7 +368,7 @@ export function App(): React.JSX.Element {
       setError(message);
       await appendErrorEvent(message);
     }
-  }, [appendErrorEvent, inputText, profiles, refreshWorkspaceData, sessions]);
+  }, [appendErrorEvent, inputText, profiles, refreshWorkspaceData, sessions, workspacePath]);
 
   const loadRunRawLog = useCallback(
     async (runId: string) => {

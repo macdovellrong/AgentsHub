@@ -19,6 +19,7 @@ export type StartOrchestrationInput = {
   plannerProfileId?: string;
   implementerProfileId?: string;
   reviewerProfileId?: string;
+  rolePrompts?: Record<string, string>;
 };
 
 export type OrchestrationResult = {
@@ -55,7 +56,8 @@ export class OrchestrationService {
       runId: null,
     });
 
-    for (const task of [planner, implementer, reviewer]) {
+    const tasks = [planner, implementer, reviewer];
+    for (const [index, task] of tasks.entries()) {
       await this.eventStore.append(input.workspacePath, {
         type: "task_created",
         taskId: task.id,
@@ -71,13 +73,22 @@ export class OrchestrationService {
         message: `Queued ${task.title}`,
         metadata: { autoExecute: false },
       });
-      await this.sendRolePrompt(input.workspacePath, input.goal, task);
+      if (index === 0) {
+        await this.sendRolePrompt(input.workspacePath, input.goal, task, input.rolePrompts?.[task.profileId ?? ""]);
+      } else {
+        await this.appendWaitingPreviousStep(input.workspacePath, task);
+      }
     }
 
-    return { tasks: [planner, implementer, reviewer] };
+    return { tasks };
   }
 
-  private async sendRolePrompt(workspacePath: string, goal: string, task: AgentTask): Promise<void> {
+  private async sendRolePrompt(
+    workspacePath: string,
+    goal: string,
+    task: AgentTask,
+    rolePrompt?: string,
+  ): Promise<void> {
     if (!this.sessions || !task.profileId) {
       await this.appendWaitingSession(workspacePath, task);
       return;
@@ -96,7 +107,7 @@ export class OrchestrationService {
       return;
     }
 
-    this.sessions.write(session.sessionId, this.buildPrompt(goal, task));
+    this.sessions.write(session.sessionId, this.buildPrompt(goal, task, rolePrompt));
     await this.eventStore.append(workspacePath, {
       type: "orchestration_step",
       taskId: task.id,
@@ -119,15 +130,31 @@ export class OrchestrationService {
     });
   }
 
-  private buildPrompt(goal: string, task: AgentTask): string {
-    return [
+  private async appendWaitingPreviousStep(workspacePath: string, task: AgentTask): Promise<void> {
+    await this.eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      taskId: task.id,
+      profileId: task.profileId ?? undefined,
+      status: "waiting_previous_step",
+      message: `Waiting for previous step before ${task.title}`,
+      metadata: { autoExecute: false },
+    });
+  }
+
+  private buildPrompt(goal: string, task: AgentTask, rolePrompt?: string): string {
+    const lines = [
       "AgentHub controlled orchestration step.",
       `Role: ${this.roleName(task.title)}`,
       `Task: ${task.title}`,
       `Goal: ${goal}`,
       "Produce one bounded response for this step. Do not start additional agent-to-agent loops.",
-      "",
-    ].join("\r\n");
+    ];
+    const trimmedRolePrompt = rolePrompt?.trim();
+    if (trimmedRolePrompt) {
+      lines.push("Profile instructions:", trimmedRolePrompt);
+    }
+    lines.push("");
+    return lines.join("\r\n");
   }
 
   private roleName(title: string): string {
