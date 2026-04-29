@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
 import { EventStore } from "./event-store";
@@ -92,6 +94,36 @@ export class NodePtyFactory implements PtyFactory {
   }
 }
 
+export function resolveProfileCommand(command: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (path.isAbsolute(command) || command.includes("\\") || command.includes("/")) {
+    return command;
+  }
+
+  const pathValue = env.PATH ?? env.Path ?? env.path;
+  if (!pathValue) {
+    return command;
+  }
+
+  const hasExtension = path.extname(command).length > 0;
+  const extensions = process.platform === "win32" && !hasExtension
+    ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
+    : [""];
+
+  for (const directory of pathValue.split(path.delimiter)) {
+    if (!directory) {
+      continue;
+    }
+    for (const extension of extensions) {
+      const candidate = path.join(directory, `${command}${extension}`);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return command;
+}
+
 export class PtySessionManager extends EventEmitter {
   private readonly ptyFactory: PtyFactory;
   private readonly logStore: RunLogStore;
@@ -128,17 +160,18 @@ export class PtySessionManager extends EventEmitter {
     });
     let pty: PtyLike;
     try {
-      pty = this.ptyFactory.spawn(profile.command, profile.args, {
+      const env = {
+        ...process.env,
+        ...profile.env,
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor",
+      };
+      pty = this.ptyFactory.spawn(resolveProfileCommand(profile.command, env), profile.args, {
         name: "xterm-256color",
         cols,
         rows,
         cwd: profile.defaultCwd ?? workspacePath,
-        env: {
-          ...process.env,
-          ...profile.env,
-          TERM: "xterm-256color",
-          COLORTERM: "truecolor",
-        },
+        env,
       });
     } catch (error) {
       try {
@@ -222,14 +255,6 @@ export class PtySessionManager extends EventEmitter {
   private async persistAndEmitData(stored: StoredSession, data: string): Promise<void> {
     try {
       await this.logStore.appendRaw(stored.session.runId, data);
-      await this.eventStore.append(stored.session.workspacePath, {
-        type: "agent_output",
-        sessionId: stored.session.sessionId,
-        runId: stored.session.runId,
-        profileId: stored.session.profileId,
-        profileName: stored.session.profileName,
-        message: data,
-      });
     } catch (error) {
       this.emitPtyError(stored.session.sessionId, error);
       return;

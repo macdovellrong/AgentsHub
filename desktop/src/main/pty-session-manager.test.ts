@@ -1,11 +1,13 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { EventStore } from "./event-store";
 import { RunLogStore } from "./log-store";
 import {
   PtySessionManager,
+  resolveProfileCommand,
   type PtyFactory,
   type PtyLike,
   type PtySpawnOptions,
@@ -144,6 +146,19 @@ afterEach(async () => {
 });
 
 describe("PtySessionManager", () => {
+  it("resolves profile commands from PATH before spawning", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const commandPath = path.join(workspacePath, process.platform === "win32" ? "agent.cmd" : "agent");
+    await writeFile(commandPath, "", "utf8");
+
+    const resolved = resolveProfileCommand("agent", {
+      PATH: workspacePath,
+      PATHEXT: ".CMD",
+    });
+
+    expect(resolved.toLowerCase()).toBe(commandPath.toLowerCase());
+  });
+
   it("starts PowerShell with UTF-8 bootstrap and emits data", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();
@@ -251,6 +266,31 @@ describe("PtySessionManager", () => {
 
     expect(logStore.appendFinished).toBe(true);
     await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("queued\r\n");
+  });
+
+  it("keeps raw PTY output out of workspace events", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const eventStore = new EventStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+      eventStore,
+    });
+    const dataEvent = new Promise<void>((resolve) => {
+      manager.on("data", () => resolve());
+    });
+
+    await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+    factory.pty.emit("data", "\u001b[32mraw terminal frame\u001b[0m\r\n");
+    await dataEvent;
+
+    const events = await eventStore.list(workspacePath);
+    expect(events.map((event) => event.type)).toEqual(["session_started"]);
   });
 
   it("persists exit metadata before emitting exit", async () => {

@@ -28,7 +28,12 @@ describe("ProfileStore", () => {
     });
     expect(profiles.find((profile) => profile.id === "codex")).toMatchObject({
       kind: "codex",
+      command: "codex.cmd",
       useWorkspaceWriteLock: true,
+    });
+    expect(profiles.find((profile) => profile.id === "gemini")).toMatchObject({
+      kind: "gemini",
+      command: "gemini.cmd",
     });
   });
 

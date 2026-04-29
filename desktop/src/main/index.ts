@@ -34,7 +34,7 @@ import { TaskStore } from "./task-store";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
 import { shouldDisableElectronSandbox } from "./electron-sandbox";
 import { getAllowedDevRendererUrl } from "./renderer-url";
-import { resolveWorkspacePath } from "./workspace-path";
+import { getDefaultWorkspacePath, resolveWorkspacePath } from "./workspace-path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +44,7 @@ const runHistoryStore = new RunHistoryStore();
 const writeLocks = new WorkspaceWriteLockService();
 const manager = new PtySessionManager({ logStore: new RunLogStore(), eventStore, writeLocks });
 const orchestration = new OrchestrationService(taskStore, eventStore);
+const defaultWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -121,7 +122,7 @@ function getProfileStore(): ProfileStore {
 }
 
 function resolveRequestWorkspace(workspacePath?: string): string {
-  return resolveWorkspacePath(workspacePath, process.cwd());
+  return resolveWorkspacePath(workspacePath, defaultWorkspacePath);
 }
 
 function toSessionResponse(session: PtySession): {
@@ -149,7 +150,7 @@ function toSessionResponse(session: PtySession): {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IpcChannels.WorkspaceDefault, () => process.cwd());
+  ipcMain.handle(IpcChannels.WorkspaceDefault, () => defaultWorkspacePath);
 
   ipcMain.handle(IpcChannels.StartPowerShell, async (_event, request: StartPowerShellRequest) => {
     const workspacePath = resolveRequestWorkspace(request.workspacePath);
