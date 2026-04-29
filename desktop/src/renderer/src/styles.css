@@ -236,7 +236,7 @@ label {
 }
 
 .sidebar {
-  grid-template-rows: minmax(180px, 0.9fr) minmax(420px, 1.1fr);
+  grid-template-rows: minmax(120px, 0.45fr) minmax(180px, 0.75fr) minmax(360px, 1.1fr);
 }
 
 .center-stack {
@@ -247,6 +247,7 @@ label {
   grid-template-rows: minmax(330px, 1.05fr) minmax(260px, 0.95fr);
 }
 
+.workspace-list,
 .profile-list,
 .event-list,
 .run-list {
@@ -257,12 +258,55 @@ label {
   padding: 10px;
 }
 
+.workspace-row,
 .profile-row,
 .event-card,
 .task-card {
   background: #111820;
   border: 1px solid #28313c;
   border-radius: 7px;
+}
+
+.workspace-tabs,
+.profile-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.workspace-row {
+  align-items: start;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 58px;
+  padding: 8px;
+  text-align: left;
+}
+
+.workspace-row.is-selected {
+  border-color: #5f86b6;
+  background: #1b2836;
+}
+
+.workspace-row strong {
+  color: #f3f6fa;
+  font-size: 13px;
+}
+
+.workspace-row span {
+  color: #98a5b5;
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-row small {
+  color: #9ccaff;
+  font-size: 11px;
 }
 
 .profile-row {
@@ -358,6 +402,12 @@ label {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.event-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .event-error {

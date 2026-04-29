@@ -9,10 +9,14 @@ import type {
   SessionStatus,
   StartPowerShellResponse,
   TaskStatus,
+  WorkspaceDto,
 } from "../../shared/ipc";
 import {
+  appendTerminalPreview,
   buildProfileSavePayload,
   buildRoutedTerminalMessage,
+  countOnlineSessionsForWorkspace,
+  filterSessionsForWorkspace,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
@@ -64,6 +68,7 @@ function describeEvent(event: AgentHubEventDto): string {
 
 export function App(): React.JSX.Element {
   const [workspacePath, setWorkspacePath] = useState("");
+  const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([]);
   const [profiles, setProfiles] = useState<AgentProfileDto[]>([]);
   const [sessions, setSessions] = useState<StartPowerShellResponse[]>([]);
   const [events, setEvents] = useState<AgentHubEventDto[]>([]);
@@ -86,16 +91,15 @@ export function App(): React.JSX.Element {
   const [forwardSourceProfileId, setForwardSourceProfileId] = useState("");
   const [forwardTargetProfileId, setForwardTargetProfileId] = useState("");
   const [forwardMessage, setForwardMessage] = useState("");
+  const [terminalPreviews, setTerminalPreviews] = useState<Record<string, string>>({});
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null,
     [profiles, selectedProfileId],
   );
-  const activeSessions = useMemo(
-    () => sessions.filter((session) => session.status === "online" || session.status === "starting"),
-    [sessions],
-  );
+  const activeSessions = useMemo(() => filterSessionsForWorkspace(sessions, workspacePath), [sessions, workspacePath]);
   const selectedSession = activeSessions.find((session) => session.sessionId === selectedSessionId) ?? null;
+  const selectedSessionPreview = selectedSession ? (terminalPreviews[selectedSession.sessionId] ?? "").trim() : "";
   const filteredRuns = runs.filter((run) => {
     const profileMatches = runProfileFilter === "all" || run.profileId === runProfileFilter;
     const statusMatches = runStatusFilter === "all" || run.status === runStatusFilter;
@@ -117,6 +121,11 @@ export function App(): React.JSX.Element {
     setSelectedSessionId((current) => pickSelectedSessionId(current, nextSessions));
   }, []);
 
+  const refreshWorkspaces = useCallback(async () => {
+    const nextWorkspaces = await window.agenthub.listWorkspaces();
+    setWorkspaces(nextWorkspaces);
+  }, []);
+
   const refreshWorkspaceData = useCallback(async (workspace = workspacePath) => {
     const request = workspace ? { workspacePath: workspace } : {};
     const [nextEvents, nextRuns, nextTasks, nextForwards] = await Promise.all([
@@ -132,8 +141,8 @@ export function App(): React.JSX.Element {
   }, [workspacePath]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshProfilesAndSessions(), refreshWorkspaceData()]);
-  }, [refreshProfilesAndSessions, refreshWorkspaceData]);
+    await Promise.all([refreshProfilesAndSessions(), refreshWorkspaceData(), refreshWorkspaces()]);
+  }, [refreshProfilesAndSessions, refreshWorkspaceData, refreshWorkspaces]);
 
   const openWorkspace = useCallback(async () => {
     setError(null);
@@ -142,11 +151,31 @@ export function App(): React.JSX.Element {
       setWorkspacePath(nextWorkspace);
       setSelectedRunId(null);
       setRawLog("");
-      await refreshWorkspaceData(nextWorkspace);
+      await Promise.all([refreshWorkspaceData(nextWorkspace), refreshWorkspaces()]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [refreshWorkspaceData, workspacePath]);
+  }, [refreshWorkspaceData, refreshWorkspaces, workspacePath]);
+
+  const activateWorkspace = useCallback(
+    async (nextWorkspacePath: string) => {
+      if (nextWorkspacePath === workspacePath) {
+        return;
+      }
+      setError(null);
+      try {
+        const nextWorkspace = await window.agenthub.activateWorkspace({ workspacePath: nextWorkspacePath });
+        setWorkspacePath(nextWorkspace);
+        setSelectedRunId(null);
+        setRawLog("");
+        setSelectedSessionId((current) => pickSelectedSessionId(current, filterSessionsForWorkspace(sessions, nextWorkspace)));
+        await Promise.all([refreshWorkspaceData(nextWorkspace), refreshWorkspaces()]);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [refreshWorkspaceData, refreshWorkspaces, sessions, workspacePath],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -158,7 +187,7 @@ export function App(): React.JSX.Element {
           return;
         }
         setWorkspacePath(defaultWorkspace);
-        await Promise.all([refreshProfilesAndSessions(), refreshWorkspaceData(defaultWorkspace)]);
+        await Promise.all([refreshProfilesAndSessions(), refreshWorkspaceData(defaultWorkspace), refreshWorkspaces()]);
       })
       .catch((reason: unknown) => {
         if (isMounted) {
@@ -169,7 +198,16 @@ export function App(): React.JSX.Element {
     return () => {
       isMounted = false;
     };
-  }, [refreshProfilesAndSessions, refreshWorkspaceData]);
+  }, [refreshProfilesAndSessions, refreshWorkspaceData, refreshWorkspaces]);
+
+  useEffect(() => {
+    return window.agenthub.onTerminalData((event) => {
+      setTerminalPreviews((current) => ({
+        ...current,
+        [event.sessionId]: appendTerminalPreview(current[event.sessionId] ?? "", event.data),
+      }));
+    });
+  }, []);
 
   useEffect(() => {
     if (selectedProfile) {
@@ -178,6 +216,10 @@ export function App(): React.JSX.Element {
       setEditorFields(emptyEditorFields);
     }
   }, [selectedProfile]);
+
+  useEffect(() => {
+    setSelectedSessionId((current) => pickSelectedSessionId(current, activeSessions));
+  }, [activeSessions]);
 
   useEffect(() => {
     if (profiles.length === 0) {
@@ -199,9 +241,9 @@ export function App(): React.JSX.Element {
       setSelectedSessionId((current) =>
         current === event.sessionId ? pickSelectedSessionId(null, activeSessions.filter((s) => s.sessionId !== event.sessionId)) : current,
       );
-      void refreshWorkspaceData();
+      void Promise.all([refreshWorkspaceData(), refreshWorkspaces()]);
     });
-  }, [activeSessions, refreshWorkspaceData]);
+  }, [activeSessions, refreshWorkspaceData, refreshWorkspaces]);
 
   useEffect(() => {
     return window.agenthub.onSessionError((event) => {
@@ -231,7 +273,7 @@ export function App(): React.JSX.Element {
         setWorkspacePath(session.workspacePath);
         setSessions((current) => [session, ...current.filter((item) => item.sessionId !== session.sessionId)]);
         setSelectedSessionId(session.sessionId);
-        await refreshWorkspaceData(session.workspacePath);
+        await Promise.all([refreshWorkspaceData(session.workspacePath), refreshWorkspaces()]);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
       } finally {
@@ -242,7 +284,7 @@ export function App(): React.JSX.Element {
         });
       }
     },
-    [refreshWorkspaceData, workspacePath],
+    [refreshWorkspaceData, refreshWorkspaces, workspacePath],
   );
 
   const stopSession = useCallback(
@@ -253,12 +295,12 @@ export function App(): React.JSX.Element {
         setSessions((current) =>
           current.map((session) => (session.sessionId === sessionId ? { ...session, status: "exited" as const } : session)),
         );
-        await refreshWorkspaceData();
+        await Promise.all([refreshWorkspaceData(), refreshWorkspaces()]);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
       }
     },
-    [refreshWorkspaceData],
+    [refreshWorkspaceData, refreshWorkspaces],
   );
 
   const resizeTerminal = useCallback((sessionId: string, cols: number, rows: number) => {
@@ -458,6 +500,46 @@ export function App(): React.JSX.Element {
     }
   }, [orchestrationGoal, profiles, refreshWorkspaceData, workspacePath]);
 
+  const prepareForward = useCallback((sourceProfileId: string | null, message: string) => {
+    setForwardSourceProfileId(sourceProfileId ?? "");
+    setForwardMessage(message.trim());
+  }, []);
+
+  const prepareForwardFromEvent = useCallback(
+    (event: AgentHubEventDto) => {
+      prepareForward(event.profileId ?? event.targetProfileId ?? null, describeEvent(event));
+    },
+    [prepareForward],
+  );
+
+  const prepareForwardFromSelectedOutput = useCallback(() => {
+    if (!selectedSession || !selectedSessionPreview) {
+      return;
+    }
+    prepareForward(selectedSession.profileId, selectedSessionPreview);
+  }, [prepareForward, selectedSession, selectedSessionPreview]);
+
+  const publishSelectedOutput = useCallback(async () => {
+    if (!selectedSession || !selectedSessionPreview) {
+      return;
+    }
+    setError(null);
+    try {
+      await window.agenthub.appendEvent({
+        workspacePath: workspacePath || undefined,
+        type: "agent_output",
+        profileId: selectedSession.profileId,
+        profileName: selectedSession.profileName,
+        sessionId: selectedSession.sessionId,
+        runId: selectedSession.runId,
+        message: selectedSessionPreview,
+      });
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [refreshWorkspaceData, selectedSession, selectedSessionPreview, workspacePath]);
+
   const createForward = useCallback(async () => {
     const message = forwardMessage.trim();
     const targetProfileId = forwardTargetProfileId || selectedProfile?.id || profiles[0]?.id;
@@ -505,6 +587,42 @@ export function App(): React.JSX.Element {
     },
     [refreshWorkspaceData, workspacePath],
   );
+
+  const createAndSendForward = useCallback(async () => {
+    const message = forwardMessage.trim();
+    const targetProfileId = forwardTargetProfileId || selectedProfile?.id || profiles[0]?.id;
+    if (!message || !targetProfileId) {
+      return;
+    }
+    setError(null);
+    try {
+      const created = await window.agenthub.createForward({
+        workspacePath: workspacePath || undefined,
+        sourceProfileId: forwardSourceProfileId || null,
+        targetProfileId,
+        message,
+      });
+      const updated = await window.agenthub.sendForward({
+        workspacePath: workspacePath || undefined,
+        forwardId: created.id,
+      });
+      if (updated.sessionId) {
+        setSelectedSessionId(updated.sessionId);
+      }
+      setForwardMessage("");
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [
+    forwardMessage,
+    forwardSourceProfileId,
+    forwardTargetProfileId,
+    profiles,
+    refreshWorkspaceData,
+    selectedProfile,
+    workspacePath,
+  ]);
 
   const pauseForward = useCallback(
     async (forwardId: string) => {
@@ -561,8 +679,33 @@ export function App(): React.JSX.Element {
       {error ? <section className="error-banner">{error}</section> : null}
 
       <section className="dashboard-grid">
-        <aside className="sidebar panel">
-          <div className="panel-header">
+        <aside className="sidebar">
+          <section className="workspace-tabs panel">
+            <div className="panel-header">
+              <h2>工作区</h2>
+              <button type="button" onClick={() => void openWorkspace()}>
+                添加
+              </button>
+            </div>
+            <div className="workspace-list">
+              {workspaces.map((workspace) => (
+                <button
+                  type="button"
+                  className={`workspace-row ${workspace.isActive || workspace.path === workspacePath ? "is-selected" : ""}`}
+                  key={workspace.path}
+                  onClick={() => void activateWorkspace(workspace.path)}
+                  title={workspace.path}
+                >
+                  <strong>{workspace.name}</strong>
+                  <span>{workspace.path}</span>
+                  <small>{countOnlineSessionsForWorkspace(sessions, workspace.path)} 在线</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="profile-panel panel">
+            <div className="panel-header">
             <h2>{UI_TEXT.sections.profiles}</h2>
             <button type="button" onClick={() => void createCustomProfile()}>
               {UI_TEXT.buttons.new}
@@ -572,7 +715,10 @@ export function App(): React.JSX.Element {
           <div className="profile-list">
             {profiles.map((profile) => {
               const onlineSessions = sessions.filter(
-                (session) => session.profileId === profile.id && session.status === "online",
+                (session) =>
+                  session.profileId === profile.id &&
+                  session.status === "online" &&
+                  filterSessionsForWorkspace([session], workspacePath).length > 0,
               );
               const isStarting = startingProfileIds.has(profile.id);
               return (
@@ -602,8 +748,9 @@ export function App(): React.JSX.Element {
               );
             })}
           </div>
+          </section>
 
-          <section className="editor-block">
+          <section className="editor-block panel">
             <div className="panel-header">
               <h2>{UI_TEXT.sections.profileEditor}</h2>
               <div className="button-row">
@@ -684,6 +831,11 @@ export function App(): React.JSX.Element {
                     {event.profileName ?? event.profileId ? <span>{event.profileName ?? event.profileId}</span> : null}
                   </div>
                   <p>{describeEvent(event)}</p>
+                  <div className="event-actions">
+                    <button type="button" onClick={() => prepareForwardFromEvent(event)}>
+                      转发
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -754,6 +906,9 @@ export function App(): React.JSX.Element {
               />
               <button type="button" onClick={() => void createForward()}>
                 {UI_TEXT.buttons.queue}
+              </button>
+              <button type="button" onClick={() => void createAndSendForward()}>
+                立即发送
               </button>
             </div>
             <div className="forward-list">
@@ -843,11 +998,21 @@ export function App(): React.JSX.Element {
           <section className="terminal-dock panel">
             <div className="panel-header">
               <h2>{UI_TEXT.sections.terminals}</h2>
-              {selectedSession ? (
-                <button type="button" onClick={() => void stopSession(selectedSession.sessionId)}>
-                  {UI_TEXT.buttons.stopSelected}
-                </button>
-              ) : null}
+              <div className="button-row">
+                {selectedSession ? (
+                  <>
+                    <button type="button" onClick={() => void publishSelectedOutput()} disabled={!selectedSessionPreview}>
+                      保存为结果
+                    </button>
+                    <button type="button" onClick={prepareForwardFromSelectedOutput} disabled={!selectedSessionPreview}>
+                      转发最近输出
+                    </button>
+                    <button type="button" onClick={() => void stopSession(selectedSession.sessionId)}>
+                      {UI_TEXT.buttons.stopSelected}
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
             <div className="session-tabs">
               {activeSessions.map((session) => (

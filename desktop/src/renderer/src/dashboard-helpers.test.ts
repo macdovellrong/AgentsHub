@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { StartPowerShellResponse } from "../../shared/ipc";
 import {
+  appendTerminalPreview,
   buildRoutedTerminalMessage,
   buildProfileSavePayload,
+  countOnlineSessionsForWorkspace,
+  filterSessionsForWorkspace,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
   pickSelectedSessionId,
@@ -118,6 +121,29 @@ describe("findOnlineSessionForTarget", () => {
 
     expect(findOnlineSessionForTarget("@codex build this", sessions, profiles, "C:/work")?.sessionId).toBe("right-workspace");
     expect(findOnlineSessionForProfile("codex", sessions, "C:/missing")).toBeNull();
+  });
+});
+
+describe("workspace session helpers", () => {
+  it("filters sessions to the active workspace", () => {
+    const sessions = [
+      baseSession,
+      { ...baseSession, sessionId: "other", workspacePath: "C:/other" },
+      { ...baseSession, sessionId: "exited", status: "exited" as const },
+    ];
+
+    expect(filterSessionsForWorkspace(sessions, "C:/work").map((session) => session.sessionId)).toEqual(["session-1"]);
+    expect(countOnlineSessionsForWorkspace(sessions, "C:/work")).toBe(1);
+  });
+});
+
+describe("appendTerminalPreview", () => {
+  it("strips ANSI control sequences and normalizes carriage returns", () => {
+    expect(appendTerminalPreview("", "\u001b[32mDone\u001b[0m\r\nNext\r")).toBe("Done\nNext\n");
+  });
+
+  it("keeps only the most recent preview text", () => {
+    expect(appendTerminalPreview("abcdef", "ghij", 5)).toBe("fghij");
   });
 });
 

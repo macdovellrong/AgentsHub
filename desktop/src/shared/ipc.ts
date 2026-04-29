@@ -1,5 +1,7 @@
 export const IpcChannels = {
   WorkspaceDefault: "workspace:getDefault",
+  WorkspacesList: "workspaces:list",
+  WorkspaceActivate: "workspace:activate",
   WorkspaceSelect: "workspace:select",
   StartPowerShell: "agent:startPowerShell",
   ProfilesList: "profiles:list",
@@ -110,6 +112,17 @@ export type RouteInputResponse = {
 
 export type WorkspaceRequest = {
   workspacePath?: string;
+};
+
+export type WorkspaceActivateRequest = {
+  workspacePath: string;
+};
+
+export type WorkspaceDto = {
+  path: string;
+  name: string;
+  lastOpenedAt: string;
+  isActive: boolean;
 };
 
 export type CreateProfileRequest = Omit<AgentProfileDto, "id"> & { id?: string };

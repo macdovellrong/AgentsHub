@@ -26,6 +26,8 @@ import type {
   TerminalResizeRequest,
   UpdateProfileRequest,
   UpdateTaskRequest,
+  WorkspaceActivateRequest,
+  WorkspaceDto,
   WorkspaceLockStatusResponse,
   WorkspaceRequest,
 } from "../../shared/ipc";
@@ -34,6 +36,8 @@ declare global {
   interface Window {
     agenthub: {
       getDefaultWorkspace(): Promise<string>;
+      listWorkspaces(): Promise<WorkspaceDto[]>;
+      activateWorkspace(request: WorkspaceActivateRequest): Promise<string>;
       selectWorkspace(request?: WorkspaceRequest): Promise<string>;
       startPowerShell(request: StartPowerShellRequest): Promise<StartPowerShellResponse>;
       listProfiles(): Promise<AgentProfileDto[]>;

@@ -86,6 +86,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 export const EVENT_TYPE_LABELS: Record<string, string> = {
   user_message: "用户消息",
+  agent_output: "Agent 结果",
   session_started: "会话启动",
   session_exited: "会话退出",
   task_created: "任务创建",

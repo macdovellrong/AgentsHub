@@ -17,6 +17,7 @@ import {
   type StartPowerShellRequest,
   type UpdateProfileRequest,
   type UpdateTaskRequest,
+  type WorkspaceActivateRequest,
   type WorkspaceRequest,
 } from "../shared/ipc";
 import { EventStore } from "./event-store";
@@ -41,6 +42,7 @@ import { shouldDisableElectronSandbox } from "./electron-sandbox";
 import { getAllowedDevRendererUrl } from "./renderer-url";
 import { selectWorkspacePath } from "./workspace-dialog";
 import { getDefaultWorkspacePath, resolveWorkspacePath } from "./workspace-path";
+import { WorkspaceStore } from "./workspace-store";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +54,7 @@ const manager = new PtySessionManager({ logStore: new RunLogStore(), eventStore,
 const forwardService = new ForwardService(new ForwardStore(), eventStore, manager);
 const orchestration = new OrchestrationService(taskStore, eventStore, manager);
 let activeWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
+let workspaceStore: WorkspaceStore | null = null;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -129,6 +132,16 @@ function getProfileStore(): ProfileStore {
   return new ProfileStore({ configPath: path.join(app.getPath("userData"), "profiles.json") });
 }
 
+function getWorkspaceStore(): WorkspaceStore {
+  workspaceStore ??= new WorkspaceStore({ configPath: path.join(app.getPath("userData"), "workspaces.json") });
+  return workspaceStore;
+}
+
+async function initializeWorkspaces(): Promise<void> {
+  const state = await getWorkspaceStore().initialize(activeWorkspacePath);
+  activeWorkspacePath = state.activeWorkspacePath;
+}
+
 function resolveRequestWorkspace(workspacePath?: string): string {
   return resolveWorkspacePath(workspacePath, activeWorkspacePath);
 }
@@ -158,15 +171,26 @@ function toSessionResponse(session: PtySession): {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IpcChannels.WorkspaceDefault, () => activeWorkspacePath);
+  ipcMain.handle(IpcChannels.WorkspaceDefault, async () => {
+    await initializeWorkspaces();
+    return activeWorkspacePath;
+  });
+
+  ipcMain.handle(IpcChannels.WorkspacesList, async () => {
+    await initializeWorkspaces();
+    return getWorkspaceStore().list(activeWorkspacePath);
+  });
+
+  ipcMain.handle(IpcChannels.WorkspaceActivate, async (_event, request: WorkspaceActivateRequest) => {
+    const state = await getWorkspaceStore().activate(resolveWorkspacePath(request.workspacePath, activeWorkspacePath));
+    activeWorkspacePath = state.activeWorkspacePath;
+    return activeWorkspacePath;
+  });
 
   ipcMain.handle(IpcChannels.WorkspaceSelect, async (_event, request: WorkspaceRequest = {}) => {
-    const decision = writeLocks.canChangeWorkspace();
-    if (!decision.ok) {
-      throw new Error(decision.reason);
-    }
+    await initializeWorkspaces();
     const currentWorkspacePath = resolveRequestWorkspace(request.workspacePath);
-    activeWorkspacePath = await selectWorkspacePath(currentWorkspacePath, async (defaultPath) => {
+    const selectedWorkspacePath = await selectWorkspacePath(currentWorkspacePath, async (defaultPath) => {
       const options: OpenDialogOptions = {
         title: "Open Workspace",
         defaultPath,
@@ -174,6 +198,8 @@ function registerIpcHandlers(): void {
       };
       return mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options);
     });
+    const state = await getWorkspaceStore().activate(selectedWorkspacePath);
+    activeWorkspacePath = state.activeWorkspacePath;
     return activeWorkspacePath;
   });
 

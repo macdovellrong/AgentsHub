@@ -68,6 +68,20 @@ export function isSessionInWorkspace(session: StartPowerShellResponse, workspace
   return normalizeWorkspacePath(session.workspacePath) === targetWorkspace;
 }
 
+export function filterSessionsForWorkspace(
+  sessions: StartPowerShellResponse[],
+  workspacePath: string | undefined,
+): StartPowerShellResponse[] {
+  return sessions.filter((session) => session.status === "online" && isSessionInWorkspace(session, workspacePath));
+}
+
+export function countOnlineSessionsForWorkspace(
+  sessions: StartPowerShellResponse[],
+  workspacePath: string | undefined,
+): number {
+  return filterSessionsForWorkspace(sessions, workspacePath).length;
+}
+
 export function findOnlineSessionForProfile(
   profileId: string,
   sessions: StartPowerShellResponse[],
@@ -128,4 +142,13 @@ export function pickSelectedSessionId(
   }
 
   return sessions[0]?.sessionId ?? null;
+}
+
+export function appendTerminalPreview(current: string, chunk: string, maxLength = 4000): string {
+  const withoutAnsi = chunk
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+  const normalized = withoutAnsi.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const combined = `${current}${normalized}`;
+  return combined.length > maxLength ? combined.slice(combined.length - maxLength) : combined;
 }

@@ -26,6 +26,8 @@ import {
   type TerminalResizeRequest,
   type UpdateProfileRequest,
   type UpdateTaskRequest,
+  type WorkspaceActivateRequest,
+  type WorkspaceDto,
   type WorkspaceLockStatusResponse,
   type WorkspaceRequest,
 } from "../shared/ipc";
@@ -33,6 +35,14 @@ import {
 const agenthub = {
   getDefaultWorkspace(): Promise<string> {
     return ipcRenderer.invoke(IpcChannels.WorkspaceDefault) as Promise<string>;
+  },
+
+  listWorkspaces(): Promise<WorkspaceDto[]> {
+    return ipcRenderer.invoke(IpcChannels.WorkspacesList) as Promise<WorkspaceDto[]>;
+  },
+
+  activateWorkspace(request: WorkspaceActivateRequest): Promise<string> {
+    return ipcRenderer.invoke(IpcChannels.WorkspaceActivate, request) as Promise<string>;
   },
 
   selectWorkspace(request: WorkspaceRequest = {}): Promise<string> {
