@@ -3,6 +3,7 @@ import type { StartPowerShellResponse } from "../../shared/ipc";
 import {
   appendTerminalPreview,
   applyMentionSelection,
+  buildQuotedForwardMessage,
   buildRoutedTerminalMessage,
   buildProfileSavePayload,
   countOnlineSessionsForWorkspace,
@@ -219,6 +220,21 @@ describe("buildRoutedTerminalMessage", () => {
 
   it("leaves routed messages unchanged when the profile has no role prompt", () => {
     expect(buildRoutedTerminalMessage(undefined, "dir")).toBe("dir");
+  });
+});
+
+describe("buildQuotedForwardMessage", () => {
+  it("combines an instruction with the quoted message", () => {
+    expect(
+      buildQuotedForwardMessage(
+        { sender: "Claude", message: "Use a log drawer instead of a permanent panel." },
+        "Implement this.",
+      ),
+    ).toBe("Implement this.\n\n引用 Claude 的消息：\nUse a log drawer instead of a permanent panel.");
+  });
+
+  it("forwards the quoted message directly when no instruction is provided", () => {
+    expect(buildQuotedForwardMessage({ sender: "Codex", message: "Done." }, "")).toBe("Done.");
   });
 });
 

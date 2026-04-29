@@ -15,6 +15,11 @@ export type MentionQuery = {
   query: string;
 };
 
+export type QuotedForwardMessage = {
+  sender: string;
+  message: string;
+};
+
 export function splitListInput(value: string): string[] {
   return value
     .split(/\s+/)
@@ -190,4 +195,13 @@ export function applyMentionSelection(
     text: nextText,
     cursor: mention.start + replacement.length + (needsTrailingSpace ? 0 : 1),
   };
+}
+
+export function buildQuotedForwardMessage(quoted: QuotedForwardMessage, instruction: string): string {
+  const trimmedInstruction = instruction.trim();
+  const trimmedMessage = quoted.message.trim();
+  if (!trimmedInstruction) {
+    return trimmedMessage;
+  }
+  return `${trimmedInstruction}\n\n引用 ${quoted.sender} 的消息：\n${trimmedMessage}`;
 }

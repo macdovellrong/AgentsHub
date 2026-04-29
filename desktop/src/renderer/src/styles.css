@@ -240,11 +240,11 @@ label {
 }
 
 .center-stack {
-  grid-template-rows: minmax(230px, 1fr) auto minmax(170px, 0.55fr) minmax(230px, 0.85fr);
+  grid-template-rows: minmax(300px, 1fr) auto minmax(230px, 0.85fr);
 }
 
 .right-stack {
-  grid-template-rows: minmax(330px, 1.05fr) minmax(260px, 0.95fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .workspace-list,
@@ -475,6 +475,35 @@ label {
 
 .composer-row {
   position: relative;
+}
+
+.quote-preview {
+  align-items: center;
+  background: #111820;
+  border: 1px solid #344253;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 8px;
+  padding: 8px;
+}
+
+.quote-preview strong {
+  color: #dce5ef;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.quote-preview p {
+  color: #9ca7b6;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  max-height: 48px;
+  overflow: hidden;
+  white-space: pre-wrap;
 }
 
 .input-row input {
@@ -727,4 +756,33 @@ label {
 
 .empty-state {
   padding: 10px;
+}
+
+.drawer-backdrop {
+  background: rgb(0 0 0 / 42%);
+  inset: 0;
+  position: fixed;
+  z-index: 20;
+}
+
+.log-drawer {
+  bottom: 12px;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 42%);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: min(720px, calc(100vw - 24px));
+}
+
+.log-drawer-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(280px, 0.58fr);
+  min-height: 0;
+}
+
+.log-drawer .run-list,
+.log-drawer .raw-log {
+  min-height: 0;
 }
