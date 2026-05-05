@@ -32,13 +32,10 @@ export class WorkspaceStore {
   async initialize(defaultWorkspacePath: string): Promise<{ activeWorkspacePath: string; workspaces: WorkspaceRecord[] }> {
     const config = await this.loadConfig();
     const activeWorkspacePath = config.activeWorkspacePath?.trim() || defaultWorkspacePath;
-    const nextConfig = this.upsertWorkspace(
-      {
-        activeWorkspacePath,
-        workspaces: config.workspaces ?? [],
-      },
+    const nextConfig = this.activateWorkspace({
       activeWorkspacePath,
-    );
+      workspaces: config.workspaces ?? [],
+    });
     await this.saveConfig(nextConfig);
     return this.toState(nextConfig);
   }
@@ -53,13 +50,28 @@ export class WorkspaceStore {
 
   async activate(workspacePath: string): Promise<{ activeWorkspacePath: string; workspaces: WorkspaceRecord[] }> {
     const config = await this.loadConfig();
-    const nextConfig = this.upsertWorkspace(
-      {
-        activeWorkspacePath: workspacePath,
-        workspaces: config.workspaces ?? [],
-      },
-      workspacePath,
-    );
+    const nextConfig = this.activateWorkspace({
+      activeWorkspacePath: workspacePath,
+      workspaces: config.workspaces ?? [],
+    });
+    await this.saveConfig(nextConfig);
+    return this.toState(nextConfig);
+  }
+
+  async remove(
+    workspacePath: string,
+    activeWorkspacePath: string,
+  ): Promise<{ activeWorkspacePath: string; workspaces: WorkspaceRecord[] }> {
+    const normalizedPath = this.normalizePath(workspacePath);
+    if (normalizedPath === this.normalizePath(activeWorkspacePath)) {
+      throw new Error("Cannot remove the active workspace");
+    }
+
+    const config = await this.loadConfig();
+    const nextConfig: Required<WorkspaceConfig> = {
+      activeWorkspacePath,
+      workspaces: (config.workspaces ?? []).filter((workspace) => this.normalizePath(workspace.path) !== normalizedPath),
+    };
     await this.saveConfig(nextConfig);
     return this.toState(nextConfig);
   }
@@ -79,6 +91,14 @@ export class WorkspaceStore {
       activeWorkspacePath: workspacePath,
       workspaces,
     };
+  }
+
+  private activateWorkspace(config: Required<WorkspaceConfig>): Required<WorkspaceConfig> {
+    const normalizedPath = this.normalizePath(config.activeWorkspacePath);
+    if (config.workspaces.some((workspace) => this.normalizePath(workspace.path) === normalizedPath)) {
+      return config;
+    }
+    return this.upsertWorkspace(config, config.activeWorkspacePath);
   }
 
   private toState(config: Required<WorkspaceConfig>): { activeWorkspacePath: string; workspaces: WorkspaceRecord[] } {
@@ -102,6 +122,9 @@ export class WorkspaceStore {
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return {};
+      }
+      if (error instanceof SyntaxError) {
         return {};
       }
       throw error;

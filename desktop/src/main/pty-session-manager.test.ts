@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -121,7 +121,7 @@ class CapturingLogStore extends RunLogStore {
 
 let workspacePath: string | undefined;
 
-function waitForCondition(condition: () => boolean): Promise<void> {
+function waitForCondition(condition: () => boolean, timeoutMs = 1000): Promise<void> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
     const timer = setInterval(() => {
@@ -130,7 +130,7 @@ function waitForCondition(condition: () => boolean): Promise<void> {
         resolve();
         return;
       }
-      if (Date.now() - startedAt > 1000) {
+      if (Date.now() - startedAt > timeoutMs) {
         clearInterval(timer);
         reject(new Error("Timed out waiting for condition"));
       }
@@ -154,6 +154,23 @@ describe("PtySessionManager", () => {
     const resolved = resolveProfileCommand("agent", {
       PATH: workspacePath,
       PATHEXT: ".CMD",
+    });
+
+    expect(resolved.toLowerCase()).toBe(commandPath.toLowerCase());
+  });
+
+  it("resolves user-level CLI installs when PATH does not include them", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const userBin = path.join(workspacePath, ".local", "bin");
+    const commandPath = path.join(userBin, process.platform === "win32" ? "claude.exe" : "claude");
+    await mkdir(userBin, { recursive: true });
+    await writeFile(commandPath, "", "utf8");
+
+    const resolved = resolveProfileCommand("claude", {
+      PATH: "",
+      PATHEXT: ".EXE",
+      USERPROFILE: workspacePath,
+      HOME: workspacePath,
     });
 
     expect(resolved.toLowerCase()).toBe(commandPath.toLowerCase());
@@ -200,6 +217,10 @@ describe("PtySessionManager", () => {
     const manager = new PtySessionManager({
       ptyFactory: factory,
       logStore: new RunLogStore(),
+      hookConfig: {
+        url: "http://127.0.0.1:38765/api/agent-result",
+        token: "test-token",
+      },
     });
 
     const session = await manager.startProfile(
@@ -224,6 +245,13 @@ describe("PtySessionManager", () => {
     expect(factory.args).toEqual(["--model", "gpt-5"]);
     expect(factory.options?.cwd).toBe(workspacePath);
     expect(factory.options?.env.CODEX_HOME).toBe("C:/codex");
+    expect(factory.options?.env.AGENTHUB_HOOK_URL).toBe("http://127.0.0.1:38765/api/agent-result");
+    expect(factory.options?.env.AGENTHUB_HOOK_TOKEN).toBe("test-token");
+    expect(factory.options?.env.AGENTHUB_PROFILE_ID).toBe("codex");
+    expect(factory.options?.env.AGENTHUB_SESSION_ID).toBe(session.sessionId);
+    expect(factory.options?.env.AGENTHUB_RUN_ID).toBe(session.runId);
+    expect(factory.options?.env.AGENTHUB_WORKSPACE).toBe(workspacePath);
+    expect(factory.options?.env.AGENTHUB_TEAM_ID).toBe("default");
     expect(session).toMatchObject({
       profileId: "codex",
       profileName: "Codex",
@@ -396,12 +424,102 @@ describe("PtySessionManager", () => {
       rows: 24,
     });
 
-    manager.write(session.sessionId, "dir\r");
+    manager.write(session.sessionId, "dir");
     manager.resize(session.sessionId, 120, 40);
     manager.stop(session.sessionId);
 
-    expect(factory.pty.writes).toEqual(["dir\r"]);
+    expect(factory.pty.writes).toEqual(["dir"]);
     expect(factory.pty.resizes).toEqual([[120, 40]]);
     expect(factory.pty.killed).toBe(true);
+  });
+
+  it("submits batched terminal input by writing text and enter separately", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    manager.write(session.sessionId, "ask Claude\r\n");
+
+    expect(factory.pty.writes).toEqual(["ask Claude"]);
+    await waitForCondition(() => factory.pty.writes.length === 2);
+    expect(factory.pty.writes).toEqual(["ask Claude", "\r"]);
+  });
+
+  it("submits multiline agent input as bracketed paste before pressing enter", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+
+    const session = await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      80,
+      24,
+    );
+
+    manager.write(session.sessionId, "line 1\nline 2\r\n");
+
+    expect(factory.pty.writes).toEqual(["\x1b[200~line 1\nline 2\x1b[201~"]);
+    await waitForCondition(() => factory.pty.writes.length === 2);
+    expect(factory.pty.writes).toEqual(["\x1b[200~line 1\nline 2\x1b[201~", "\r"]);
+  });
+
+  it("sends a settled retry enter for long multiline Codex input", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+
+    const session = await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      80,
+      24,
+    );
+
+    manager.write(session.sessionId, "review this proposal\nwith several lines\nand submit it\r\n");
+
+    await waitForCondition(() => factory.pty.writes.length === 3, 2000);
+    expect(factory.pty.writes).toEqual([
+      "\x1b[200~review this proposal\nwith several lines\nand submit it\x1b[201~",
+      "\r",
+      "\r",
+    ]);
   });
 });

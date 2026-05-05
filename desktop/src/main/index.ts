@@ -1,29 +1,48 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, type OpenDialogOptions } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   IpcChannels,
+  isConversationActionRequest,
+  isCreateTaskPlanRequest,
+  isStartManagerConversationRequest,
+  isStartPairNegotiationConversationRequest,
+  isStartRoundtableConversationRequest,
+  isTaskPlanActionRequest,
+  isWorkspaceRequest,
   type AppendEventRequest,
+  type ClipboardWriteTextRequest,
+  type ConversationActionRequest,
   type CreateForwardRequest,
   type CreateProfileRequest,
   type CreateTaskRequest,
+  type CreateTaskPlanRequest,
   type DuplicateProfileRequest,
   type ForwardActionRequest,
   type ReadRunRawLogRequest,
   type RouteInputRequest,
+  type StartManagerConversationRequest,
   type StartOrchestrationRequest,
+  type StartPairNegotiationConversationRequest,
   type StartProfileRequest,
   type StartPowerShellRequest,
+  type StartRoundtableConversationRequest,
+  type TaskPlanActionRequest,
   type UpdateProfileRequest,
   type UpdateTaskRequest,
   type WorkspaceActivateRequest,
+  type WorkspaceDeleteRequest,
+  type WorkspaceOpenFolderRequest,
   type WorkspaceRequest,
 } from "../shared/ipc";
 import { EventStore } from "./event-store";
 import { hideDefaultApplicationMenu } from "./application-menu";
+import { ConversationOrchestrator } from "./conversation-orchestrator";
+import { ConversationStore } from "./conversation-store";
 import { ForwardService } from "./forward-service";
 import { ForwardStore } from "./forward-store";
+import { AgentResultHookReceiver } from "./hook-receiver";
 import { RunLogStore } from "./log-store";
 import { OrchestrationService } from "./orchestration";
 import { ProfileStore } from "./profile-store";
@@ -36,23 +55,54 @@ import {
 } from "./pty-session-manager";
 import { parseRoutedInput } from "./routing";
 import { RunHistoryStore } from "./run-history";
+import { observeHookEvent, TaskPlanService } from "./task-plan-service";
+import { TaskPlanStore } from "./task-plan-store";
 import { TaskStore } from "./task-store";
+import { TeamCommandService } from "./team-command-service";
+import { TeamStore } from "./team-store";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
 import { shouldDisableElectronSandbox } from "./electron-sandbox";
 import { getAllowedDevRendererUrl } from "./renderer-url";
 import { selectWorkspacePath } from "./workspace-dialog";
 import { getDefaultWorkspacePath, resolveWorkspacePath } from "./workspace-path";
 import { WorkspaceStore } from "./workspace-store";
+import { openWorkspaceFolderPath } from "./workspace-folder";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const eventStore = new EventStore();
+const eventStore = new EventStore({
+  onAppend: (workspacePath, event) => sendToRenderer(IpcChannels.EventAppended, { workspacePath, event }),
+});
+const conversationStore = new ConversationStore();
 const taskStore = new TaskStore();
+const taskPlanStore = new TaskPlanStore();
+const teamStore = new TeamStore();
 const runHistoryStore = new RunHistoryStore();
 const writeLocks = new WorkspaceWriteLockService();
-const manager = new PtySessionManager({ logStore: new RunLogStore(), eventStore, writeLocks });
+let conversationOrchestrator: ConversationOrchestrator | null = null;
+let teamCommandService: TeamCommandService | null = null;
+let taskPlanService: TaskPlanService | null = null;
+const hookReceiver = new AgentResultHookReceiver({
+  eventStore,
+  onEventAppended: (workspacePath, event) => {
+    void observeHookEvent(workspacePath, event, [
+      ["task-plan", () => taskPlanService?.handleAgentOutput(workspacePath, event)],
+      ["team", () => teamCommandService?.handleAgentOutput(workspacePath, event)],
+      ["conversation", () => conversationOrchestrator?.handleAgentOutput(workspacePath, event)],
+    ]);
+  },
+});
+const manager = new PtySessionManager({
+  logStore: new RunLogStore(),
+  eventStore,
+  writeLocks,
+  hookConfig: hookReceiver.getClientEnvironment(),
+});
 const forwardService = new ForwardService(new ForwardStore(), eventStore, manager);
 const orchestration = new OrchestrationService(taskStore, eventStore, manager);
+taskPlanService = new TaskPlanService(taskPlanStore, eventStore, manager);
+conversationOrchestrator = new ConversationOrchestrator(conversationStore, eventStore, manager);
+teamCommandService = new TeamCommandService(teamStore, taskStore, eventStore, manager);
 let activeWorkspacePath = getDefaultWorkspacePath(process.cwd(), process.env.AGENTHUB_WORKSPACE);
 let workspaceStore: WorkspaceStore | null = null;
 
@@ -187,6 +237,18 @@ function registerIpcHandlers(): void {
     return activeWorkspacePath;
   });
 
+  ipcMain.handle(IpcChannels.WorkspaceDelete, async (_event, request: WorkspaceDeleteRequest) => {
+    await initializeWorkspaces();
+    await getWorkspaceStore().remove(resolveWorkspacePath(request.workspacePath, activeWorkspacePath), activeWorkspacePath);
+    return getWorkspaceStore().list(activeWorkspacePath);
+  });
+
+  ipcMain.handle(IpcChannels.WorkspaceOpenFolder, async (_event, request: WorkspaceOpenFolderRequest) => {
+    await openWorkspaceFolderPath(resolveWorkspacePath(request.workspacePath, activeWorkspacePath), (workspacePath) =>
+      shell.openPath(workspacePath),
+    );
+  });
+
   ipcMain.handle(IpcChannels.WorkspaceSelect, async (_event, request: WorkspaceRequest = {}) => {
     await initializeWorkspaces();
     const currentWorkspacePath = resolveRequestWorkspace(request.workspacePath);
@@ -298,6 +360,64 @@ function registerIpcHandlers(): void {
     return updated;
   });
 
+  ipcMain.handle(IpcChannels.TaskPlansList, (_event, request: unknown) => {
+    if (!isWorkspaceRequest(request)) {
+      throw new Error("Invalid workspace request");
+    }
+    if (!taskPlanService) {
+      throw new Error("Task plan service is not available");
+    }
+    const normalizedRequest = request ?? {};
+    return taskPlanService.listPlans(resolveRequestWorkspace(normalizedRequest.workspacePath));
+  });
+
+  ipcMain.handle(IpcChannels.TaskPlanSourcesList, (_event, request: unknown) => {
+    if (!isWorkspaceRequest(request)) {
+      throw new Error("Invalid workspace request");
+    }
+    const normalizedRequest = request ?? {};
+    return taskPlanStore.listSourceTasks(resolveRequestWorkspace(normalizedRequest.workspacePath));
+  });
+
+  ipcMain.handle(IpcChannels.TaskPlansCreate, (_event, request: CreateTaskPlanRequest) => {
+    if (!isCreateTaskPlanRequest(request)) {
+      throw new Error("Invalid task plan create request");
+    }
+    if (!taskPlanService) {
+      throw new Error("Task plan service is not available");
+    }
+    const { workspacePath, ...input } = request;
+    return taskPlanService.createPlan(resolveRequestWorkspace(workspacePath), input);
+  });
+
+  ipcMain.handle(IpcChannels.TaskPlansStartManager, (_event, request: TaskPlanActionRequest) => {
+    if (!isTaskPlanActionRequest(request)) {
+      throw new Error("Invalid task plan action request");
+    }
+    if (!taskPlanService) {
+      throw new Error("Task plan service is not available");
+    }
+    return taskPlanService.startManager(resolveRequestWorkspace(request.workspacePath), { planId: request.planId });
+  });
+
+  ipcMain.handle(IpcChannels.TaskPlansReadMarkdown, (_event, request: TaskPlanActionRequest) => {
+    if (!isTaskPlanActionRequest(request)) {
+      throw new Error("Invalid task plan action request");
+    }
+    return taskPlanStore.readMarkdown(resolveRequestWorkspace(request.workspacePath), request.planId);
+  });
+
+  ipcMain.handle(IpcChannels.TaskPlansOpenFolder, async (_event, request: TaskPlanActionRequest) => {
+    if (!isTaskPlanActionRequest(request)) {
+      throw new Error("Invalid task plan action request");
+    }
+    const plan = await taskPlanStore.getPlan(resolveRequestWorkspace(request.workspacePath), request.planId);
+    const error = await shell.openPath(plan.planPath);
+    if (error) {
+      throw new Error(`Failed to open task plan folder: ${error}`);
+    }
+  });
+
   ipcMain.handle(IpcChannels.OrchestrationStart, async (_event, request: StartOrchestrationRequest) => {
     const profiles = await getProfileStore().list();
     const rolePrompts = Object.fromEntries(profiles.map((profile) => [profile.id, profile.rolePrompt]));
@@ -332,6 +452,110 @@ function registerIpcHandlers(): void {
     forwardService.send(resolveRequestWorkspace(request.workspacePath), request.forwardId),
   );
 
+  ipcMain.handle(IpcChannels.ClipboardReadText, () => clipboard.readText());
+
+  ipcMain.handle(IpcChannels.ClipboardWriteText, (_event, request: ClipboardWriteTextRequest) => {
+    if (typeof request.text !== "string") {
+      throw new Error("Invalid clipboard write request");
+    }
+    clipboard.writeText(request.text);
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsList, (_event, request: WorkspaceRequest = {}) =>
+    conversationStore.list(resolveRequestWorkspace(request.workspacePath)),
+  );
+
+  ipcMain.handle(IpcChannels.ConversationsStartManager, async (_event, request: StartManagerConversationRequest) => {
+    if (!isStartManagerConversationRequest(request)) {
+      throw new Error("Invalid manager conversation request");
+    }
+    if (!conversationOrchestrator) {
+      throw new Error("Conversation orchestrator is not available");
+    }
+    return conversationOrchestrator.startManager({
+      workspacePath: resolveRequestWorkspace(request.workspacePath),
+      topic: request.topic,
+      supervisorProfileId: request.supervisorProfileId,
+      participantProfileIds: request.participantProfileIds,
+      maxSteps: request.maxSteps,
+    });
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsStartRoundtable, async (_event, request: StartRoundtableConversationRequest) => {
+    if (!isStartRoundtableConversationRequest(request)) {
+      throw new Error("Invalid roundtable conversation request");
+    }
+    if (!conversationOrchestrator) {
+      throw new Error("Conversation orchestrator is not available");
+    }
+    return conversationOrchestrator.startRoundtable({
+      workspacePath: resolveRequestWorkspace(request.workspacePath),
+      participantProfileIds: request.participantProfileIds,
+      topic: request.topic,
+      maxRounds: request.maxRounds,
+    });
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsStartPairNegotiation, async (_event, request: StartPairNegotiationConversationRequest) => {
+    if (!isStartPairNegotiationConversationRequest(request)) {
+      throw new Error("Invalid pair negotiation conversation request");
+    }
+    if (!conversationOrchestrator) {
+      throw new Error("Conversation orchestrator is not available");
+    }
+    return conversationOrchestrator.startPairNegotiation({
+      workspacePath: resolveRequestWorkspace(request.workspacePath),
+      participantProfileIds: request.participantProfileIds,
+      topic: request.topic,
+      maxRounds: request.maxRounds,
+    });
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsPause, async (_event, request: ConversationActionRequest) => {
+    if (!isConversationActionRequest(request)) {
+      throw new Error("Invalid conversation action request");
+    }
+    const workspacePath = resolveRequestWorkspace(request.workspacePath);
+    const conversation = await conversationStore.update(workspacePath, request.conversationId, { status: "paused" });
+    await eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      conversationId: conversation.id,
+      status: "paused",
+      message: `会话已暂停：${conversation.topic}`,
+    });
+    return conversation;
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsResume, async (_event, request: ConversationActionRequest) => {
+    if (!isConversationActionRequest(request)) {
+      throw new Error("Invalid conversation action request");
+    }
+    const workspacePath = resolveRequestWorkspace(request.workspacePath);
+    const conversation = await conversationStore.update(workspacePath, request.conversationId, { status: "running" });
+    await eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      conversationId: conversation.id,
+      status: "running",
+      message: `会话已继续：${conversation.topic}`,
+    });
+    return conversation;
+  });
+
+  ipcMain.handle(IpcChannels.ConversationsStop, async (_event, request: ConversationActionRequest) => {
+    if (!isConversationActionRequest(request)) {
+      throw new Error("Invalid conversation action request");
+    }
+    const workspacePath = resolveRequestWorkspace(request.workspacePath);
+    const conversation = await conversationStore.update(workspacePath, request.conversationId, { status: "stopped" });
+    await eventStore.append(workspacePath, {
+      type: "orchestration_step",
+      conversationId: conversation.id,
+      status: "stopped",
+      message: `会话已停止：${conversation.topic}`,
+    });
+    return conversation;
+  });
+
   ipcMain.handle(IpcChannels.WorkspaceLockStatus, () => {
     const decision = writeLocks.canChangeWorkspace();
     return decision.ok ? { ok: true } : { ok: false, reason: decision.reason };
@@ -362,7 +586,14 @@ manager.on("error", (event: PtyErrorEvent) => {
   sendToRenderer(IpcChannels.SessionError, event);
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    const hookInfo = await hookReceiver.start();
+    console.log(`[agenthub:hook] listening on ${hookInfo.url}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[agenthub:hook] failed to start: ${message}`);
+  }
   registerIpcHandlers();
   createWindow();
 });
@@ -377,4 +608,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  void hookReceiver.stop();
 });

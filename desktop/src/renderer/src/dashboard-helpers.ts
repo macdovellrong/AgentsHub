@@ -1,4 +1,13 @@
-import type { AgentProfileDto, CreateProfileRequest, StartPowerShellResponse } from "../../shared/ipc";
+import type {
+  AgentConversationDto,
+  AgentHubEventDto,
+  AgentProfileDto,
+  ConversationMode,
+  ConversationStatus,
+  CreateProfileRequest,
+  StartPowerShellResponse,
+} from "../../shared/ipc";
+import { UI_TEXT } from "./ui-text";
 
 export type ProfileEditorFields = {
   name: string;
@@ -19,6 +28,33 @@ export type QuotedForwardMessage = {
   sender: string;
   message: string;
 };
+
+const CONVERSATION_EVENT_TYPES = new Set<AgentHubEventDto["type"]>([
+  "user_message",
+  "agent_output",
+  "task_created",
+  "task_updated",
+  "orchestration_step",
+  "error",
+]);
+
+const ACTIVE_CONVERSATION_STATUSES = new Set<ConversationStatus>(["running", "paused"]);
+
+const CONVERSATION_MODE_LABELS: Record<ConversationMode, string> = {
+  pair_negotiation: "协商",
+  manager: "管理",
+  roundtable: "讨论",
+};
+
+const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
+  running: "运行中",
+  paused: "已暂停",
+  completed: "已完成",
+  failed: "失败",
+  stopped: "已停止",
+};
+
+const AGENTHUB_COMMAND_PATTERN = /<agenthub>([\s\S]*?)<\/agenthub>/i;
 
 export function splitListInput(value: string): string[] {
   return value
@@ -135,6 +171,44 @@ export function buildRoutedTerminalMessage(profile: AgentProfileDto | undefined,
   return message;
 }
 
+export function buildTerminalSubmitInput(profile: AgentProfileDto | undefined, message: string): string {
+  const routedMessage = buildRoutedTerminalMessage(profile, message);
+  if (routedMessage.endsWith("\r\n")) {
+    return routedMessage;
+  }
+  if (routedMessage.endsWith("\r") || routedMessage.endsWith("\n")) {
+    return `${routedMessage.replace(/[\r\n]+$/g, "")}\r\n`;
+  }
+  return `${routedMessage}\r\n`;
+}
+
+export function buildTaskPlanGenerationPrompt(taskDescription: string): string {
+  const task = taskDescription.trim();
+  return [
+    "你是 AgentHub 的任务计划生成器。",
+    "",
+    "请根据用户需求，在当前工作区创建一个新的任务目录：",
+    "",
+    "tasks/YYYYMMDD-HHmm-短标题/",
+    "",
+    "并在该目录下创建：",
+    "",
+    "task-plan.md",
+    "",
+    "要求：",
+    "1. 目录名使用当前日期时间和简短英文 slug。",
+    "2. task-plan.md 必须是可执行的任务计划，不是讨论稿。",
+    "3. 任务计划要包含背景、目标、非目标、任务拆解、验收标准、风险点。",
+    "4. 每个子任务要有明确编号，例如 T001、T002。",
+    "5. 不要修改 .agenthub/ 目录。",
+    "6. 不要直接开始实现，先只生成 task-plan.md。",
+    "7. 如果需求不清楚，先在聊天中提出需要用户确认的问题。",
+    "",
+    "用户需求：",
+    task,
+  ].join("\n");
+}
+
 export function pickSelectedSessionId(
   currentSessionId: string | null,
   sessions: StartPowerShellResponse[],
@@ -153,6 +227,95 @@ export function appendTerminalPreview(current: string, chunk: string, maxLength 
   const normalized = withoutAnsi.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const combined = `${current}${normalized}`;
   return combined.length > maxLength ? combined.slice(combined.length - maxLength) : combined;
+}
+
+export function filterConversationEvents(events: AgentHubEventDto[]): AgentHubEventDto[] {
+  return events.filter((event) => CONVERSATION_EVENT_TYPES.has(event.type));
+}
+
+function extractAgenthubCommandFromMessage(message: string | undefined): Record<string, unknown> | null {
+  if (!message) {
+    return null;
+  }
+
+  const match = AGENTHUB_COMMAND_PATTERN.exec(message);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(match[1] ?? "");
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function describeArtifactCommand(event: AgentHubEventDto, command: Record<string, unknown>): string | null {
+  const artifactPath = command.artifact_path;
+  if (typeof artifactPath !== "string") {
+    return null;
+  }
+
+  const summary = command.summary;
+  const profileLabel = event.profileName ?? event.profileId ?? "Agent";
+  return typeof summary === "string" && summary.length > 0
+    ? `${profileLabel} 已写入 ${artifactPath}：${summary}`
+    : `${profileLabel} 已写入 ${artifactPath}`;
+}
+
+export function describeConversationEvent(event: AgentHubEventDto): string {
+  const agenthubCommand = event.metadata?.agenthubCommand;
+  if (typeof agenthubCommand === "object" && agenthubCommand !== null) {
+    const description = describeArtifactCommand(event, agenthubCommand as Record<string, unknown>);
+    if (description) {
+      return description;
+    }
+  }
+
+  const messageCommand = extractAgenthubCommandFromMessage(event.message);
+  if (messageCommand) {
+    const description = describeArtifactCommand(event, messageCommand);
+    if (description) {
+      return description;
+    }
+  }
+
+  if (event.message) {
+    return event.message;
+  }
+  if (event.error) {
+    return event.error;
+  }
+  if (event.type === "session_started") {
+    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.started}`;
+  }
+  if (event.type === "session_exited") {
+    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.exited}`;
+  }
+  return event.type.replace(/_/g, " ");
+}
+
+export function formatConversationStatusLabel(status: ConversationStatus): string {
+  return CONVERSATION_STATUS_LABELS[status];
+}
+
+export function formatConversationModeLabel(mode: ConversationMode): string {
+  return CONVERSATION_MODE_LABELS[mode];
+}
+
+export function formatParticipantLabel(conversation: Pick<AgentConversationDto, "supervisorProfileId" | "participantProfileIds">): string {
+  const participantText = conversation.participantProfileIds.join(", ");
+  if (!conversation.supervisorProfileId) {
+    return participantText;
+  }
+  return participantText ? `${conversation.supervisorProfileId} -> ${participantText}` : conversation.supervisorProfileId;
+}
+
+export function filterActiveConversations(conversations: AgentConversationDto[]): AgentConversationDto[] {
+  return [...conversations]
+    .filter((conversation) => ACTIVE_CONVERSATION_STATUSES.has(conversation.status))
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
 export function findMentionQuery(text: string, cursor: number): MentionQuery | null {

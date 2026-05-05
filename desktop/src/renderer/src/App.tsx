@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type {
+  AgentConversationDto,
   AgentHubEventDto,
   AgentProfileDto,
-  AgentTaskDto,
+  ConversationStatus,
   RunHistoryDto,
   SessionStatus,
   StartPowerShellResponse,
-  TaskStatus,
+  TaskPlanDto,
+  TaskPlanSourceDto,
+  TaskPlanStatus,
   WorkspaceDto,
 } from "../../shared/ipc";
 import {
@@ -14,10 +17,17 @@ import {
   applyMentionSelection,
   buildQuotedForwardMessage,
   buildProfileSavePayload,
-  buildRoutedTerminalMessage,
+  buildTaskPlanGenerationPrompt,
+  buildTerminalSubmitInput,
   countOnlineSessionsForWorkspace,
+  describeConversationEvent,
+  filterActiveConversations,
+  filterConversationEvents,
   filterSessionsForWorkspace,
   findMentionQuery,
+  formatConversationModeLabel,
+  formatConversationStatusLabel,
+  formatParticipantLabel,
   getMentionCandidates,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
@@ -30,7 +40,6 @@ import {
 import { TerminalPane } from "./components/TerminalPane";
 import { UI_TEXT, formatEventTypeLabel, formatStatusLabel } from "./ui-text";
 
-const TASK_STATUSES: TaskStatus[] = ["pending", "running", "review", "done", "failed"];
 const RUN_STATUSES: Array<RunHistoryDto["status"] | "all"> = ["all", "running", "exited"];
 
 const emptyEditorFields: ProfileEditorFields = {
@@ -50,24 +59,8 @@ function formatTime(value: string): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function statusClass(status: SessionStatus | RunHistoryDto["status"] | TaskStatus): string {
+function statusClass(status: SessionStatus | RunHistoryDto["status"] | TaskPlanStatus | ConversationStatus): string {
   return `status-${status}`;
-}
-
-function describeEvent(event: AgentHubEventDto): string {
-  if (event.message) {
-    return event.message;
-  }
-  if (event.error) {
-    return event.error;
-  }
-  if (event.type === "session_started") {
-    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.started}`;
-  }
-  if (event.type === "session_exited") {
-    return `${event.profileName ?? event.profileId ?? "Session"} ${UI_TEXT.summaries.exited}`;
-  }
-  return event.type.replace(/_/g, " ");
 }
 
 function chatMessageClass(event: AgentHubEventDto): string {
@@ -97,6 +90,14 @@ type QuotedChatMessage = QuotedForwardMessage & {
   sourceProfileId: string | null;
 };
 
+type WorkspaceContextMenuState = {
+  workspacePath: string;
+  x: number;
+  y: number;
+};
+
+type MainTab = "conversation" | `terminal:${string}`;
+
 export function App(): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const eventListRef = useRef<HTMLDivElement | null>(null);
@@ -105,8 +106,10 @@ export function App(): React.JSX.Element {
   const [profiles, setProfiles] = useState<AgentProfileDto[]>([]);
   const [sessions, setSessions] = useState<StartPowerShellResponse[]>([]);
   const [events, setEvents] = useState<AgentHubEventDto[]>([]);
+  const [conversations, setConversations] = useState<AgentConversationDto[]>([]);
   const [runs, setRuns] = useState<RunHistoryDto[]>([]);
-  const [tasks, setTasks] = useState<AgentTaskDto[]>([]);
+  const [taskPlans, setTaskPlans] = useState<TaskPlanDto[]>([]);
+  const [taskPlanSources, setTaskPlanSources] = useState<TaskPlanSourceDto[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [editorFields, setEditorFields] = useState<ProfileEditorFields>(emptyEditorFields);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -119,18 +122,36 @@ export function App(): React.JSX.Element {
   const [runStatusFilter, setRunStatusFilter] = useState<(typeof RUN_STATUSES)[number]>("all");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [rawLog, setRawLog] = useState("");
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDescription, setNewTaskDescription] = useState("");
-  const [orchestrationGoal, setOrchestrationGoal] = useState("");
+  const [selectedTaskPlanId, setSelectedTaskPlanId] = useState<string | null>(null);
+  const [taskPlanMarkdown, setTaskPlanMarkdown] = useState("");
+  const [newTaskPlanTitle, setNewTaskPlanTitle] = useState("");
+  const [selectedTaskPlanSourceDirectory, setSelectedTaskPlanSourceDirectory] = useState("");
   const [terminalPreviews, setTerminalPreviews] = useState<Record<string, string>>({});
   const [quotedMessage, setQuotedMessage] = useState<QuotedChatMessage | null>(null);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+  const [workspaceContextMenu, setWorkspaceContextMenu] = useState<WorkspaceContextMenuState | null>(null);
+  const [mainTab, setMainTab] = useState<MainTab>("conversation");
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null,
     [profiles, selectedProfileId],
   );
   const activeSessions = useMemo(() => filterSessionsForWorkspace(sessions, workspacePath), [sessions, workspacePath]);
+  const selectedProfileOnlineCount = useMemo(
+    () => activeSessions.filter((session) => session.profileId === selectedProfile?.id && session.status === "online").length,
+    [activeSessions, selectedProfile?.id],
+  );
+  const conversationEvents = useMemo(() => filterConversationEvents(events), [events]);
+  const activeConversations = useMemo(() => filterActiveConversations(conversations), [conversations]);
+  const selectedTaskPlan = useMemo(
+    () => taskPlans.find((plan) => plan.id === selectedTaskPlanId) ?? null,
+    [selectedTaskPlanId, taskPlans],
+  );
+  const selectedTaskPlanSource = useMemo(
+    () => taskPlanSources.find((source) => source.directoryName === selectedTaskPlanSourceDirectory) ?? null,
+    [selectedTaskPlanSourceDirectory, taskPlanSources],
+  );
   const selectedSession = activeSessions.find((session) => session.sessionId === selectedSessionId) ?? null;
   const selectedSessionPreview = selectedSession ? (terminalPreviews[selectedSession.sessionId] ?? "").trim() : "";
   const filteredRuns = runs.filter((run) => {
@@ -141,6 +162,10 @@ export function App(): React.JSX.Element {
   const mentionCandidates = useMemo(
     () => (mentionQuery ? getMentionCandidates(mentionQuery.query, profiles).slice(0, 8) : []),
     [mentionQuery, profiles],
+  );
+  const contextMenuWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.path === workspaceContextMenu?.workspacePath) ?? null,
+    [workspaceContextMenu?.workspacePath, workspaces],
   );
 
   const refreshMentionQuery = useCallback((text: string, cursor: number | null) => {
@@ -171,14 +196,24 @@ export function App(): React.JSX.Element {
 
   const refreshWorkspaceData = useCallback(async (workspace = workspacePath) => {
     const request = workspace ? { workspacePath: workspace } : {};
-    const [nextEvents, nextRuns, nextTasks] = await Promise.all([
+    const [nextEvents, nextConversations, nextRuns, nextTaskPlans, nextTaskPlanSources] = await Promise.all([
       window.agenthub.listEvents(request),
+      window.agenthub.listConversations(request),
       window.agenthub.listRuns(request),
-      window.agenthub.listTasks(request),
+      window.agenthub.listTaskPlans(request),
+      window.agenthub.listTaskPlanSources(request),
     ]);
     setEvents(nextEvents);
+    setConversations(nextConversations);
     setRuns(nextRuns);
-    setTasks(nextTasks);
+    setTaskPlans(nextTaskPlans);
+    setTaskPlanSources(nextTaskPlanSources);
+    setSelectedTaskPlanSourceDirectory((current) => {
+      if (current && nextTaskPlanSources.some((source) => source.directoryName === current)) {
+        return current;
+      }
+      return nextTaskPlanSources[0]?.directoryName ?? "";
+    });
   }, [workspacePath]);
 
   const refreshAll = useCallback(async () => {
@@ -192,6 +227,10 @@ export function App(): React.JSX.Element {
       setWorkspacePath(nextWorkspace);
       setSelectedRunId(null);
       setRawLog("");
+      setSelectedTaskPlanId(null);
+      setTaskPlanMarkdown("");
+      setSelectedTaskPlanSourceDirectory("");
+      setMainTab("conversation");
       await Promise.all([refreshWorkspaceData(nextWorkspace), refreshWorkspaces()]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -201,7 +240,7 @@ export function App(): React.JSX.Element {
   const activateWorkspace = useCallback(
     async (nextWorkspacePath: string) => {
       if (nextWorkspacePath === workspacePath) {
-        return;
+        return true;
       }
       setError(null);
       try {
@@ -209,14 +248,119 @@ export function App(): React.JSX.Element {
         setWorkspacePath(nextWorkspace);
         setSelectedRunId(null);
         setRawLog("");
+        setSelectedTaskPlanId(null);
+        setTaskPlanMarkdown("");
+        setSelectedTaskPlanSourceDirectory("");
+        setMainTab("conversation");
         setSelectedSessionId((current) => pickSelectedSessionId(current, filterSessionsForWorkspace(sessions, nextWorkspace)));
         await Promise.all([refreshWorkspaceData(nextWorkspace), refreshWorkspaces()]);
+        return true;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
+        return false;
       }
     },
     [refreshWorkspaceData, refreshWorkspaces, sessions, workspacePath],
   );
+
+  const refreshWorkspaceCard = useCallback(
+    async (nextWorkspacePath: string) => {
+      if (nextWorkspacePath !== workspacePath) {
+        await activateWorkspace(nextWorkspacePath);
+        return;
+      }
+      setError(null);
+      try {
+        await refreshAll();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [activateWorkspace, refreshAll, workspacePath],
+  );
+
+  const openWorkspaceLogs = useCallback(
+    async (nextWorkspacePath: string) => {
+      const activated = await activateWorkspace(nextWorkspacePath);
+      if (activated) {
+        setIsLogDrawerOpen(true);
+      }
+    },
+    [activateWorkspace],
+  );
+
+  const closeWorkspaceContextMenu = useCallback(() => {
+    setWorkspaceContextMenu(null);
+  }, []);
+
+  const openWorkspaceContextMenu = useCallback((event: MouseEvent<HTMLElement>, targetWorkspacePath: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 190;
+    setWorkspaceContextMenu({
+      workspacePath: targetWorkspacePath,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+    });
+  }, []);
+
+  const openWorkspaceFolder = useCallback(
+    async (targetWorkspacePath: string) => {
+      closeWorkspaceContextMenu();
+      setError(null);
+      try {
+        await window.agenthub.openWorkspaceFolder({ workspacePath: targetWorkspacePath });
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [closeWorkspaceContextMenu],
+  );
+
+  const deleteWorkspace = useCallback(
+    async (targetWorkspacePath: string) => {
+      closeWorkspaceContextMenu();
+      if (targetWorkspacePath === workspacePath) {
+        setError("当前工作区正在使用，先切换到其他工作区后再删除。");
+        return;
+      }
+      const confirmed = window.confirm("仅从 AgentHub 工作区列表移除，不会删除磁盘上的文件夹。确定删除吗？");
+      if (!confirmed) {
+        return;
+      }
+      setError(null);
+      try {
+        const nextWorkspaces = await window.agenthub.deleteWorkspace({ workspacePath: targetWorkspacePath });
+        setWorkspaces(nextWorkspaces);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [closeWorkspaceContextMenu, workspacePath],
+  );
+
+  useEffect(() => {
+    if (!workspaceContextMenu) {
+      return undefined;
+    }
+    const hide = () => closeWorkspaceContextMenu();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeWorkspaceContextMenu();
+      }
+    };
+    window.addEventListener("click", hide);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", hide);
+    window.addEventListener("blur", hide);
+    return () => {
+      window.removeEventListener("click", hide);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", hide);
+      window.removeEventListener("blur", hide);
+    };
+  }, [closeWorkspaceContextMenu, workspaceContextMenu]);
 
   useEffect(() => {
     let isMounted = true;
@@ -251,11 +395,32 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    return window.agenthub.onEventAppended((notification) => {
+      if (notification.workspacePath !== workspacePath) {
+        return;
+      }
+      setEvents((current) => {
+        if (current.some((event) => event.id === notification.event.id)) {
+          return current;
+        }
+        return [...current, notification.event];
+      });
+      const request = { workspacePath: workspacePath || undefined };
+      void Promise.all([window.agenthub.listConversations(request), window.agenthub.listTaskPlans(request)])
+        .then(([nextConversations, nextTaskPlans]) => {
+          setConversations(nextConversations);
+          setTaskPlans(nextTaskPlans);
+        })
+        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+    });
+  }, [workspacePath]);
+
+  useEffect(() => {
     const list = eventListRef.current;
     if (list) {
       list.scrollTop = list.scrollHeight;
     }
-  }, [events]);
+  }, [conversationEvents]);
 
   useEffect(() => {
     setSelectedMentionIndex((current) => Math.min(current, Math.max(mentionCandidates.length - 1, 0)));
@@ -274,6 +439,41 @@ export function App(): React.JSX.Element {
   }, [activeSessions]);
 
   useEffect(() => {
+    if (selectedTaskPlanId && !taskPlans.some((plan) => plan.id === selectedTaskPlanId)) {
+      setSelectedTaskPlanId(null);
+      setTaskPlanMarkdown("");
+    }
+  }, [selectedTaskPlanId, taskPlans]);
+
+  useEffect(() => {
+    if (!selectedTaskPlanSourceDirectory && taskPlanSources[0]) {
+      setSelectedTaskPlanSourceDirectory(taskPlanSources[0].directoryName);
+    }
+    if (
+      selectedTaskPlanSourceDirectory &&
+      !taskPlanSources.some((source) => source.directoryName === selectedTaskPlanSourceDirectory)
+    ) {
+      setSelectedTaskPlanSourceDirectory(taskPlanSources[0]?.directoryName ?? "");
+    }
+  }, [selectedTaskPlanSourceDirectory, taskPlanSources]);
+
+  useEffect(() => {
+    if (selectedTaskPlanSource) {
+      setNewTaskPlanTitle((current) => (current.trim() ? current : selectedTaskPlanSource.title));
+    }
+  }, [selectedTaskPlanSource]);
+
+  useEffect(() => {
+    setMainTab((current) => {
+      if (current === "conversation") {
+        return current;
+      }
+      const sessionId = current.replace(/^terminal:/, "");
+      return activeSessions.some((session) => session.sessionId === sessionId) ? current : "conversation";
+    });
+  }, [activeSessions]);
+
+  useEffect(() => {
     return window.agenthub.onSessionExit((event) => {
       setSessions((current) =>
         current.map((session) =>
@@ -283,6 +483,7 @@ export function App(): React.JSX.Element {
       setSelectedSessionId((current) =>
         current === event.sessionId ? pickSelectedSessionId(null, activeSessions.filter((s) => s.sessionId !== event.sessionId)) : current,
       );
+      setMainTab((current) => (current === `terminal:${event.sessionId}` ? "conversation" : current));
       void Promise.all([refreshWorkspaceData(), refreshWorkspaces()]);
     });
   }, [activeSessions, refreshWorkspaceData, refreshWorkspaces]);
@@ -315,6 +516,7 @@ export function App(): React.JSX.Element {
         setWorkspacePath(session.workspacePath);
         setSessions((current) => [session, ...current.filter((item) => item.sessionId !== session.sessionId)]);
         setSelectedSessionId(session.sessionId);
+        setMainTab(`terminal:${session.sessionId}`);
         await Promise.all([refreshWorkspaceData(session.workspacePath), refreshWorkspaces()]);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -337,6 +539,7 @@ export function App(): React.JSX.Element {
         setSessions((current) =>
           current.map((session) => (session.sessionId === sessionId ? { ...session, status: "exited" as const } : session)),
         );
+        setMainTab((current) => (current === `terminal:${sessionId}` ? "conversation" : current));
         await Promise.all([refreshWorkspaceData(), refreshWorkspaces()]);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -349,6 +552,26 @@ export function App(): React.JSX.Element {
     void window.agenthub.terminalResize({ sessionId, cols, rows });
   }, []);
 
+  const openProfileEditor = useCallback(
+    (profileId: string) => {
+      setSelectedProfileId(profileId);
+      const profile = profiles.find((candidate) => candidate.id === profileId);
+      if (profile) {
+        setEditorFields(profileToFields(profile));
+      }
+      setIsLogDrawerOpen(false);
+      setIsProfileEditorOpen(true);
+    },
+    [profiles],
+  );
+
+  const closeProfileEditor = useCallback(() => {
+    if (selectedProfile) {
+      setEditorFields(profileToFields(selectedProfile));
+    }
+    setIsProfileEditorOpen(false);
+  }, [selectedProfile]);
+
   const saveSelectedProfile = useCallback(async () => {
     if (!selectedProfile) {
       return;
@@ -358,6 +581,7 @@ export function App(): React.JSX.Element {
       const patch = buildProfileSavePayload(selectedProfile, editorFields);
       const updated = await window.agenthub.updateProfile({ id: selectedProfile.id, patch });
       setProfiles((current) => current.map((profile) => (profile.id === updated.id ? updated : profile)));
+      setIsProfileEditorOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -379,6 +603,8 @@ export function App(): React.JSX.Element {
       });
       setProfiles((current) => [...current, created]);
       setSelectedProfileId(created.id);
+      setEditorFields(profileToFields(created));
+      setIsProfileEditorOpen(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -393,6 +619,8 @@ export function App(): React.JSX.Element {
       const duplicate = await window.agenthub.duplicateProfile({ id: selectedProfile.id });
       setProfiles((current) => [...current, duplicate]);
       setSelectedProfileId(duplicate.id);
+      setEditorFields(profileToFields(duplicate));
+      setIsProfileEditorOpen(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -407,6 +635,7 @@ export function App(): React.JSX.Element {
       await window.agenthub.deleteProfile(selectedProfile.id);
       setProfiles((current) => current.filter((profile) => profile.id !== selectedProfile.id));
       setSelectedProfileId((current) => (current === selectedProfile.id ? null : current));
+      setIsProfileEditorOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -425,8 +654,8 @@ export function App(): React.JSX.Element {
     [refreshWorkspaceData, workspacePath],
   );
 
-  const routeMessage = useCallback(async () => {
-    const text = inputText.trim();
+  const sendRoutedText = useCallback(async (rawText: string, options: { asTaskPlanPrompt?: boolean } = {}) => {
+    const text = rawText.trim();
     if (!text) {
       return;
     }
@@ -454,12 +683,16 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      if (quotedMessage) {
+      const outboundMessage = options.asTaskPlanPrompt
+        ? buildTaskPlanGenerationPrompt(routed.message)
+        : routed.message;
+
+      if (quotedMessage && !options.asTaskPlanPrompt) {
         const created = await window.agenthub.createForward({
           workspacePath: workspacePath || undefined,
           sourceProfileId: quotedMessage.sourceProfileId,
           targetProfileId: routed.targetProfileId,
-          message: buildQuotedForwardMessage(quotedMessage, routed.message),
+          message: buildQuotedForwardMessage(quotedMessage, outboundMessage),
         });
         const sent = await window.agenthub.sendForward({
           workspacePath: workspacePath || undefined,
@@ -475,18 +708,29 @@ export function App(): React.JSX.Element {
 
       await window.agenthub.terminalInput({
         sessionId: targetSession.sessionId,
-        data: `${buildRoutedTerminalMessage(
+        data: buildTerminalSubmitInput(
           profiles.find((profile) => profile.id === targetSession.profileId),
-          routed.message,
-        )}\r`,
+          outboundMessage,
+        ),
       });
       setSelectedSessionId(targetSession.sessionId);
+      if (options.asTaskPlanPrompt) {
+        setQuotedMessage(null);
+      }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(message);
       await appendErrorEvent(message);
     }
-  }, [appendErrorEvent, inputText, profiles, quotedMessage, refreshWorkspaceData, sessions, workspacePath]);
+  }, [appendErrorEvent, profiles, quotedMessage, refreshWorkspaceData, sessions, workspacePath]);
+
+  const routeMessage = useCallback(async () => {
+    await sendRoutedText(inputText);
+  }, [inputText, sendRoutedText]);
+
+  const sendTaskPlanGenerationPrompt = useCallback(async () => {
+    await sendRoutedText(inputText, { asTaskPlanPrompt: true });
+  }, [inputText, sendRoutedText]);
 
   const selectMentionCandidate = useCallback(
     (profileId: string) => {
@@ -551,37 +795,174 @@ export function App(): React.JSX.Element {
     [workspacePath],
   );
 
-  const createTask = useCallback(async () => {
-    const title = newTaskTitle.trim();
-    if (!title) {
+  const loadTaskPlanMarkdown = useCallback(
+    async (planId: string) => {
+      setError(null);
+      try {
+        const markdown = await window.agenthub.readTaskPlanMarkdown({
+          workspacePath: workspacePath || undefined,
+          planId,
+        });
+        setSelectedTaskPlanId(planId);
+        setTaskPlanMarkdown(markdown);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    [workspacePath],
+  );
+
+  const createTaskPlan = useCallback(async () => {
+    const title = newTaskPlanTitle.trim();
+    const sourceTaskDirectoryName = selectedTaskPlanSourceDirectory.trim();
+    if (!title || !sourceTaskDirectoryName) {
+      return;
+    }
+    const managerProfileId = profiles.find((profile) => profile.kind === "claude")?.id ?? "claude";
+    const preferredParticipantProfileIds = profiles
+      .filter((profile) => (profile.kind === "codex" || profile.kind === "gemini") && profile.id !== managerProfileId)
+      .map((profile) => profile.id);
+    const fallbackParticipantProfileIds = profiles
+      .filter((profile) => profile.id !== managerProfileId)
+      .map((profile) => profile.id);
+    const participantProfileIds =
+      preferredParticipantProfileIds.length > 0 ? preferredParticipantProfileIds : fallbackParticipantProfileIds;
+    if (participantProfileIds.length === 0) {
+      setError("至少需要一个参与智能体。");
       return;
     }
     setError(null);
     try {
-      await window.agenthub.createTask({
+      const created = await window.agenthub.createTaskPlan({
         workspacePath: workspacePath || undefined,
         title,
-        description: newTaskDescription.trim(),
-        status: "pending",
-        profileId: selectedProfile?.id ?? null,
-        runId: selectedRunId,
+        sourceTaskDirectoryName,
+        managerProfileId,
+        participantProfileIds,
       });
-      setNewTaskTitle("");
-      setNewTaskDescription("");
+      const [nextTaskPlans, nextMarkdown] = await Promise.all([
+        window.agenthub.listTaskPlans({ workspacePath: workspacePath || undefined }),
+        window.agenthub.readTaskPlanMarkdown({ workspacePath: workspacePath || undefined, planId: created.id }),
+      ]);
+      setTaskPlans(nextTaskPlans);
+      setSelectedTaskPlanId(created.id);
+      setTaskPlanMarkdown(nextMarkdown);
+      setNewTaskPlanTitle("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [newTaskPlanTitle, profiles, selectedTaskPlanSourceDirectory, workspacePath]);
+
+  const startSelectedTaskPlanManager = useCallback(async () => {
+    if (!selectedTaskPlanId) {
+      return;
+    }
+    setError(null);
+    try {
+      const updated = await window.agenthub.startTaskPlanManager({
+        workspacePath: workspacePath || undefined,
+        planId: selectedTaskPlanId,
+      });
+      setTaskPlans((current) => current.map((plan) => (plan.id === updated.id ? updated : plan)));
       await refreshWorkspaceData();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [newTaskDescription, newTaskTitle, refreshWorkspaceData, selectedProfile, selectedRunId, workspacePath]);
+  }, [refreshWorkspaceData, selectedTaskPlanId, workspacePath]);
 
-  const updateTaskStatus = useCallback(
-    async (task: AgentTaskDto, status: TaskStatus) => {
+  const openSelectedTaskPlanFolder = useCallback(async () => {
+    if (!selectedTaskPlanId) {
+      return;
+    }
+    setError(null);
+    try {
+      await window.agenthub.openTaskPlanFolder({
+        workspacePath: workspacePath || undefined,
+        planId: selectedTaskPlanId,
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [selectedTaskPlanId, workspacePath]);
+
+  const startManagerConversation = useCallback(async () => {
+    const topic = inputText.trim();
+    if (!topic) {
+      return;
+    }
+    setError(null);
+    try {
+      await window.agenthub.startManagerConversation({
+        workspacePath: workspacePath || undefined,
+        topic,
+        supervisorProfileId: "claude",
+        participantProfileIds: ["codex", "gemini"],
+      });
+      setInputText("");
+      setMentionQuery(null);
+      setQuotedMessage(null);
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [inputText, refreshWorkspaceData, workspacePath]);
+
+  const startRoundtableConversation = useCallback(async () => {
+    const topic = inputText.trim();
+    if (!topic) {
+      return;
+    }
+    setError(null);
+    try {
+      await window.agenthub.startRoundtableConversation({
+        workspacePath: workspacePath || undefined,
+        topic,
+        participantProfileIds: ["claude", "codex", "gemini"],
+      });
+      setInputText("");
+      setMentionQuery(null);
+      setQuotedMessage(null);
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [inputText, refreshWorkspaceData, workspacePath]);
+
+  const startPairNegotiationConversation = useCallback(async () => {
+    const topic = inputText.trim();
+    if (!topic) {
+      return;
+    }
+    setError(null);
+    try {
+      const claudeProfileId = profiles.find((profile) => profile.kind === "claude")?.id ?? "claude";
+      const codexProfileId = profiles.find((profile) => profile.kind === "codex")?.id ?? "codex";
+      await window.agenthub.startPairNegotiationConversation({
+        workspacePath: workspacePath || undefined,
+        topic,
+        participantProfileIds: [claudeProfileId, codexProfileId],
+      });
+      setInputText("");
+      setMentionQuery(null);
+      setQuotedMessage(null);
+      await refreshWorkspaceData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [inputText, profiles, refreshWorkspaceData, workspacePath]);
+
+  const updateConversationStatus = useCallback(
+    async (conversationId: string, action: "pause" | "resume" | "stop") => {
+      setError(null);
       try {
-        await window.agenthub.updateTask({
-          workspacePath: workspacePath || undefined,
-          taskId: task.id,
-          patch: { status },
-        });
+        const request = { workspacePath: workspacePath || undefined, conversationId };
+        const updated =
+          action === "pause"
+            ? await window.agenthub.pauseConversation(request)
+            : action === "resume"
+              ? await window.agenthub.resumeConversation(request)
+              : await window.agenthub.stopConversation(request);
+        setConversations((current) => [updated, ...current.filter((conversation) => conversation.id !== updated.id)]);
         await refreshWorkspaceData();
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -590,33 +971,12 @@ export function App(): React.JSX.Element {
     [refreshWorkspaceData, workspacePath],
   );
 
-  const startOrchestration = useCallback(async () => {
-    const goal = orchestrationGoal.trim();
-    if (!goal) {
-      return;
-    }
-    setError(null);
-    try {
-      await window.agenthub.startOrchestration({
-        workspacePath: workspacePath || undefined,
-        goal,
-        plannerProfileId: profiles.find((profile) => profile.kind === "claude")?.id,
-        implementerProfileId: profiles.find((profile) => profile.kind === "codex")?.id,
-        reviewerProfileId: profiles.find((profile) => profile.kind === "gemini")?.id,
-      });
-      setOrchestrationGoal("");
-      await refreshWorkspaceData();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
-  }, [orchestrationGoal, profiles, refreshWorkspaceData, workspacePath]);
-
   const prepareForwardFromEvent = useCallback(
     (event: AgentHubEventDto) => {
       setQuotedMessage({
         sender: chatSenderLabel(event),
         sourceProfileId: event.profileId ?? event.targetProfileId ?? null,
-        message: describeEvent(event),
+        message: describeConversationEvent(event),
       });
       inputRef.current?.focus();
     },
@@ -658,27 +1018,6 @@ export function App(): React.JSX.Element {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div className="brand-block">
-          <h1>AgentHub</h1>
-          <p title={UI_TEXT.currentWorkspaceHint}>{workspacePath || UI_TEXT.loadingWorkspace}</p>
-        </div>
-        <div className="topbar-actions">
-          <button type="button" onClick={() => void openWorkspace()}>
-            {UI_TEXT.buttons.openWorkspace}
-          </button>
-          <button type="button" onClick={() => setIsLogDrawerOpen(true)}>
-            日志
-          </button>
-          <button type="button" onClick={() => void refreshAll()}>
-            {UI_TEXT.buttons.refresh}
-          </button>
-          <span className="summary-pill">
-            {activeSessions.length} {UI_TEXT.summaries.onlineSuffix}
-          </span>
-        </div>
-      </header>
-
       {error ? <section className="error-banner">{error}</section> : null}
 
       <section className="dashboard-grid">
@@ -687,153 +1026,191 @@ export function App(): React.JSX.Element {
             <div className="panel-header">
               <h2>工作区</h2>
               <button type="button" onClick={() => void openWorkspace()}>
-                添加
+                打开/添加
               </button>
             </div>
             <div className="workspace-list">
-              {workspaces.map((workspace) => (
+              {workspaces.map((workspace) => {
+                const isCurrentWorkspace = workspace.isActive || workspace.path === workspacePath;
+                const onlineCount = countOnlineSessionsForWorkspace(sessions, workspace.path);
+
+                return (
+                  <article
+                    className={`workspace-row ${isCurrentWorkspace ? "is-selected" : ""}`}
+                    key={workspace.path}
+                    role="button"
+                    tabIndex={0}
+                    title={workspace.path}
+                    onClick={() => void activateWorkspace(workspace.path)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void activateWorkspace(workspace.path);
+                      }
+                    }}
+                    onContextMenu={(event) => openWorkspaceContextMenu(event, workspace.path)}
+                  >
+                    <div className="workspace-main">
+                      <span className="workspace-title-line">
+                        <strong>{workspace.name}</strong>
+                        {isCurrentWorkspace ? <span className="workspace-current-pill">当前</span> : null}
+                      </span>
+                      <span className="workspace-path">{workspace.path}</span>
+                    </div>
+                    <div className="workspace-meta">
+                      <small>{onlineCount} 在线</small>
+                      <span>右键操作</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {workspaceContextMenu && contextMenuWorkspace ? (
+              <div
+                className="workspace-context-menu"
+                role="menu"
+                style={{ left: workspaceContextMenu.x, top: workspaceContextMenu.y }}
+                onClick={(event) => event.stopPropagation()}
+              >
                 <button
                   type="button"
-                  className={`workspace-row ${workspace.isActive || workspace.path === workspacePath ? "is-selected" : ""}`}
-                  key={workspace.path}
-                  onClick={() => void activateWorkspace(workspace.path)}
-                  title={workspace.path}
+                  role="menuitem"
+                  onClick={() => {
+                    closeWorkspaceContextMenu();
+                    void activateWorkspace(contextMenuWorkspace.path);
+                  }}
+                  disabled={contextMenuWorkspace.path === workspacePath}
                 >
-                  <strong>{workspace.name}</strong>
-                  <span>{workspace.path}</span>
-                  <small>{countOnlineSessionsForWorkspace(sessions, workspace.path)} 在线</small>
+                  切换到此工作区
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeWorkspaceContextMenu();
+                    void refreshWorkspaceCard(contextMenuWorkspace.path);
+                  }}
+                >
+                  刷新工作区数据
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeWorkspaceContextMenu();
+                    void openWorkspaceLogs(contextMenuWorkspace.path);
+                  }}
+                >
+                  查看运行日志
+                </button>
+                <button type="button" role="menuitem" onClick={() => void openWorkspaceFolder(contextMenuWorkspace.path)}>
+                  在资源管理器中打开
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void deleteWorkspace(contextMenuWorkspace.path)}
+                  disabled={contextMenuWorkspace.path === workspacePath}
+                >
+                  从列表移除
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="profile-panel panel">
             <div className="panel-header">
-            <h2>{UI_TEXT.sections.profiles}</h2>
-            <button type="button" onClick={() => void createCustomProfile()}>
-              {UI_TEXT.buttons.new}
-            </button>
-          </div>
-
-          <div className="profile-list">
-            {profiles.map((profile) => {
-              const onlineSessions = sessions.filter(
-                (session) =>
-                  session.profileId === profile.id &&
-                  session.status === "online" &&
-                  filterSessionsForWorkspace([session], workspacePath).length > 0,
-              );
-              const isStarting = startingProfileIds.has(profile.id);
-              return (
-                <article
-                  className={`profile-row ${selectedProfile?.id === profile.id ? "is-selected" : ""}`}
-                  key={profile.id}
-                  onClick={() => setSelectedProfileId(profile.id)}
-                >
-                  <div>
-                    <strong>{profile.name}</strong>
-                    <span>{profile.kind}</span>
-                  </div>
-                  <div className="profile-actions">
-                    <span className={`status-pill ${onlineSessions.length > 0 ? "status-online" : "status-exited"}`}>
-                      {formatStatusLabel(isStarting ? "starting" : onlineSessions.length > 0 ? "online" : "offline")}
-                    </span>
-                    <button type="button" onClick={() => void startProfile(profile.id)} disabled={isStarting}>
-                      {UI_TEXT.buttons.start}
-                    </button>
-                    {onlineSessions.map((session) => (
-                      <button type="button" key={session.sessionId} onClick={() => void stopSession(session.sessionId)}>
-                        {UI_TEXT.buttons.stop}
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          </section>
-
-          <section className="editor-block panel">
-            <div className="panel-header">
-              <h2>{UI_TEXT.sections.profileEditor}</h2>
-              <div className="button-row">
-                <button type="button" onClick={() => void duplicateSelectedProfile()} disabled={!selectedProfile}>
-                  {UI_TEXT.buttons.duplicate}
-                </button>
-                <button type="button" onClick={() => void deleteSelectedProfile()} disabled={!selectedProfile}>
-                  {UI_TEXT.buttons.delete}
-                </button>
-              </div>
+              <h2>{UI_TEXT.sections.profiles}</h2>
+              <button type="button" onClick={() => void createCustomProfile()}>
+                {UI_TEXT.buttons.new}
+              </button>
             </div>
-            <label>
-              {UI_TEXT.labels.name}
-              <input
-                value={editorFields.name}
-                onChange={(event) => setEditorFields((current) => ({ ...current, name: event.target.value }))}
-              />
-            </label>
-            <label>
-              {UI_TEXT.labels.command}
-              <input
-                value={editorFields.command}
-                onChange={(event) => setEditorFields((current) => ({ ...current, command: event.target.value }))}
-              />
-            </label>
-            <label>
-              {UI_TEXT.labels.args}
-              <textarea
-                rows={3}
-                value={editorFields.argsText}
-                onChange={(event) => setEditorFields((current) => ({ ...current, argsText: event.target.value }))}
-              />
-            </label>
-            <label>
-              {UI_TEXT.labels.aliases}
-              <input
-                value={editorFields.aliasesText}
-                onChange={(event) => setEditorFields((current) => ({ ...current, aliasesText: event.target.value }))}
-              />
-            </label>
-            <label>
-              {UI_TEXT.labels.rolePrompt}
-              <textarea
-                rows={5}
-                value={editorFields.rolePrompt}
-                onChange={(event) => setEditorFields((current) => ({ ...current, rolePrompt: event.target.value }))}
-              />
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={editorFields.useWorkspaceWriteLock}
-                onChange={(event) =>
-                  setEditorFields((current) => ({ ...current, useWorkspaceWriteLock: event.target.checked }))
-                }
-              />
-              {UI_TEXT.labels.workspaceWriteLock}
-            </label>
-            <button type="button" onClick={() => void saveSelectedProfile()} disabled={!selectedProfile}>
-              {UI_TEXT.buttons.saveProfile}
-            </button>
+
+            <div className="profile-list">
+              {profiles.map((profile) => {
+                const onlineSessions = sessions.filter(
+                  (session) =>
+                    session.profileId === profile.id &&
+                    session.status === "online" &&
+                    filterSessionsForWorkspace([session], workspacePath).length > 0,
+                );
+                const isStarting = startingProfileIds.has(profile.id);
+                return (
+                  <article
+                    className={`profile-row ${selectedProfile?.id === profile.id ? "is-selected" : ""}`}
+                    key={profile.id}
+                    onClick={() => setSelectedProfileId(profile.id)}
+                  >
+                    <div>
+                      <strong>{profile.name}</strong>
+                      <span>{profile.kind}</span>
+                    </div>
+                    <div className="profile-actions">
+                      <span className={`status-pill ${onlineSessions.length > 0 ? "status-online" : "status-exited"}`}>
+                        {formatStatusLabel(isStarting ? "starting" : onlineSessions.length > 0 ? "online" : "offline")}
+                      </span>
+                      <button type="button" onClick={() => void startProfile(profile.id)} disabled={isStarting}>
+                        {UI_TEXT.buttons.start}
+                      </button>
+                      <button type="button" onClick={() => openProfileEditor(profile.id)}>
+                        编辑
+                      </button>
+                      {onlineSessions.map((session) => (
+                        <button type="button" key={session.sessionId} onClick={() => void stopSession(session.sessionId)}>
+                          {UI_TEXT.buttons.stop}
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </section>
         </aside>
 
-        <section className="center-stack">
+        <section className="workspace-content">
+          <div className="workspace-main-tabs" role="tablist" aria-label="工作区视图">
+            <button
+              type="button"
+              role="tab"
+              className={mainTab === "conversation" ? "is-selected" : ""}
+              onClick={() => setMainTab("conversation")}
+            >
+              协作消息
+            </button>
+            {activeSessions.map((session) => (
+              <button
+                type="button"
+                role="tab"
+                className={mainTab === `terminal:${session.sessionId}` ? "is-selected" : ""}
+                key={session.sessionId}
+                onClick={() => {
+                  setSelectedSessionId(session.sessionId);
+                  setMainTab(`terminal:${session.sessionId}`);
+                }}
+              >
+                {session.profileName}
+              </button>
+            ))}
+          </div>
+          <div className="workspace-tab-stage">
+            <section className={`workspace-tab-pane collaboration-pane ${mainTab === "conversation" ? "is-visible" : ""}`}>
+              <section className="center-stack">
           <section className="timeline panel">
             <div className="panel-header">
               <h2>{UI_TEXT.sections.conversation}</h2>
-              <span>{events.length} 条事件</span>
+              <span>{conversationEvents.length} 条消息</span>
             </div>
             <div className="event-list chat-list" ref={eventListRef}>
-              {events.length === 0 ? <p className="empty-state">{UI_TEXT.empty.events}</p> : null}
-              {events.map((event) => (
+              {conversationEvents.length === 0 ? <p className="empty-state">{UI_TEXT.empty.events}</p> : null}
+              {conversationEvents.map((event) => (
                 <article className={`chat-message ${chatMessageClass(event)} event-${event.type}`} key={event.id}>
                   <div className="chat-bubble">
                     <div className="event-meta chat-meta">
                       <strong>{chatSenderLabel(event)}</strong>
                       <span>{formatTime(event.timestamp)}</span>
                     </div>
-                    <p>{describeEvent(event)}</p>
+                    <p>{describeConversationEvent(event)}</p>
                     <div className="event-actions">
                       <button type="button" onClick={() => prepareForwardFromEvent(event)}>
                         转发
@@ -897,23 +1274,135 @@ export function App(): React.JSX.Element {
               <button type="button" onClick={() => void routeMessage()}>
                 {UI_TEXT.buttons.send}
               </button>
+              <button type="button" onClick={() => void sendTaskPlanGenerationPrompt()} disabled={!inputText.trim()}>
+                {UI_TEXT.buttons.generateTaskPlan}
+              </button>
+              <button type="button" onClick={() => void startManagerConversation()} disabled={!inputText.trim()}>
+                交给 Claude 管理
+              </button>
+              <button type="button" onClick={() => void startRoundtableConversation()} disabled={!inputText.trim()}>
+                新建讨论
+              </button>
+              <button type="button" onClick={() => void startPairNegotiationConversation()} disabled={!inputText.trim()}>
+                双人协商
+              </button>
+            </div>
+            <div className="conversation-manager-list">
+              {activeConversations.length === 0 ? <p className="empty-state">暂无活跃会话</p> : null}
+              {activeConversations.map((conversation) => (
+                <article className="conversation-manager-card" key={conversation.id}>
+                  <div className="conversation-manager-main">
+                    <strong title={conversation.topic}>{conversation.topic}</strong>
+                    <span>
+                      {formatConversationModeLabel(conversation.mode)} · {formatParticipantLabel(conversation)}
+                    </span>
+                  </div>
+                  <div className="conversation-manager-meta">
+                    <span className={`status-pill ${statusClass(conversation.status)}`}>
+                      {formatConversationStatusLabel(conversation.status)}
+                    </span>
+                    <span className="conversation-step">
+                      {conversation.currentStep}/{conversation.maxSteps ?? "∞"}
+                    </span>
+                  </div>
+                  <div className="button-row conversation-manager-actions">
+                    <button
+                      type="button"
+                      onClick={() => void updateConversationStatus(conversation.id, "pause")}
+                      disabled={conversation.status !== "running"}
+                    >
+                      暂停
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void updateConversationStatus(conversation.id, "resume")}
+                      disabled={conversation.status !== "paused"}
+                    >
+                      继续
+                    </button>
+                    <button type="button" onClick={() => void updateConversationStatus(conversation.id, "stop")}>
+                      停止
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
 
-          <section className="orchestration panel">
+          <section className="task-plan-panel panel">
             <div className="panel-header">
-              <h2>{UI_TEXT.sections.orchestration}</h2>
-              <span>{UI_TEXT.labels.manualTrigger}</span>
+              <h2>{UI_TEXT.sections.taskPlans}</h2>
+              <span>{taskPlans.length} 个计划</span>
             </div>
-            <div className="input-row">
+            <div className="task-plan-create">
+              <select
+                value={selectedTaskPlanSourceDirectory}
+                onChange={(event) => {
+                  const source = taskPlanSources.find((candidate) => candidate.directoryName === event.target.value) ?? null;
+                  setSelectedTaskPlanSourceDirectory(event.target.value);
+                  setNewTaskPlanTitle(source?.title ?? "");
+                }}
+              >
+                {taskPlanSources.length === 0 ? <option value="">{UI_TEXT.empty.taskPlanSources}</option> : null}
+                {taskPlanSources.map((source) => (
+                  <option value={source.directoryName} key={source.directoryName}>
+                    {source.title}
+                  </option>
+                ))}
+              </select>
               <input
-                value={orchestrationGoal}
-                onChange={(event) => setOrchestrationGoal(event.target.value)}
-                placeholder={UI_TEXT.placeholders.orchestrationGoal}
+                value={newTaskPlanTitle}
+                onChange={(event) => setNewTaskPlanTitle(event.target.value)}
+                placeholder={UI_TEXT.placeholders.taskPlanTitle}
               />
-              <button type="button" onClick={() => void startOrchestration()}>
-                {UI_TEXT.buttons.start}
+              <span className="task-plan-source-hint">{UI_TEXT.hints.taskPlanSource}</span>
+              <button
+                type="button"
+                onClick={() => void createTaskPlan()}
+                disabled={!newTaskPlanTitle.trim() || !selectedTaskPlanSourceDirectory}
+              >
+                {UI_TEXT.buttons.createTaskPlan}
               </button>
+            </div>
+            <div className="task-plan-body">
+              <div className="task-plan-list">
+                {taskPlans.length === 0 ? <p className="empty-state">{UI_TEXT.empty.taskPlans}</p> : null}
+                {taskPlans.map((plan) => (
+                  <button
+                    type="button"
+                    className={`task-plan-row ${selectedTaskPlanId === plan.id ? "is-selected" : ""}`}
+                    key={plan.id}
+                    onClick={() => void loadTaskPlanMarkdown(plan.id)}
+                  >
+                    <strong>{plan.title}</strong>
+                    <span className={`status-pill ${statusClass(plan.status)}`}>{formatStatusLabel(plan.status)}</span>
+                    <small>{plan.date || plan.directoryName}</small>
+                  </button>
+                ))}
+              </div>
+              <div className="task-plan-detail">
+                {selectedTaskPlan ? (
+                  <>
+                    <div className="task-plan-detail-header">
+                      <div>
+                        <strong>{selectedTaskPlan.title}</strong>
+                        <span>{selectedTaskPlan.directoryName}</span>
+                      </div>
+                      <div className="button-row">
+                        <button type="button" onClick={() => void startSelectedTaskPlanManager()}>
+                          {UI_TEXT.buttons.startTaskPlanManager}
+                        </button>
+                        <button type="button" onClick={() => void openSelectedTaskPlanFolder()}>
+                          {UI_TEXT.buttons.openTaskPlanFolder}
+                        </button>
+                      </div>
+                    </div>
+                    <pre className="task-plan-markdown">{taskPlanMarkdown || UI_TEXT.empty.taskPlanMarkdown}</pre>
+                  </>
+                ) : (
+                  <p className="empty-state">{UI_TEXT.empty.taskPlanMarkdown}</p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -995,53 +1484,51 @@ export function App(): React.JSX.Element {
           </section>
 
           */}
-          <section className="tasks panel">
-            <div className="panel-header">
-              <h2>{UI_TEXT.sections.tasks}</h2>
-              <span>{tasks.length} 个任务</span>
-            </div>
-            <div className="task-create">
-              <input
-                value={newTaskTitle}
-                onChange={(event) => setNewTaskTitle(event.target.value)}
-                placeholder={UI_TEXT.placeholders.taskTitle}
-              />
-              <input
-                value={newTaskDescription}
-                onChange={(event) => setNewTaskDescription(event.target.value)}
-                placeholder={UI_TEXT.placeholders.taskDescription}
-              />
-              <button type="button" onClick={() => void createTask()}>
-                {UI_TEXT.buttons.create}
-              </button>
-            </div>
-            <div className="task-columns">
-              {TASK_STATUSES.map((status) => (
-                <section className="task-column" key={status}>
-                  <h3>{formatStatusLabel(status)}</h3>
-                  {tasks
-                    .filter((task) => task.status === status)
-                    .map((task) => (
-                      <article className="task-card" key={task.id}>
-                        <strong>{task.title}</strong>
-                        {task.description ? <p>{task.description}</p> : null}
-                        <select value={task.status} onChange={(event) => void updateTaskStatus(task, event.target.value as TaskStatus)}>
-                          {TASK_STATUSES.map((option) => (
-                            <option value={option} key={option}>
-                              {formatStatusLabel(option)}
-                            </option>
-                          ))}
-                        </select>
-                      </article>
-                    ))}
+            </section>
+            </section>
+            {activeSessions.map((session) => {
+              const isTerminalTabSelected = mainTab === `terminal:${session.sessionId}`;
+              return (
+                <section
+                  className={`workspace-tab-pane workspace-terminal-pane ${isTerminalTabSelected ? "is-visible" : ""}`}
+                  key={session.sessionId}
+                >
+                  <div className="panel-header workspace-terminal-header">
+                    <div>
+                      <h2>{session.profileName}</h2>
+                      <span>{session.profileId}</span>
+                    </div>
+                    <div className="button-row">
+                      {selectedSession?.sessionId === session.sessionId ? (
+                        <>
+                          <button type="button" onClick={() => void publishSelectedOutput()} disabled={!selectedSessionPreview}>
+                            保存为结果
+                          </button>
+                          <button type="button" onClick={prepareForwardFromSelectedOutput} disabled={!selectedSessionPreview}>
+                            转发最近输出
+                          </button>
+                          <button type="button" onClick={() => void stopSession(session.sessionId)}>
+                            {UI_TEXT.buttons.stopSelected}
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="terminal-host">
+                    <TerminalPane
+                      sessionId={session.sessionId}
+                      onResize={(cols, rows) => resizeTerminal(session.sessionId, cols, rows)}
+                    />
+                  </div>
                 </section>
-              ))}
-            </div>
-          </section>
+              );
+            })}
+          </div>
         </section>
 
-        <aside className="right-stack">
-          <section className="terminal-dock panel">
+        {false ? (
+          <aside className="legacy-terminal-stack">
+            <section className="legacy-terminal-dock panel">
             <div className="panel-header">
               <h2>{UI_TEXT.sections.terminals}</h2>
               <div className="button-row">
@@ -1053,7 +1540,7 @@ export function App(): React.JSX.Element {
                     <button type="button" onClick={prepareForwardFromSelectedOutput} disabled={!selectedSessionPreview}>
                       转发最近输出
                     </button>
-                    <button type="button" onClick={() => void stopSession(selectedSession.sessionId)}>
+                    <button type="button" onClick={() => (selectedSession ? void stopSession(selectedSession.sessionId) : undefined)}>
                       {UI_TEXT.buttons.stopSelected}
                     </button>
                   </>
@@ -1130,8 +1617,89 @@ export function App(): React.JSX.Element {
             <pre className="raw-log">{rawLog || UI_TEXT.empty.rawLog}</pre>
           </section>
           */}
-        </aside>
+          </aside>
+        ) : null}
       </section>
+      {isProfileEditorOpen ? (
+        <section className="drawer-backdrop" role="presentation">
+          <aside className="profile-drawer panel" aria-label={UI_TEXT.sections.profileEditor}>
+            <div className="panel-header">
+              <h2>{UI_TEXT.sections.profileEditor}</h2>
+              <div className="button-row">
+                <button type="button" onClick={() => void duplicateSelectedProfile()} disabled={!selectedProfile}>
+                  {UI_TEXT.buttons.duplicate}
+                </button>
+                <button type="button" onClick={() => void deleteSelectedProfile()} disabled={!selectedProfile}>
+                  {UI_TEXT.buttons.delete}
+                </button>
+                <button type="button" onClick={closeProfileEditor}>
+                  关闭
+                </button>
+              </div>
+            </div>
+            <div className="profile-drawer-body">
+              {selectedProfileOnlineCount > 0 ? (
+                <p className="profile-editor-note">当前 Agent 已启动，保存后对后续发送任务生效；启动命令类改动需要重启该 Agent。</p>
+              ) : null}
+              <label>
+                {UI_TEXT.labels.name}
+                <input
+                  value={editorFields.name}
+                  onChange={(event) => setEditorFields((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+              <label>
+                {UI_TEXT.labels.command}
+                <input
+                  value={editorFields.command}
+                  onChange={(event) => setEditorFields((current) => ({ ...current, command: event.target.value }))}
+                />
+              </label>
+              <label>
+                {UI_TEXT.labels.args}
+                <textarea
+                  rows={3}
+                  value={editorFields.argsText}
+                  onChange={(event) => setEditorFields((current) => ({ ...current, argsText: event.target.value }))}
+                />
+              </label>
+              <label>
+                {UI_TEXT.labels.aliases}
+                <input
+                  value={editorFields.aliasesText}
+                  onChange={(event) => setEditorFields((current) => ({ ...current, aliasesText: event.target.value }))}
+                />
+              </label>
+              <label>
+                {UI_TEXT.labels.rolePrompt}
+                <textarea
+                  rows={9}
+                  value={editorFields.rolePrompt}
+                  onChange={(event) => setEditorFields((current) => ({ ...current, rolePrompt: event.target.value }))}
+                />
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={editorFields.useWorkspaceWriteLock}
+                  onChange={(event) =>
+                    setEditorFields((current) => ({ ...current, useWorkspaceWriteLock: event.target.checked }))
+                  }
+                />
+                {UI_TEXT.labels.workspaceWriteLock}
+              </label>
+            </div>
+            <div className="profile-drawer-actions">
+              <button type="button" onClick={closeProfileEditor}>
+                取消
+              </button>
+              <button type="button" onClick={() => void saveSelectedProfile()} disabled={!selectedProfile}>
+                {UI_TEXT.buttons.saveProfile}
+              </button>
+            </div>
+          </aside>
+        </section>
+      ) : null}
       {isLogDrawerOpen ? (
         <section className="drawer-backdrop" role="presentation">
           <aside className="log-drawer panel" aria-label="运行日志">

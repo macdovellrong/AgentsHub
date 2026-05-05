@@ -50,7 +50,7 @@ describe("ForwardService", () => {
     expect(gateway.writes).toEqual([
       {
         sessionId: "session-1",
-        data: "Please implement task A.\r",
+        data: "Please implement task A.\r\n",
       },
     ]);
     await expect(eventStore.list(workspacePath)).resolves.toMatchObject([
@@ -77,6 +77,48 @@ describe("ForwardService", () => {
     await expect(eventStore.list(workspacePath)).resolves.toMatchObject([
       { type: "agent_forward", status: "pending", targetProfileId: "gemini" },
       { type: "agent_forward", status: "blocked", targetProfileId: "gemini" },
+    ]);
+  });
+
+  it("uses CRLF when sending a forward to Claude, Codex, and Gemini profiles", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-forward-service-"));
+    const gateway = new FakeGateway();
+    gateway.sessions = [
+      { sessionId: "session-1", profileId: "claude", workspacePath, status: "online" },
+      { sessionId: "session-2", profileId: "codex", workspacePath, status: "online" },
+      { sessionId: "session-3", profileId: "gemini-copy-1234abcd", workspacePath, status: "online" },
+    ];
+    const service = new ForwardService(new ForwardStore(), new EventStore(), gateway);
+    const claudeForward = await service.create(workspacePath, {
+      targetProfileId: "claude",
+      message: "Plan this change.",
+    });
+    const codexForward = await service.create(workspacePath, {
+      targetProfileId: "codex",
+      message: "Implement this change.",
+    });
+    const geminiForward = await service.create(workspacePath, {
+      targetProfileId: "gemini-copy-1234abcd",
+      message: "Review this change.",
+    });
+
+    await service.send(workspacePath, claudeForward.id);
+    await service.send(workspacePath, codexForward.id);
+    await service.send(workspacePath, geminiForward.id);
+
+    expect(gateway.writes).toEqual([
+      {
+        sessionId: "session-1",
+        data: "Plan this change.\r\n",
+      },
+      {
+        sessionId: "session-2",
+        data: "Implement this change.\r\n",
+      },
+      {
+        sessionId: "session-3",
+        data: "Review this change.\r\n",
+      },
     ]);
   });
 

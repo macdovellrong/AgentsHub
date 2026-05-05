@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -9,13 +9,20 @@ type TerminalPaneProps = {
   onResize(cols: number, rows: number): void;
 };
 
+type TerminalContextMenu = {
+  x: number;
+  y: number;
+  hasSelection: boolean;
+};
+
 export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.JSX.Element {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const terminalSurfaceRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const reportedSizeRef = useRef<TerminalSize | null>(null);
   const sessionIdRef = useRef(sessionId);
   const onResizeRef = useRef(onResize);
+  const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -26,10 +33,38 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     onResizeRef.current = onResize;
   }, [onResize]);
 
-  useEffect(() => {
-    const container = containerRef.current;
+  const copySelection = useCallback(async () => {
+    const selection = terminalRef.current?.getSelection() ?? "";
+    setContextMenu(null);
+    if (!selection) {
+      return;
+    }
+    await window.agenthub.writeClipboardText({ text: selection });
+    terminalRef.current?.focus();
+  }, []);
 
-    if (!container) {
+  const pasteClipboard = useCallback(async () => {
+    const currentSessionId = sessionIdRef.current;
+    setContextMenu(null);
+    if (!currentSessionId) {
+      return;
+    }
+    const text = await window.agenthub.readClipboardText();
+    if (!text) {
+      terminalRef.current?.focus();
+      return;
+    }
+    await window.agenthub.terminalInput({
+      sessionId: currentSessionId,
+      data: text,
+    });
+    terminalRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const terminalSurface = terminalSurfaceRef.current;
+
+    if (!terminalSurface) {
       return undefined;
     }
 
@@ -68,7 +103,7 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     terminal.loadAddon(fitAddon);
-    terminal.open(container);
+    terminal.open(terminalSurface);
     terminal.focus();
 
     const dataSubscription = terminal.onData((data) => {
@@ -101,7 +136,7 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     };
 
     const resizeObserver = new ResizeObserver(fitAndReport);
-    resizeObserver.observe(container);
+    resizeObserver.observe(terminalSurface);
     fitAndReport();
 
     return () => {
@@ -111,6 +146,18 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const hideContextMenu = () => setContextMenu(null);
+    window.addEventListener("click", hideContextMenu);
+    window.addEventListener("keydown", hideContextMenu);
+    window.addEventListener("resize", hideContextMenu);
+    return () => {
+      window.removeEventListener("click", hideContextMenu);
+      window.removeEventListener("keydown", hideContextMenu);
+      window.removeEventListener("resize", hideContextMenu);
     };
   }, []);
 
@@ -131,5 +178,36 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     );
   }, [sessionId]);
 
-  return <section className="terminal-pane" ref={containerRef} aria-label="Terminal" />;
+  return (
+    <section
+      className="terminal-pane"
+      aria-label="Terminal"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        const terminal = terminalRef.current;
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          hasSelection: Boolean(terminal?.hasSelection()),
+        });
+      }}
+    >
+      <div className="terminal-surface" ref={terminalSurfaceRef} />
+      {contextMenu ? (
+        <div
+          className="terminal-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button type="button" role="menuitem" onClick={() => void copySelection()} disabled={!contextMenu.hasSelection}>
+            复制
+          </button>
+          <button type="button" role="menuitem" onClick={() => void pasteClipboard()} disabled={!sessionId}>
+            粘贴
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
 }

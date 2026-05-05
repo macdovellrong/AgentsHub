@@ -7,12 +7,20 @@ describe("UI_TEXT", () => {
       profiles: "智能体",
       profileEditor: "角色配置",
       conversation: "协作消息",
-      orchestration: "受控编排",
       forwarding: "转发控制",
-      tasks: "任务看板",
+      taskPlans: "任务计划",
       terminals: "终端",
       runs: "运行记录",
     });
+  });
+
+  it("uses Chinese labels for task plan controls", () => {
+    expect(UI_TEXT.sections.taskPlans).toBe("任务计划");
+    expect(UI_TEXT.placeholders.taskPlanTitle).toBe("计划标题（从选中的 tasks 目录创建快照）");
+    expect(UI_TEXT.hints.taskPlanSource).toBe("读取当前工作区 tasks/<时间-标题>/task-plan.md，并保存为这次执行的历史快照。");
+    expect(UI_TEXT.buttons.generateTaskPlan).toBe("生成任务计划");
+    expect(UI_TEXT.buttons.startTaskPlanManager).toBe("交给 Claude 管理");
+    expect(UI_TEXT.buttons.openTaskPlanFolder).toBe("打开计划目录");
   });
 
   it("formats known status labels in Chinese", () => {

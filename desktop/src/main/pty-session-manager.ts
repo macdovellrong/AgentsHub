@@ -69,6 +69,12 @@ type PtySessionManagerOptions = {
   logStore?: RunLogStore;
   eventStore?: EventStore;
   writeLocks?: WorkspaceWriteLockService;
+  hookConfig?: AgentHookConfig;
+};
+
+export type AgentHookConfig = {
+  url: string;
+  token: string;
 };
 
 type StoredSession = {
@@ -100,16 +106,12 @@ export function resolveProfileCommand(command: string, env: NodeJS.ProcessEnv = 
   }
 
   const pathValue = env.PATH ?? env.Path ?? env.path;
-  if (!pathValue) {
-    return command;
-  }
-
   const hasExtension = path.extname(command).length > 0;
   const extensions = process.platform === "win32" && !hasExtension
     ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
     : [""];
 
-  for (const directory of pathValue.split(path.delimiter)) {
+  for (const directory of commandSearchDirectories(pathValue, env)) {
     if (!directory) {
       continue;
     }
@@ -124,11 +126,57 @@ export function resolveProfileCommand(command: string, env: NodeJS.ProcessEnv = 
   return command;
 }
 
+function commandSearchDirectories(pathValue: string | undefined, env: NodeJS.ProcessEnv): string[] {
+  const directories = pathValue ? pathValue.split(path.delimiter) : [];
+  const userProfile = env.USERPROFILE ?? env.HOME;
+  if (userProfile) {
+    directories.push(path.join(userProfile, ".local", "bin"));
+  }
+  if (env.APPDATA) {
+    directories.push(path.join(env.APPDATA, "npm"));
+  }
+  if (env.LOCALAPPDATA) {
+    directories.push(path.join(env.LOCALAPPDATA, "Microsoft", "WindowsApps"));
+  }
+  return [...new Set(directories.filter(Boolean))];
+}
+
+function splitSubmittedTerminalInput(data: string): { text: string } | null {
+  if (data.length <= 1 || !/[\r\n]$/.test(data)) {
+    return null;
+  }
+  return { text: data.replace(/[\r\n]+$/g, "") };
+}
+
+function shouldUseBracketedPaste(kind: AgentProfileKind): boolean {
+  return kind === "codex" || kind === "claude" || kind === "gemini";
+}
+
+function bracketedPaste(text: string): string {
+  return `\x1b[200~${normalizePastedText(text)}\x1b[201~`;
+}
+
+function normalizePastedText(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function getSubmitDelays(kind: AgentProfileKind, text: string): number[] {
+  if (!shouldUseBracketedPaste(kind)) {
+    return [25];
+  }
+  const isMultiline = /[\r\n]/.test(text);
+  if (kind === "codex" && isMultiline) {
+    return [450, 1400];
+  }
+  return [450];
+}
+
 export class PtySessionManager extends EventEmitter {
   private readonly ptyFactory: PtyFactory;
   private readonly logStore: RunLogStore;
   private readonly eventStore: EventStore;
   private readonly writeLocks: WorkspaceWriteLockService;
+  private readonly hookConfig: AgentHookConfig | undefined;
   private readonly sessions = new Map<string, StoredSession>();
 
   constructor(options: PtySessionManagerOptions = {}) {
@@ -137,6 +185,7 @@ export class PtySessionManager extends EventEmitter {
     this.logStore = options.logStore ?? new RunLogStore();
     this.eventStore = options.eventStore ?? new EventStore();
     this.writeLocks = options.writeLocks ?? new WorkspaceWriteLockService();
+    this.hookConfig = options.hookConfig;
   }
 
   async startPowerShell(input: StartPowerShellInput): Promise<PtySession> {
@@ -158,6 +207,7 @@ export class PtySessionManager extends EventEmitter {
       command: profile.command,
       args: profile.args,
     });
+    const sessionId = randomUUID();
     let pty: PtyLike;
     try {
       const env = {
@@ -165,6 +215,17 @@ export class PtySessionManager extends EventEmitter {
         ...profile.env,
         TERM: "xterm-256color",
         COLORTERM: "truecolor",
+        ...(this.hookConfig
+          ? {
+              AGENTHUB_HOOK_URL: this.hookConfig.url,
+              AGENTHUB_HOOK_TOKEN: this.hookConfig.token,
+              AGENTHUB_PROFILE_ID: profile.id,
+              AGENTHUB_SESSION_ID: sessionId,
+              AGENTHUB_RUN_ID: run.runId,
+              AGENTHUB_WORKSPACE: workspacePath,
+              AGENTHUB_TEAM_ID: "default",
+            }
+          : {}),
       };
       pty = this.ptyFactory.spawn(resolveProfileCommand(profile.command, env), profile.args, {
         name: "xterm-256color",
@@ -182,7 +243,7 @@ export class PtySessionManager extends EventEmitter {
       throw error;
     }
     const session: PtySession = {
-      sessionId: randomUUID(),
+      sessionId,
       runId: run.runId,
       profileId: profile.id,
       profileName: profile.name,
@@ -233,7 +294,22 @@ export class PtySessionManager extends EventEmitter {
   }
 
   write(sessionId: string, data: string): void {
-    this.requireSession(sessionId).pty.write(data);
+    const stored = this.requireSession(sessionId);
+    const submittedInput = splitSubmittedTerminalInput(data);
+    if (!submittedInput) {
+      stored.pty.write(data);
+      return;
+    }
+    stored.pty.write(
+      shouldUseBracketedPaste(stored.session.kind) ? bracketedPaste(submittedInput.text) : submittedInput.text,
+    );
+    for (const delayMs of getSubmitDelays(stored.session.kind, submittedInput.text)) {
+      setTimeout(() => {
+        if (this.sessions.has(sessionId)) {
+          stored.pty.write("\r");
+        }
+      }, delayMs);
+    }
   }
 
   resize(sessionId: string, cols: number, rows: number): void {

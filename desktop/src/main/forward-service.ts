@@ -1,5 +1,6 @@
 import { EventStore } from "./event-store";
 import { ForwardStore, type AgentForward, type CreateForwardInput } from "./forward-store";
+import { toSubmittedTerminalInput } from "./terminal-input";
 
 export type ForwardSession = {
   sessionId: string;
@@ -79,7 +80,7 @@ export class ForwardService {
       return blocked;
     }
 
-    this.sessions.write(session.sessionId, this.toTerminalInput(forward.message));
+    this.sessions.write(session.sessionId, toSubmittedTerminalInput(forward.message));
     const sent = await this.forwardStore.update(workspacePath, forward.id, {
       status: "sent",
       sessionId: session.sessionId,
@@ -88,10 +89,6 @@ export class ForwardService {
     });
     await this.appendForwardEvent(workspacePath, sent, "Forward sent");
     return sent;
-  }
-
-  private toTerminalInput(message: string): string {
-    return message.endsWith("\r") || message.endsWith("\n") ? message : `${message}\r`;
   }
 
   private async appendForwardEvent(workspacePath: string, forward: AgentForward, message: string): Promise<void> {

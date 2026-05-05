@@ -2,15 +2,20 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   IpcChannels,
   type AgentHubEventDto,
+  type AgentConversationDto,
   type AgentForwardDto,
   type AgentProfileDto,
   type AgentTaskDto,
   type AppendEventRequest,
+  type ClipboardWriteTextRequest,
   type CreateForwardRequest,
   type CreateProfileRequest,
   type CreateTaskRequest,
+  type ConversationActionRequest,
   type DuplicateProfileRequest,
+  type EventAppendedEvent,
   type ForwardActionRequest,
+  type CreateTaskPlanRequest,
   type ReadRunRawLogRequest,
   type RouteInputRequest,
   type RouteInputResponse,
@@ -18,15 +23,23 @@ import {
   type SessionErrorEvent,
   type SessionExitEvent,
   type StartOrchestrationRequest,
+  type StartManagerConversationRequest,
+  type StartPairNegotiationConversationRequest,
+  type StartRoundtableConversationRequest,
   type StartProfileRequest,
   type StartPowerShellRequest,
   type StartPowerShellResponse,
+  type TaskPlanActionRequest,
+  type TaskPlanDto,
+  type TaskPlanSourceDto,
   type TerminalDataEvent,
   type TerminalInputRequest,
   type TerminalResizeRequest,
   type UpdateProfileRequest,
   type UpdateTaskRequest,
   type WorkspaceActivateRequest,
+  type WorkspaceDeleteRequest,
+  type WorkspaceOpenFolderRequest,
   type WorkspaceDto,
   type WorkspaceLockStatusResponse,
   type WorkspaceRequest,
@@ -43,6 +56,14 @@ const agenthub = {
 
   activateWorkspace(request: WorkspaceActivateRequest): Promise<string> {
     return ipcRenderer.invoke(IpcChannels.WorkspaceActivate, request) as Promise<string>;
+  },
+
+  deleteWorkspace(request: WorkspaceDeleteRequest): Promise<WorkspaceDto[]> {
+    return ipcRenderer.invoke(IpcChannels.WorkspaceDelete, request) as Promise<WorkspaceDto[]>;
+  },
+
+  openWorkspaceFolder(request: WorkspaceOpenFolderRequest): Promise<void> {
+    return ipcRenderer.invoke(IpcChannels.WorkspaceOpenFolder, request) as Promise<void>;
   },
 
   selectWorkspace(request: WorkspaceRequest = {}): Promise<string> {
@@ -89,6 +110,14 @@ const agenthub = {
     return ipcRenderer.invoke(IpcChannels.TerminalResize, request) as Promise<void>;
   },
 
+  readClipboardText(): Promise<string> {
+    return ipcRenderer.invoke(IpcChannels.ClipboardReadText) as Promise<string>;
+  },
+
+  writeClipboardText(request: ClipboardWriteTextRequest): Promise<void> {
+    return ipcRenderer.invoke(IpcChannels.ClipboardWriteText, request) as Promise<void>;
+  },
+
   stopSession(sessionId: string): Promise<void> {
     return ipcRenderer.invoke(IpcChannels.StopSession, sessionId) as Promise<void>;
   },
@@ -125,6 +154,30 @@ const agenthub = {
     return ipcRenderer.invoke(IpcChannels.TasksUpdate, request) as Promise<AgentTaskDto>;
   },
 
+  listTaskPlans(request: WorkspaceRequest = {}): Promise<TaskPlanDto[]> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlansList, request) as Promise<TaskPlanDto[]>;
+  },
+
+  listTaskPlanSources(request: WorkspaceRequest = {}): Promise<TaskPlanSourceDto[]> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlanSourcesList, request) as Promise<TaskPlanSourceDto[]>;
+  },
+
+  createTaskPlan(request: CreateTaskPlanRequest): Promise<TaskPlanDto> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlansCreate, request) as Promise<TaskPlanDto>;
+  },
+
+  startTaskPlanManager(request: TaskPlanActionRequest): Promise<TaskPlanDto> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlansStartManager, request) as Promise<TaskPlanDto>;
+  },
+
+  readTaskPlanMarkdown(request: TaskPlanActionRequest): Promise<string> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlansReadMarkdown, request) as Promise<string>;
+  },
+
+  openTaskPlanFolder(request: TaskPlanActionRequest): Promise<void> {
+    return ipcRenderer.invoke(IpcChannels.TaskPlansOpenFolder, request) as Promise<void>;
+  },
+
   startOrchestration(request: StartOrchestrationRequest): Promise<{ tasks: AgentTaskDto[] }> {
     return ipcRenderer.invoke(IpcChannels.OrchestrationStart, request) as Promise<{ tasks: AgentTaskDto[] }>;
   },
@@ -149,6 +202,34 @@ const agenthub = {
     return ipcRenderer.invoke(IpcChannels.ForwardsSend, request) as Promise<AgentForwardDto>;
   },
 
+  listConversations(request: WorkspaceRequest = {}): Promise<AgentConversationDto[]> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsList, request) as Promise<AgentConversationDto[]>;
+  },
+
+  startManagerConversation(request: StartManagerConversationRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsStartManager, request) as Promise<AgentConversationDto>;
+  },
+
+  startRoundtableConversation(request: StartRoundtableConversationRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsStartRoundtable, request) as Promise<AgentConversationDto>;
+  },
+
+  startPairNegotiationConversation(request: StartPairNegotiationConversationRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsStartPairNegotiation, request) as Promise<AgentConversationDto>;
+  },
+
+  pauseConversation(request: ConversationActionRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsPause, request) as Promise<AgentConversationDto>;
+  },
+
+  resumeConversation(request: ConversationActionRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsResume, request) as Promise<AgentConversationDto>;
+  },
+
+  stopConversation(request: ConversationActionRequest): Promise<AgentConversationDto> {
+    return ipcRenderer.invoke(IpcChannels.ConversationsStop, request) as Promise<AgentConversationDto>;
+  },
+
   getWorkspaceLockStatus(): Promise<WorkspaceLockStatusResponse> {
     return ipcRenderer.invoke(IpcChannels.WorkspaceLockStatus) as Promise<WorkspaceLockStatusResponse>;
   },
@@ -169,6 +250,12 @@ const agenthub = {
     const listener = (_event: Electron.IpcRendererEvent, payload: SessionErrorEvent) => callback(payload);
     ipcRenderer.on(IpcChannels.SessionError, listener);
     return () => ipcRenderer.removeListener(IpcChannels.SessionError, listener);
+  },
+
+  onEventAppended(callback: (event: EventAppendedEvent) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, payload: EventAppendedEvent) => callback(payload);
+    ipcRenderer.on(IpcChannels.EventAppended, listener);
+    return () => ipcRenderer.removeListener(IpcChannels.EventAppended, listener);
   },
 };
 
