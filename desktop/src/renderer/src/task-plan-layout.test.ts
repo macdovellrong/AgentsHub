@@ -12,7 +12,7 @@ describe("task plan layout", () => {
   it("renders the task plan panel instead of legacy orchestration and task panels", () => {
     const appSource = readRendererFile("App.tsx");
 
-    expect(appSource).toContain('className="task-plan-panel panel"');
+    expect(appSource).toContain("task-plan-panel panel");
     expect(appSource).not.toContain('className="orchestration panel"');
     expect(appSource).not.toContain('className="tasks panel"');
   });

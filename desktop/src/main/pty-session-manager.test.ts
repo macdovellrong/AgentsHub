@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EventStore } from "./event-store";
 import { RunLogStore } from "./log-store";
 import {
+  buildProfileLaunchArgs,
   PtySessionManager,
   resolveProfileCommand,
   type PtyFactory,
@@ -146,6 +147,110 @@ afterEach(async () => {
 });
 
 describe("PtySessionManager", () => {
+  it("builds resume arguments only for Codex, Claude, and Gemini profiles", () => {
+    expect(
+      buildProfileLaunchArgs(
+        {
+          id: "codex",
+          name: "Codex",
+          kind: "codex",
+          command: "codex.cmd",
+          args: ["--model", "gpt-5"],
+          aliases: [],
+          rolePrompt: "",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: true,
+        },
+        { resumeLast: true, workspacePath: "V:/AgentGroup" },
+      ),
+    ).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", "V:/AgentGroup"]);
+    expect(
+      buildProfileLaunchArgs(
+        {
+          id: "claude",
+          name: "Claude",
+          kind: "claude",
+          command: "claude",
+          args: [],
+          aliases: [],
+          rolePrompt: "",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: false,
+        },
+        { resumeLast: true },
+      ),
+    ).toEqual(["--continue"]);
+    expect(
+      buildProfileLaunchArgs(
+        {
+          id: "gemini",
+          name: "Gemini",
+          kind: "gemini",
+          command: "gemini.cmd",
+          args: ["--model", "gemini-2.5-pro"],
+          aliases: [],
+          rolePrompt: "",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: false,
+        },
+        { resumeLast: true },
+      ),
+    ).toEqual(["--model", "gemini-2.5-pro", "--resume", "latest"]);
+    expect(
+      buildProfileLaunchArgs(
+        {
+          id: "custom",
+          name: "Custom",
+          kind: "custom",
+          command: "agent.exe",
+          args: ["run"],
+          aliases: [],
+          rolePrompt: "",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: false,
+        },
+        { resumeLast: true },
+      ),
+    ).toEqual(["run"]);
+  });
+
+  it("records and spawns the resumed launch arguments", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const logStore = new CapturingLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+
+    await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.cmd",
+        args: ["--model", "gpt-5"],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      120,
+      40,
+      { resumeLast: true },
+    );
+
+    expect(factory.args).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+    const meta = JSON.parse(await readFile(logStore.lastMetaPath!, "utf8"));
+    expect(meta.args).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+  });
+
   it("resolves profile commands from PATH before spawning", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const commandPath = path.join(workspacePath, process.platform === "win32" ? "agent.cmd" : "agent");

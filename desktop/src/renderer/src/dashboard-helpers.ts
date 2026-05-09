@@ -39,6 +39,9 @@ const CONVERSATION_EVENT_TYPES = new Set<AgentHubEventDto["type"]>([
 ]);
 
 const ACTIVE_CONVERSATION_STATUSES = new Set<ConversationStatus>(["running", "paused"]);
+const DEFAULT_TASK_PLAN_SPLIT_RATIO = 0.42;
+const MIN_TASK_PLAN_SPLIT_RATIO = 0.24;
+const MAX_TASK_PLAN_SPLIT_RATIO = 0.78;
 
 const CONVERSATION_MODE_LABELS: Record<ConversationMode, string> = {
   pair_negotiation: "协商",
@@ -89,6 +92,26 @@ export function profileToFields(profile: AgentProfileDto): ProfileEditorFields {
     rolePrompt: profile.rolePrompt,
     useWorkspaceWriteLock: profile.useWorkspaceWriteLock,
   };
+}
+
+export function canResumeProfile(profile: AgentProfileDto): boolean {
+  return profile.kind === "codex" || profile.kind === "claude" || profile.kind === "gemini";
+}
+
+export function clampTaskPlanSplitRatio(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_TASK_PLAN_SPLIT_RATIO;
+  }
+  return Math.min(MAX_TASK_PLAN_SPLIT_RATIO, Math.max(MIN_TASK_PLAN_SPLIT_RATIO, value));
+}
+
+export function formatCenterStackRows(input: { taskPlanCollapsed: boolean; taskPlanRatio: number }): string {
+  if (input.taskPlanCollapsed) {
+    return "minmax(0, 1fr) 8px 42px";
+  }
+  const taskPlanRatio = clampTaskPlanSplitRatio(input.taskPlanRatio);
+  const conversationRatio = Number((1 - taskPlanRatio).toFixed(2));
+  return `minmax(260px, ${conversationRatio}fr) 8px minmax(180px, ${taskPlanRatio}fr)`;
 }
 
 export function getInputTargetToken(text: string): string | null {

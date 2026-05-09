@@ -36,6 +36,11 @@ export type StartPowerShellInput = {
   rows: number;
 };
 
+export type StartProfileOptions = {
+  resumeLast?: boolean;
+  workspacePath?: string;
+};
+
 export type PtySession = {
   sessionId: string;
   runId: string;
@@ -93,6 +98,8 @@ const POWERSHELL_ARGS = [
   "-Command",
   "Remove-Module PSReadLine -ErrorAction SilentlyContinue; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; chcp 65001 | Out-Null; Write-Host 'AgentHub PowerShell ready'",
 ];
+
+const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 
 export class NodePtyFactory implements PtyFactory {
   spawn(command: string, args: string[], options: PtySpawnOptions): PtyLike {
@@ -171,6 +178,33 @@ function getSubmitDelays(kind: AgentProfileKind, text: string): number[] {
   return [450];
 }
 
+export function buildProfileLaunchArgs(profile: AgentProfile, options: StartProfileOptions = {}): string[] {
+  const args = [...profile.args];
+  if (!options.resumeLast || !RESUMABLE_PROFILE_KINDS.has(profile.kind)) {
+    return args;
+  }
+
+  if (profile.kind === "codex") {
+    if (args.includes("resume")) {
+      return args;
+    }
+    const workspaceArgs =
+      options.workspacePath && !args.some((arg) => arg === "--cd" || arg === "-C")
+        ? ["--cd", options.workspacePath]
+        : [];
+    return [...args, "resume", "--last", ...workspaceArgs];
+  }
+  if (profile.kind === "claude") {
+    return args.some((arg) => arg === "--continue" || arg === "-c" || arg === "--resume" || arg === "-r")
+      ? args
+      : [...args, "--continue"];
+  }
+  if (profile.kind === "gemini") {
+    return args.some((arg) => arg === "--resume" || arg === "-r") ? args : [...args, "--resume", "latest"];
+  }
+  return args;
+}
+
 export class PtySessionManager extends EventEmitter {
   private readonly ptyFactory: PtyFactory;
   private readonly logStore: RunLogStore;
@@ -196,16 +230,23 @@ export class PtySessionManager extends EventEmitter {
     return this.startProfile(powerShellProfile, input.workspacePath, input.cols, input.rows);
   }
 
-  async startProfile(profile: AgentProfile, workspacePath: string, cols: number, rows: number): Promise<PtySession> {
+  async startProfile(
+    profile: AgentProfile,
+    workspacePath: string,
+    cols: number,
+    rows: number,
+    options: StartProfileOptions = {},
+  ): Promise<PtySession> {
     const lockDecision = this.writeLocks.canStart(workspacePath, profile.useWorkspaceWriteLock);
     if (!lockDecision.ok) {
       throw new Error(lockDecision.reason);
     }
+    const launchArgs = buildProfileLaunchArgs(profile, { ...options, workspacePath });
     const run = await this.logStore.createRun({
       workspacePath,
       profileId: profile.id,
       command: profile.command,
-      args: profile.args,
+      args: launchArgs,
     });
     const sessionId = randomUUID();
     let pty: PtyLike;
@@ -227,7 +268,7 @@ export class PtySessionManager extends EventEmitter {
             }
           : {}),
       };
-      pty = this.ptyFactory.spawn(resolveProfileCommand(profile.command, env), profile.args, {
+      pty = this.ptyFactory.spawn(resolveProfileCommand(profile.command, env), launchArgs, {
         name: "xterm-256color",
         cols,
         rows,

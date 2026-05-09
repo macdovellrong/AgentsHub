@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type {
   AgentConversationDto,
   AgentHubEventDto,
@@ -19,6 +28,8 @@ import {
   buildProfileSavePayload,
   buildTaskPlanGenerationPrompt,
   buildTerminalSubmitInput,
+  canResumeProfile,
+  clampTaskPlanSplitRatio,
   countOnlineSessionsForWorkspace,
   describeConversationEvent,
   filterActiveConversations,
@@ -27,6 +38,7 @@ import {
   findMentionQuery,
   formatConversationModeLabel,
   formatConversationStatusLabel,
+  formatCenterStackRows,
   formatParticipantLabel,
   getMentionCandidates,
   findOnlineSessionForProfile,
@@ -41,6 +53,11 @@ import { TerminalPane } from "./components/TerminalPane";
 import { UI_TEXT, formatEventTypeLabel, formatStatusLabel } from "./ui-text";
 
 const RUN_STATUSES: Array<RunHistoryDto["status"] | "all"> = ["all", "running", "exited"];
+const LAYOUT_STORAGE_KEYS = {
+  sidebarCollapsed: "agenthub.layout.sidebarCollapsed",
+  taskPlanCollapsed: "agenthub.layout.taskPlanCollapsed",
+  taskPlanSplitRatio: "agenthub.layout.taskPlanSplitRatio",
+} as const;
 
 const emptyEditorFields: ProfileEditorFields = {
   name: "",
@@ -98,9 +115,42 @@ type WorkspaceContextMenuState = {
 
 type MainTab = "conversation" | `terminal:${string}`;
 
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  try {
+    if (typeof window === "undefined") {
+      return fallback;
+    }
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : value === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function readStoredTaskPlanSplitRatio(): number {
+  try {
+    if (typeof window === "undefined") {
+      return clampTaskPlanSplitRatio(Number.NaN);
+    }
+    const value = window.localStorage.getItem(LAYOUT_STORAGE_KEYS.taskPlanSplitRatio);
+    return value === null ? clampTaskPlanSplitRatio(Number.NaN) : clampTaskPlanSplitRatio(Number(value));
+  } catch {
+    return clampTaskPlanSplitRatio(Number.NaN);
+  }
+}
+
+function writeStoredLayoutValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Layout persistence is optional; ignore private-mode or storage quota failures.
+  }
+}
+
 export function App(): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const eventListRef = useRef<HTMLDivElement | null>(null);
+  const centerStackRef = useRef<HTMLDivElement | null>(null);
   const [workspacePath, setWorkspacePath] = useState("");
   const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([]);
   const [profiles, setProfiles] = useState<AgentProfileDto[]>([]);
@@ -132,6 +182,13 @@ export function App(): React.JSX.Element {
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
   const [workspaceContextMenu, setWorkspaceContextMenu] = useState<WorkspaceContextMenuState | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>("conversation");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
+    readStoredBoolean(LAYOUT_STORAGE_KEYS.sidebarCollapsed, false),
+  );
+  const [isTaskPlanCollapsed, setIsTaskPlanCollapsed] = useState(() =>
+    readStoredBoolean(LAYOUT_STORAGE_KEYS.taskPlanCollapsed, false),
+  );
+  const [taskPlanSplitRatio, setTaskPlanSplitRatio] = useState(readStoredTaskPlanSplitRatio);
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0] ?? null,
@@ -167,6 +224,22 @@ export function App(): React.JSX.Element {
     () => workspaces.find((workspace) => workspace.path === workspaceContextMenu?.workspacePath) ?? null,
     [workspaceContextMenu?.workspacePath, workspaces],
   );
+  const centerStackRows = useMemo(
+    () => formatCenterStackRows({ taskPlanCollapsed: isTaskPlanCollapsed, taskPlanRatio: taskPlanSplitRatio }),
+    [isTaskPlanCollapsed, taskPlanSplitRatio],
+  );
+
+  useEffect(() => {
+    writeStoredLayoutValue(LAYOUT_STORAGE_KEYS.sidebarCollapsed, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    writeStoredLayoutValue(LAYOUT_STORAGE_KEYS.taskPlanCollapsed, String(isTaskPlanCollapsed));
+  }, [isTaskPlanCollapsed]);
+
+  useEffect(() => {
+    writeStoredLayoutValue(LAYOUT_STORAGE_KEYS.taskPlanSplitRatio, String(taskPlanSplitRatio));
+  }, [taskPlanSplitRatio]);
 
   const refreshMentionQuery = useCallback((text: string, cursor: number | null) => {
     if (cursor === null) {
@@ -503,7 +576,7 @@ export function App(): React.JSX.Element {
   }, [refreshWorkspaceData]);
 
   const startProfile = useCallback(
-    async (profileId: string) => {
+    async (profileId: string, resumeLast = false) => {
       setError(null);
       setStartingProfileIds((current) => new Set(current).add(profileId));
       try {
@@ -512,6 +585,7 @@ export function App(): React.JSX.Element {
           workspacePath: workspacePath || undefined,
           cols: 120,
           rows: 32,
+          resumeLast,
         });
         setWorkspacePath(session.workspacePath);
         setSessions((current) => [session, ...current.filter((item) => item.sessionId !== session.sessionId)]);
@@ -550,6 +624,42 @@ export function App(): React.JSX.Element {
 
   const resizeTerminal = useCallback((sessionId: string, cols: number, rows: number) => {
     void window.agenthub.terminalResize({ sessionId, cols, rows });
+  }, []);
+
+  const beginCenterSplitResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const centerStack = centerStackRef.current;
+    if (!centerStack) {
+      return;
+    }
+    event.preventDefault();
+    setIsTaskPlanCollapsed(false);
+
+    const updateRatio = (clientY: number) => {
+      const rect = centerStack.getBoundingClientRect();
+      if (rect.height <= 0) {
+        return;
+      }
+      setTaskPlanSplitRatio(clampTaskPlanSplitRatio((rect.bottom - clientY) / rect.height));
+    };
+
+    updateRatio(event.clientY);
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (moveEvent: PointerEvent) => updateRatio(moveEvent.clientY);
+    const handlePointerUp = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
   }, []);
 
   const openProfileEditor = useCallback(
@@ -1020,8 +1130,45 @@ export function App(): React.JSX.Element {
     <main className="app-shell">
       {error ? <section className="error-banner">{error}</section> : null}
 
-      <section className="dashboard-grid">
-        <aside className="sidebar">
+      <section className={`dashboard-grid ${isSidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
+        <aside className={`sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}`}>
+          {isSidebarCollapsed ? (
+            <div className="sidebar-rail" aria-label="收起的侧边栏">
+              <button type="button" className="sidebar-rail-button" title="展开侧边栏" onClick={() => setIsSidebarCollapsed(false)}>
+                ≡
+              </button>
+              <button
+                type="button"
+                className="sidebar-rail-button"
+                title={workspacePath || "工作区"}
+                onClick={() => setIsSidebarCollapsed(false)}
+              >
+                工
+              </button>
+              <div className="sidebar-rail-separator" />
+              {profiles.map((profile) => {
+                const online = activeSessions.some((session) => session.profileId === profile.id);
+                return (
+                  <button
+                    type="button"
+                    className={`sidebar-rail-button ${selectedProfile?.id === profile.id ? "is-selected" : ""}`}
+                    key={profile.id}
+                    title={`${profile.name} (${online ? "在线" : "离线"})`}
+                    onClick={() => setSelectedProfileId(profile.id)}
+                  >
+                    <span>{profile.id.slice(0, 2).toUpperCase()}</span>
+                    <i className={online ? "is-online" : ""} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <div className="sidebar-toolbar">
+                <button type="button" onClick={() => setIsSidebarCollapsed(true)}>
+                  收起侧边栏
+                </button>
+              </div>
           <section className="workspace-tabs panel">
             <div className="panel-header">
               <h2>工作区</h2>
@@ -1152,6 +1299,11 @@ export function App(): React.JSX.Element {
                       <button type="button" onClick={() => void startProfile(profile.id)} disabled={isStarting}>
                         {UI_TEXT.buttons.start}
                       </button>
+                      {canResumeProfile(profile) ? (
+                        <button type="button" onClick={() => void startProfile(profile.id, true)} disabled={isStarting}>
+                          恢复
+                        </button>
+                      ) : null}
                       <button type="button" onClick={() => openProfileEditor(profile.id)}>
                         编辑
                       </button>
@@ -1166,6 +1318,8 @@ export function App(): React.JSX.Element {
               })}
             </div>
           </section>
+            </>
+          )}
         </aside>
 
         <section className="workspace-content">
@@ -1195,7 +1349,7 @@ export function App(): React.JSX.Element {
           </div>
           <div className="workspace-tab-stage">
             <section className={`workspace-tab-pane collaboration-pane ${mainTab === "conversation" ? "is-visible" : ""}`}>
-              <section className="center-stack">
+              <section className="center-stack" ref={centerStackRef} style={{ gridTemplateRows: centerStackRows }}>
           <section className="timeline panel">
             <div className="panel-header">
               <h2>{UI_TEXT.sections.conversation}</h2>
@@ -1329,11 +1483,26 @@ export function App(): React.JSX.Element {
             </div>
           </section>
 
-          <section className="task-plan-panel panel">
+          <button
+            type="button"
+            className="center-splitter"
+            onPointerDown={beginCenterSplitResize}
+            title="拖拽调整协作消息和任务计划高度"
+            aria-label="调整协作消息和任务计划高度"
+          />
+
+          <section className={`task-plan-panel panel ${isTaskPlanCollapsed ? "is-collapsed" : ""}`}>
             <div className="panel-header">
               <h2>{UI_TEXT.sections.taskPlans}</h2>
-              <span>{taskPlans.length} 个计划</span>
+              <div className="button-row">
+                <span>{taskPlans.length} 个计划</span>
+                <button type="button" onClick={() => setIsTaskPlanCollapsed((current) => !current)}>
+                  {isTaskPlanCollapsed ? "显示" : "收起"}
+                </button>
+              </div>
             </div>
+            {!isTaskPlanCollapsed ? (
+              <>
             <div className="task-plan-create">
               <select
                 value={selectedTaskPlanSourceDirectory}
@@ -1404,6 +1573,8 @@ export function App(): React.JSX.Element {
                 )}
               </div>
             </div>
+              </>
+            ) : null}
           </section>
 
           {/*

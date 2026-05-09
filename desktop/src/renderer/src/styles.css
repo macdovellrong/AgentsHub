@@ -174,6 +174,11 @@ label {
   min-height: 0;
   overflow: hidden;
   padding: 10px;
+  transition: grid-template-columns 160ms ease;
+}
+
+.dashboard-grid.is-sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .panel {
@@ -212,11 +217,75 @@ label {
 }
 
 .sidebar {
-  grid-template-rows: minmax(120px, 0.42fr) minmax(260px, 1fr);
+  grid-template-rows: auto minmax(120px, 0.42fr) minmax(260px, 1fr);
+}
+
+.sidebar.is-collapsed {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.sidebar-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sidebar-toolbar button {
+  width: 100%;
+}
+
+.sidebar-rail {
+  align-content: start;
+  background: #151a20;
+  border: 1px solid #2b333d;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.sidebar-rail-button {
+  align-items: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: grid;
+  font-size: 11px;
+  font-weight: 800;
+  justify-items: center;
+  min-height: 0;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+.sidebar-rail-button.is-selected {
+  background: #1b2836;
+  border-color: #5f86b6;
+}
+
+.sidebar-rail-button i {
+  background: #53606f;
+  border: 1px solid #151a20;
+  border-radius: 999px;
+  bottom: 5px;
+  height: 8px;
+  position: absolute;
+  right: 5px;
+  width: 8px;
+}
+
+.sidebar-rail-button i.is-online {
+  background: #7de0a8;
+}
+
+.sidebar-rail-separator {
+  border-top: 1px solid #303946;
+  height: 1px;
 }
 
 .center-stack {
-  grid-template-rows: minmax(300px, 1fr) minmax(240px, 0.72fr);
+  grid-template-rows: minmax(260px, 0.58fr) 8px minmax(180px, 0.42fr);
 }
 
 .workspace-content {
@@ -636,6 +705,33 @@ label {
   justify-content: flex-end;
 }
 
+.center-splitter {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: row-resize;
+  min-height: 8px;
+  padding: 0;
+  position: relative;
+}
+
+.center-splitter::before {
+  background: #303a46;
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  left: 10px;
+  position: absolute;
+  right: 10px;
+  top: 3px;
+}
+
+.center-splitter:hover::before,
+.center-splitter:focus-visible::before {
+  background: #6f9fcb;
+}
+
 .quote-preview {
   align-items: center;
   background: #111820;
@@ -789,6 +885,11 @@ label {
 .task-plan-panel {
   grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
+}
+
+.task-plan-panel.is-collapsed {
+  grid-template-rows: auto;
+  overflow: hidden;
 }
 
 .task-plan-create {

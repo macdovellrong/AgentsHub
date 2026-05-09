@@ -8,12 +8,15 @@ import {
   buildRoutedTerminalMessage,
   buildTerminalSubmitInput,
   buildProfileSavePayload,
+  canResumeProfile,
+  clampTaskPlanSplitRatio,
   countOnlineSessionsForWorkspace,
   describeConversationEvent,
   filterActiveConversations,
   filterConversationEvents,
   formatConversationModeLabel,
   formatConversationStatusLabel,
+  formatCenterStackRows,
   formatParticipantLabel,
   filterSessionsForWorkspace,
   findMentionQuery,
@@ -82,6 +85,83 @@ describe("buildProfileSavePayload", () => {
       defaultCwd: null,
       useWorkspaceWriteLock: true,
     });
+  });
+});
+
+describe("canResumeProfile", () => {
+  it("allows resume controls only for Codex, Claude, and Gemini profiles", () => {
+    expect(
+      canResumeProfile({
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.cmd",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: true,
+      }),
+    ).toBe(true);
+    expect(
+      canResumeProfile({
+        id: "claude",
+        name: "Claude",
+        kind: "claude",
+        command: "claude",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      }),
+    ).toBe(true);
+    expect(
+      canResumeProfile({
+        id: "gemini",
+        name: "Gemini",
+        kind: "gemini",
+        command: "gemini.cmd",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      }),
+    ).toBe(true);
+    expect(
+      canResumeProfile({
+        id: "powershell",
+        name: "PowerShell",
+        kind: "powershell",
+        command: "powershell.exe",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("layout split helpers", () => {
+  it("clamps task plan split ratios to usable bounds", () => {
+    expect(clampTaskPlanSplitRatio(0.1)).toBe(0.24);
+    expect(clampTaskPlanSplitRatio(0.5)).toBe(0.5);
+    expect(clampTaskPlanSplitRatio(0.95)).toBe(0.78);
+    expect(clampTaskPlanSplitRatio(Number.NaN)).toBe(0.42);
+  });
+
+  it("formats center stack rows for expanded and collapsed task plans", () => {
+    expect(formatCenterStackRows({ taskPlanCollapsed: false, taskPlanRatio: 0.4 })).toBe(
+      "minmax(260px, 0.6fr) 8px minmax(180px, 0.4fr)",
+    );
+    expect(formatCenterStackRows({ taskPlanCollapsed: true, taskPlanRatio: 0.4 })).toBe("minmax(0, 1fr) 8px 42px");
   });
 });
 

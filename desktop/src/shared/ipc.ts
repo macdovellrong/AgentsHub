@@ -91,6 +91,7 @@ export type StartProfileRequest = {
   workspacePath?: string;
   cols: number;
   rows: number;
+  resumeLast?: boolean;
 };
 
 export type TerminalInputRequest = {

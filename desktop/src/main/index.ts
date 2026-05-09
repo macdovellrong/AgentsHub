@@ -295,7 +295,9 @@ function registerIpcHandlers(): void {
     if (!profile) {
       throw new Error(`Unknown profile: ${request.profileId}`);
     }
-    const session = await manager.startProfile(profile, resolveRequestWorkspace(request.workspacePath), request.cols, request.rows);
+    const session = await manager.startProfile(profile, resolveRequestWorkspace(request.workspacePath), request.cols, request.rows, {
+      resumeLast: request.resumeLast,
+    });
     return toSessionResponse(session);
   });
 
