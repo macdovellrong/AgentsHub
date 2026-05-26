@@ -7,6 +7,7 @@ import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
 import { EventStore } from "./event-store";
 import { getDefaultProfiles, type AgentProfile, type AgentProfileKind } from "./profile-store";
+import type { ProjectHookInstaller } from "./project-hook-installer";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
 import { shouldBufferTerminalInput, type TerminalInputSource } from "./terminal-input-readiness";
 import { countUtf8Bytes, subtractAckedBytes } from "./terminal-output-ack";
@@ -79,6 +80,7 @@ type PtySessionManagerOptions = {
   eventStore?: EventStore;
   writeLocks?: WorkspaceWriteLockService;
   hookConfig?: AgentHookConfig;
+  projectHooks?: ProjectHookInstaller;
 };
 
 export type AgentHookConfig = {
@@ -110,6 +112,7 @@ const POWERSHELL_ARGS = [
 ];
 
 const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
+const PROJECT_HOOK_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 export const INPUT_READY_FIRST_OUTPUT_DELAY_MS = 120;
 export const INPUT_READY_TIMEOUT_MS = 3000;
 
@@ -223,6 +226,7 @@ export class PtySessionManager extends EventEmitter {
   private readonly eventStore: EventStore;
   private readonly writeLocks: WorkspaceWriteLockService;
   private readonly hookConfig: AgentHookConfig | undefined;
+  private readonly projectHooks: ProjectHookInstaller | undefined;
   private readonly sessions = new Map<string, StoredSession>();
 
   constructor(options: PtySessionManagerOptions = {}) {
@@ -232,6 +236,7 @@ export class PtySessionManager extends EventEmitter {
     this.eventStore = options.eventStore ?? new EventStore();
     this.writeLocks = options.writeLocks ?? new WorkspaceWriteLockService();
     this.hookConfig = options.hookConfig;
+    this.projectHooks = options.projectHooks;
   }
 
   async startPowerShell(input: StartPowerShellInput): Promise<PtySession> {
@@ -252,6 +257,9 @@ export class PtySessionManager extends EventEmitter {
     const lockDecision = this.writeLocks.canStart(workspacePath, profile.useWorkspaceWriteLock);
     if (!lockDecision.ok) {
       throw new Error(lockDecision.reason);
+    }
+    if (this.projectHooks && PROJECT_HOOK_PROFILE_KINDS.has(profile.kind)) {
+      await this.projectHooks.install(workspacePath);
     }
     const launchArgs = buildProfileLaunchArgs(profile, { ...options, workspacePath });
     const run = await this.logStore.createRun({

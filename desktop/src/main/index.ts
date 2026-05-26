@@ -51,6 +51,7 @@ import { AgentResultHookReceiver } from "./hook-receiver";
 import { RunLogStore } from "./log-store";
 import { OrchestrationService } from "./orchestration";
 import { ProfileStore } from "./profile-store";
+import { ProjectAgentHookInstaller } from "./project-hook-installer";
 import {
   PtySessionManager,
   type PtySession,
@@ -103,6 +104,7 @@ const manager = new PtySessionManager({
   eventStore,
   writeLocks,
   hookConfig: hookReceiver.getClientEnvironment(),
+  projectHooks: new ProjectAgentHookInstaller(),
 });
 const forwardService = new ForwardService(new ForwardStore(), eventStore, manager);
 const orchestration = new OrchestrationService(taskStore, eventStore, manager);

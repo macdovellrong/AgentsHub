@@ -63,6 +63,14 @@ class FakeFactory implements PtyFactory {
   }
 }
 
+class FakeProjectHookInstaller {
+  readonly workspaces: string[] = [];
+
+  async install(workspacePath: string): Promise<void> {
+    this.workspaces.push(workspacePath);
+  }
+}
+
 class DelayedLogStore extends RunLogStore {
   appendedChunks: string[] = [];
   appendStarted = false;
@@ -367,6 +375,55 @@ describe("PtySessionManager", () => {
       status: "online",
       workspacePath,
     });
+  });
+
+  it("installs project hooks before spawning managed agent profiles", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const projectHooks = new FakeProjectHookInstaller();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+      projectHooks,
+    });
+
+    await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      120,
+      40,
+    );
+
+    expect(projectHooks.workspaces).toEqual([workspacePath]);
+  });
+
+  it("does not install project hooks for PowerShell sessions", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const projectHooks = new FakeProjectHookInstaller();
+    const manager = new PtySessionManager({
+      ptyFactory: new FakeFactory(),
+      logStore: new RunLogStore(),
+      projectHooks,
+    });
+
+    await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    expect(projectHooks.workspaces).toEqual([]);
   });
 
   it("appends raw data through the log store before emitting data", async () => {

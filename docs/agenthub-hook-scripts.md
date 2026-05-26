@@ -1,33 +1,65 @@
 # AgentHub Hook 脚本接入说明
 
-本文记录 Codex、Claude、Gemini 将最终回复同步回 AgentHub 中央聊天区的 hook 脚本方案。
+本文记录 Codex、Claude、Gemini 将最终回复同步回 AgentHub 中央聊天区的 hook 方案。
 
-## 当前脚本
+## 当前策略
 
-仓库内脚本位于：
-
-```text
-scripts/hooks/agenthub_hook_common.py
-scripts/hooks/agenthub_codex_stop.py
-scripts/hooks/agenthub_claude_stop.py
-scripts/hooks/agenthub_gemini_after_agent.py
-```
-
-三个入口脚本共用 `agenthub_hook_common.py`。脚本会读取 CLI hook 传入的 `stdin` JSON，抽取最终回复，然后通过 HTTP POST 发送到 AgentHub 本地服务。
-
-## 推荐系统放置位置
-
-建议把 `scripts/hooks/` 下的 4 个 `.py` 文件复制到：
+AgentHub 不再要求手动把 hook 脚本复制到用户目录。通过 AgentHub 启动 Codex、Claude 或 Gemini 时，主进程会自动把脚本安装到当前工作区：
 
 ```text
-C:\Users\saber\.agenthub\hooks\
+<workspace>/.codex/hooks/
+<workspace>/.claude/hooks/
+<workspace>/.gemini/hooks/
 ```
 
-不要只复制入口脚本，因为它们依赖同目录下的 `agenthub_hook_common.py`。
+仓库内的源脚本位于 `scripts/hooks/`：
 
-## AgentHub 注入的环境变量
+```text
+agenthub_hook_common.py
+agenthub_codex_stop.py
+agenthub_claude_stop.py
+agenthub_gemini_after_agent.py
+```
 
-AgentHub 启动每个 Agent 进程时，应注入以下环境变量：
+安装到工作区时，每个 CLI 目录只会复制对应入口脚本和 `agenthub_hook_common.py`。
+
+## 自动写入的项目配置
+
+Codex：
+
+```text
+<workspace>/.codex/config.toml
+<workspace>/.codex/hooks.json
+```
+
+AgentHub 会确保 `config.toml` 中启用：
+
+```toml
+[features]
+codex_hooks = true
+```
+
+并在 `hooks.json` 的 `Stop` 事件中追加 AgentHub command hook。
+
+Claude Code：
+
+```text
+<workspace>/.claude/settings.local.json
+```
+
+AgentHub 会在 `Stop` 和 `StopFailure` 中追加 command hook，调用项目内的 `agenthub_claude_stop.py`。使用 `settings.local.json` 是为了避免把本机路径和实验配置提交到项目仓库。
+
+Gemini CLI：
+
+```text
+<workspace>/.gemini/settings.json
+```
+
+AgentHub 会在 `AfterAgent` 中追加 command hook，调用项目内的 `agenthub_gemini_after_agent.py`。
+
+## 环境变量
+
+通过 AgentHub 启动的 Agent 会注入以下环境变量：
 
 ```text
 AGENTHUB_HOOK_URL=http://127.0.0.1:<port>/api/agent-result
@@ -36,208 +68,35 @@ AGENTHUB_PROFILE_ID=<profile-id>
 AGENTHUB_SESSION_ID=<agenthub-session-id>
 AGENTHUB_RUN_ID=<run-id>
 AGENTHUB_WORKSPACE=<workspace-path>
+AGENTHUB_TEAM_ID=default
 ```
 
-这些变量用于区分多个 Codex、Claude、Gemini 实例，避免所有 hook 结果混到同一个聊天流里。
+hook 脚本依赖这些变量定位回调服务、工作区、会话和 profile。
 
-## Codex 配置
+## 普通终端启动时的行为
 
-用户级配置位置：
+项目级配置意味着：如果你在同一个项目目录中直接用 Windows Terminal 启动 `codex`、`claude` 或 `gemini`，CLI 仍然会加载项目 hook。
 
-```text
-C:\Users\saber\.codex\config.toml
-C:\Users\saber\.codex\hooks.json
-```
+但脚本会先检查 `AGENTHUB_HOOK_URL`。如果不是通过 AgentHub 启动，没有该变量，脚本只输出 `{}` 并记录诊断日志，不会向任何服务发送消息。
 
-项目级配置位置：
+## 配置合并规则
 
-```text
-<workspace>\.codex\config.toml
-<workspace>\.codex\hooks.json
-```
-
-`config.toml` 需要开启 hooks：
-
-```toml
-[features]
-codex_hooks = true
-```
-
-`hooks.json` 示例：
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py -3 \"C:\\Users\\saber\\.agenthub\\hooks\\agenthub_codex_stop.py\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Codex 使用 `Stop` hook，在一轮回复结束后发送 `last_assistant_message`。
-
-## Claude 配置
-
-用户级配置位置：
-
-```text
-C:\Users\saber\.claude\settings.json
-```
-
-项目级配置位置：
-
-```text
-<workspace>\.claude\settings.json
-<workspace>\.claude\settings.local.json
-```
-
-Claude 推荐使用原生 HTTP hook，直接 POST 到 AgentHub 本地服务，避免再启动一层 Python 转发进程。配置示例：
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "http",
-            "url": "http://127.0.0.1:38765/api/agent-result",
-            "timeout": 5,
-            "headers": {
-              "X-AgentHub-Token": "$AGENTHUB_HOOK_TOKEN",
-              "X-AgentHub-Source": "claude",
-              "X-AgentHub-Profile-Id": "$AGENTHUB_PROFILE_ID",
-              "X-AgentHub-Session-Id": "$AGENTHUB_SESSION_ID",
-              "X-AgentHub-Run-Id": "$AGENTHUB_RUN_ID",
-              "X-AgentHub-Workspace": "$AGENTHUB_WORKSPACE"
-            },
-            "allowedEnvVars": [
-              "AGENTHUB_HOOK_TOKEN",
-              "AGENTHUB_PROFILE_ID",
-              "AGENTHUB_SESSION_ID",
-              "AGENTHUB_RUN_ID",
-              "AGENTHUB_WORKSPACE"
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Claude 使用 `Stop` hook，在一轮正常回复结束后发送最终助手消息。如果一轮因为 API 错误结束，Claude 会触发 `StopFailure` 而不是 `Stop`，因此建议同时配置同样的 HTTP hook：
-
-```json
-{
-  "hooks": {
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "type": "http",
-            "url": "http://127.0.0.1:38765/api/agent-result",
-            "timeout": 5,
-            "headers": {
-              "X-AgentHub-Token": "$AGENTHUB_HOOK_TOKEN",
-              "X-AgentHub-Source": "claude",
-              "X-AgentHub-Profile-Id": "$AGENTHUB_PROFILE_ID",
-              "X-AgentHub-Session-Id": "$AGENTHUB_SESSION_ID",
-              "X-AgentHub-Run-Id": "$AGENTHUB_RUN_ID",
-              "X-AgentHub-Workspace": "$AGENTHUB_WORKSPACE"
-            },
-            "allowedEnvVars": [
-              "AGENTHUB_HOOK_TOKEN",
-              "AGENTHUB_PROFILE_ID",
-              "AGENTHUB_SESSION_ID",
-              "AGENTHUB_RUN_ID",
-              "AGENTHUB_WORKSPACE"
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-## Gemini 配置
-
-用户级配置位置：
-
-```text
-C:\Users\saber\.gemini\settings.json
-```
-
-项目级配置位置：
-
-```text
-<workspace>\.gemini\settings.json
-```
-
-系统级配置位置：
-
-```text
-C:\ProgramData\gemini-cli\settings.json
-```
-
-配置示例：
-
-```json
-{
-  "hooks": {
-    "AfterAgent": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "name": "agenthub-result",
-            "type": "command",
-            "command": "py -3 \"C:\\Users\\saber\\.agenthub\\hooks\\agenthub_gemini_after_agent.py\"",
-            "timeout": 5000
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Gemini 使用 `AfterAgent` hook，在一轮 agent 执行结束后发送 `prompt_response`。
+- 自动安装是幂等的，多次启动不会重复插入 AgentHub hook。
+- 已存在的 Codex、Claude、Gemini 配置会保留。
+- 已存在的非 AgentHub hook 会保留。
+- 如果对应 JSON 配置损坏，启动 Agent 会失败并提示配置解析错误，需要先手动修复该项目配置。
 
 ## 工作流
 
 ```text
 用户在 AgentHub 输入 @codex / @claude / @gemini 消息
-        ↓
-AgentHub 写入对应 CLI 的 PTY
-        ↓
-CLI 执行任务并生成最终回复
-        ↓
-CLI 触发 hook 脚本
-        ↓
-hook 脚本读取 stdin JSON
-        ↓
-hook 脚本 POST 到 AgentHub 本地 HTTP 服务
-        ↓
-AgentHub 写入 events.jsonl 并推送到中央聊天区
+  -> AgentHub 写入对应 CLI 的 PTY
+  -> CLI 执行并生成最终回复
+  -> CLI 触发项目级 hook
+  -> hook 脚本读取 stdin JSON
+  -> hook 脚本 POST 到 AgentHub 本地 HTTP 服务
+  -> AgentHub 写入 events.jsonl 并推送到中央聊天区
 ```
-
-## 注意事项
-
-- 第一版建议使用用户级配置，避免每个 workspace 重复配置。
-- AgentHub 未启动或未注入 `AGENTHUB_HOOK_URL` 时，脚本只输出 `{}`，不会发送消息。
-- hook 脚本 stdout 应保持 JSON 输出，普通日志应写入 stderr，避免破坏 CLI hook 协议。
-- 回调服务建议只监听 `127.0.0.1`，并校验 `X-AgentHub-Token`。
 
 ## 官方文档
 
