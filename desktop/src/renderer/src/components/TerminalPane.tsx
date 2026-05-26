@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { hasClipboardImage } from "./terminal-clipboard";
+import { DEFAULT_TERMINAL_FONT_SIZE, resolveTerminalFontSize } from "./terminal-font-size";
+import { createTerminalOutputAckBatcher } from "./terminal-output-ack";
+import { resolveTerminalRendererMode } from "./terminal-renderer";
 import { fitAndReportTerminalSize, type TerminalSize } from "./terminal-size";
 
 type TerminalPaneProps = {
@@ -19,9 +26,11 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
   const terminalSurfaceRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const reportedSizeRef = useRef<TerminalSize | null>(null);
   const sessionIdRef = useRef(sessionId);
   const onResizeRef = useRef(onResize);
+  const fontSizeRef = useRef(DEFAULT_TERMINAL_FONT_SIZE);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
 
   useEffect(() => {
@@ -43,10 +52,31 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     terminalRef.current?.focus();
   }, []);
 
+  const pasteClipboardImage = useCallback(async (): Promise<boolean> => {
+    const currentSessionId = sessionIdRef.current;
+    if (!currentSessionId) {
+      return false;
+    }
+    const saved = await window.agenthub.saveClipboardImage({ sessionId: currentSessionId });
+    if (!saved) {
+      return false;
+    }
+    await window.agenthub.terminalInput({
+      sessionId: currentSessionId,
+      data: saved.terminalText,
+      source: "user",
+    });
+    terminalRef.current?.focus();
+    return true;
+  }, []);
+
   const pasteClipboard = useCallback(async () => {
     const currentSessionId = sessionIdRef.current;
     setContextMenu(null);
     if (!currentSessionId) {
+      return;
+    }
+    if (await pasteClipboardImage()) {
       return;
     }
     const text = await window.agenthub.readClipboardText();
@@ -57,7 +87,19 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     await window.agenthub.terminalInput({
       sessionId: currentSessionId,
       data: text,
+      source: "user",
     });
+    terminalRef.current?.focus();
+  }, [pasteClipboardImage]);
+
+  const searchTerminal = useCallback(() => {
+    setContextMenu(null);
+    const query = window.prompt("查找终端内容");
+    if (!query) {
+      terminalRef.current?.focus();
+      return;
+    }
+    searchAddonRef.current?.findNext(query, { incremental: false });
     terminalRef.current?.focus();
   }, []);
 
@@ -71,7 +113,7 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     const terminal = new Terminal({
       cursorBlink: true,
       fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, monospace',
-      fontSize: 13,
+      fontSize: fontSizeRef.current,
       lineHeight: 1.18,
       scrollback: 5000,
       windowsMode: true,
@@ -99,12 +141,59 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       },
     });
     const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
+    const ackBatcher = createTerminalOutputAckBatcher({
+      sendAck: (request) => {
+        void window.agenthub.terminalAck(request);
+      },
+    });
+    const rendererDisposables: Array<{ dispose(): void }> = [];
+    rendererDisposables.push(searchAddon);
+    const enableCanvasRenderer = () => {
+      try {
+        const canvasAddon = new CanvasAddon();
+        terminal.loadAddon(canvasAddon);
+        rendererDisposables.push(canvasAddon);
+      } catch {
+        // xterm's DOM renderer remains active when accelerated renderers are unavailable.
+      }
+    };
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    searchAddonRef.current = searchAddon;
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
     terminal.open(terminalSurface);
+    const rendererMode = resolveTerminalRendererMode(import.meta.env.VITE_AGENTHUB_TERMINAL_RENDERER);
+    if (rendererMode === "webgl") {
+      try {
+        const webglAddon = new WebglAddon();
+        terminal.loadAddon(webglAddon);
+        rendererDisposables.push(webglAddon);
+        const contextLossDisposable = webglAddon.onContextLoss(() => {
+          contextLossDisposable.dispose();
+          webglAddon.dispose();
+          enableCanvasRenderer();
+        });
+        rendererDisposables.push(contextLossDisposable);
+      } catch {
+        enableCanvasRenderer();
+      }
+    } else {
+      enableCanvasRenderer();
+    }
     terminal.focus();
+
+    const handlePaste = (event: ClipboardEvent) => {
+      if (!hasClipboardImage(event.clipboardData)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void pasteClipboardImage();
+    };
+    terminalSurface.addEventListener("paste", handlePaste, { capture: true });
 
     const dataSubscription = terminal.onData((data) => {
       const currentSessionId = sessionIdRef.current;
@@ -116,12 +205,15 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       void window.agenthub.terminalInput({
         sessionId: currentSessionId,
         data,
+        source: "user",
       });
     });
 
     const removeTerminalDataListener = window.agenthub.onTerminalData((event) => {
       if (event.sessionId === sessionIdRef.current) {
-        terminal.write(event.data);
+        terminal.write(event.data, () => {
+          ackBatcher.ackWrittenData(event.sessionId, event.data);
+        });
       }
     });
 
@@ -135,19 +227,42 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       );
     };
 
+    const handleZoomKeyDown = (event: KeyboardEvent) => {
+      const nextFontSize = resolveTerminalFontSize(fontSizeRef.current, event);
+
+      if (nextFontSize === fontSizeRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      fontSizeRef.current = nextFontSize;
+      terminal.options.fontSize = nextFontSize;
+      fitAndReport();
+      terminal.focus();
+    };
+
     const resizeObserver = new ResizeObserver(fitAndReport);
     resizeObserver.observe(terminalSurface);
+    terminalSurface.addEventListener("keydown", handleZoomKeyDown, { capture: true });
     fitAndReport();
 
     return () => {
       resizeObserver.disconnect();
+      terminalSurface.removeEventListener("keydown", handleZoomKeyDown, { capture: true });
+      terminalSurface.removeEventListener("paste", handlePaste, { capture: true });
       removeTerminalDataListener();
       dataSubscription.dispose();
+      ackBatcher.dispose();
+      for (const disposable of rendererDisposables) {
+        disposable.dispose();
+      }
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+      searchAddonRef.current = null;
     };
-  }, []);
+  }, [pasteClipboardImage]);
 
   useEffect(() => {
     const hideContextMenu = () => setContextMenu(null);
@@ -205,6 +320,9 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
           </button>
           <button type="button" role="menuitem" onClick={() => void pasteClipboard()} disabled={!sessionId}>
             粘贴
+          </button>
+          <button type="button" role="menuitem" onClick={searchTerminal}>
+            查找
           </button>
         </div>
       ) : null}

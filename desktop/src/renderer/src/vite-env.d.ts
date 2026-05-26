@@ -20,6 +20,8 @@ import type {
   RouteInputRequest,
   RouteInputResponse,
   RunHistoryDto,
+  SaveClipboardImageRequest,
+  SavedAttachmentDto,
   SessionErrorEvent,
   SessionExitEvent,
   StartOrchestrationRequest,
@@ -32,6 +34,7 @@ import type {
   TaskPlanActionRequest,
   TaskPlanDto,
   TaskPlanSourceDto,
+  TerminalAckRequest,
   TerminalDataEvent,
   TerminalInputRequest,
   TerminalResizeRequest,
@@ -64,8 +67,10 @@ declare global {
       listSessions(): Promise<StartPowerShellResponse[]>;
       terminalInput(request: TerminalInputRequest): Promise<void>;
       terminalResize(request: TerminalResizeRequest): Promise<void>;
+      terminalAck(request: TerminalAckRequest): Promise<void>;
       readClipboardText(): Promise<string>;
       writeClipboardText(request: ClipboardWriteTextRequest): Promise<void>;
+      saveClipboardImage(request?: SaveClipboardImageRequest): Promise<SavedAttachmentDto | null>;
       stopSession(sessionId: string): Promise<void>;
       routeInput(request: RouteInputRequest): Promise<RouteInputResponse>;
       listEvents(request?: WorkspaceRequest): Promise<AgentHubEventDto[]>;

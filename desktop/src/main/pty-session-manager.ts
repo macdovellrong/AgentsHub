@@ -8,6 +8,8 @@ import { RunLogStore } from "./log-store";
 import { EventStore } from "./event-store";
 import { getDefaultProfiles, type AgentProfile, type AgentProfileKind } from "./profile-store";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
+import { shouldBufferTerminalInput, type TerminalInputSource } from "./terminal-input-readiness";
+import { countUtf8Bytes, subtractAckedBytes } from "./terminal-output-ack";
 
 export type PtySpawnOptions = {
   name: string;
@@ -57,6 +59,8 @@ export type PtySession = {
 export type PtyDataEvent = {
   sessionId: string;
   data: string;
+  seq: number;
+  byteLength: number;
 };
 
 export type PtyExitEvent = {
@@ -88,6 +92,12 @@ type StoredSession = {
   dataSubscription: { dispose: () => void };
   exitSubscription: { dispose: () => void };
   persistenceQueue: Promise<void>;
+  outputSeq: number;
+  unackedBytes: number;
+  inputReady: boolean;
+  inputBuffer: string[];
+  inputReadyTimeout: ReturnType<typeof setTimeout> | null;
+  firstOutputReadyTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const POWERSHELL_COMMAND = "powershell.exe";
@@ -100,6 +110,8 @@ const POWERSHELL_ARGS = [
 ];
 
 const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
+export const INPUT_READY_FIRST_OUTPUT_DELAY_MS = 120;
+export const INPUT_READY_TIMEOUT_MS = 3000;
 
 export class NodePtyFactory implements PtyFactory {
   spawn(command: string, args: string[], options: PtySpawnOptions): PtyLike {
@@ -310,8 +322,17 @@ export class PtySessionManager extends EventEmitter {
       dataSubscription,
       exitSubscription,
       persistenceQueue: Promise.resolve(),
+      outputSeq: 0,
+      unackedBytes: 0,
+      inputReady: false,
+      inputBuffer: [],
+      inputReadyTimeout: null,
+      firstOutputReadyTimer: null,
     };
     this.sessions.set(session.sessionId, storedSession);
+    storedSession.inputReadyTimeout = setTimeout(() => {
+      this.markInputReady(session.sessionId);
+    }, INPUT_READY_TIMEOUT_MS);
     this.writeLocks.register({
       sessionId: session.sessionId,
       workspacePath,
@@ -334,8 +355,19 @@ export class PtySessionManager extends EventEmitter {
     return [...this.sessions.values()].map((stored) => ({ ...stored.session }));
   }
 
-  write(sessionId: string, data: string): void {
+  write(sessionId: string, data: string, source: TerminalInputSource = "program"): void {
     const stored = this.requireSession(sessionId);
+    if (source === "user" && !stored.inputReady) {
+      this.markInputReady(sessionId);
+    }
+    if (shouldBufferTerminalInput({ inputReady: stored.inputReady, source })) {
+      stored.inputBuffer.push(data);
+      return;
+    }
+    this.writeImmediately(stored, data);
+  }
+
+  private writeImmediately(stored: StoredSession, data: string): void {
     const submittedInput = splitSubmittedTerminalInput(data);
     if (!submittedInput) {
       stored.pty.write(data);
@@ -346,11 +378,17 @@ export class PtySessionManager extends EventEmitter {
     );
     for (const delayMs of getSubmitDelays(stored.session.kind, submittedInput.text)) {
       setTimeout(() => {
-        if (this.sessions.has(sessionId)) {
+        if (this.sessions.has(stored.session.sessionId)) {
           stored.pty.write("\r");
         }
       }, delayMs);
     }
+  }
+
+  ack(sessionId: string, byteLength: number): number {
+    const stored = this.requireSession(sessionId);
+    stored.unackedBytes = subtractAckedBytes(stored.unackedBytes, byteLength);
+    return stored.unackedBytes;
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
@@ -376,11 +414,21 @@ export class PtySessionManager extends EventEmitter {
       this.emitPtyError(stored.session.sessionId, error);
       return;
     }
-    this.emit("data", { sessionId: stored.session.sessionId, data } satisfies PtyDataEvent);
+    const byteLength = countUtf8Bytes(data);
+    stored.outputSeq += 1;
+    stored.unackedBytes += byteLength;
+    this.emit("data", {
+      sessionId: stored.session.sessionId,
+      data,
+      seq: stored.outputSeq,
+      byteLength,
+    } satisfies PtyDataEvent);
+    this.scheduleFirstOutputReady(stored);
   }
 
   private async handleExit(stored: StoredSession, exitCode: number | null): Promise<void> {
     stored.session.status = "exited";
+    this.clearInputReadyTimers(stored);
     try {
       await stored.persistenceQueue;
     } catch (error) {
@@ -420,5 +468,40 @@ export class PtySessionManager extends EventEmitter {
     }
     const message = error instanceof Error ? error.message : String(error);
     this.emit("error", { sessionId, message } satisfies PtyErrorEvent);
+  }
+
+  private scheduleFirstOutputReady(stored: StoredSession): void {
+    if (stored.inputReady || stored.firstOutputReadyTimer) {
+      return;
+    }
+    const sessionId = stored.session.sessionId;
+    stored.firstOutputReadyTimer = setTimeout(() => {
+      this.markInputReady(sessionId);
+    }, INPUT_READY_FIRST_OUTPUT_DELAY_MS);
+  }
+
+  private markInputReady(sessionId: string): void {
+    const stored = this.sessions.get(sessionId);
+    if (!stored || stored.inputReady) {
+      return;
+    }
+    stored.inputReady = true;
+    this.clearInputReadyTimers(stored);
+    const buffered = [...stored.inputBuffer];
+    stored.inputBuffer = [];
+    for (const data of buffered) {
+      this.writeImmediately(stored, data);
+    }
+  }
+
+  private clearInputReadyTimers(stored: StoredSession): void {
+    if (stored.inputReadyTimeout) {
+      clearTimeout(stored.inputReadyTimeout);
+      stored.inputReadyTimeout = null;
+    }
+    if (stored.firstOutputReadyTimer) {
+      clearTimeout(stored.firstOutputReadyTimer);
+      stored.firstOutputReadyTimer = null;
+    }
   }
 }

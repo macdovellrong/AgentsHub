@@ -2,11 +2,13 @@ import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventStore } from "./event-store";
 import { RunLogStore } from "./log-store";
 import {
   buildProfileLaunchArgs,
+  INPUT_READY_FIRST_OUTPUT_DELAY_MS,
+  INPUT_READY_TIMEOUT_MS,
   PtySessionManager,
   resolveProfileCommand,
   type PtyFactory,
@@ -140,6 +142,7 @@ function waitForCondition(condition: () => boolean, timeoutMs = 1000): Promise<v
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   if (workspacePath) {
     await rm(workspacePath, { recursive: true, force: true });
     workspacePath = undefined;
@@ -426,6 +429,34 @@ describe("PtySessionManager", () => {
     expect(events.map((event) => event.type)).toEqual(["session_started"]);
   });
 
+  it("emits sequenced terminal output and tracks acknowledged bytes", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+    const events: Array<{ sessionId: string; data: string; seq: number; byteLength: number }> = [];
+    manager.on("data", (event) => events.push(event));
+
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    factory.pty.emit("data", "ready");
+    factory.pty.emit("data", "中文");
+    await waitForCondition(() => events.length === 2);
+
+    expect(events).toEqual([
+      { sessionId: session.sessionId, data: "ready", seq: 1, byteLength: 5 },
+      { sessionId: session.sessionId, data: "中文", seq: 2, byteLength: 6 },
+    ]);
+    expect(manager.ack(session.sessionId, 5)).toBe(6);
+    expect(manager.ack(session.sessionId, 99)).toBe(0);
+  });
+
   it("persists exit metadata before emitting exit", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();
@@ -529,13 +560,82 @@ describe("PtySessionManager", () => {
       rows: 24,
     });
 
-    manager.write(session.sessionId, "dir");
+    manager.write(session.sessionId, "dir", "user");
     manager.resize(session.sessionId, 120, 40);
     manager.stop(session.sessionId);
 
     expect(factory.pty.writes).toEqual(["dir"]);
     expect(factory.pty.resizes).toEqual([[120, 40]]);
     expect(factory.pty.killed).toBe(true);
+  });
+
+  it("buffers programmatic input until the first terminal output settles", async () => {
+    vi.useFakeTimers();
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+    const dataEvent = new Promise<void>((resolve) => {
+      manager.on("data", () => resolve());
+    });
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    manager.write(session.sessionId, "dir\r\n");
+    expect(factory.pty.writes).toEqual([]);
+
+    factory.pty.emit("data", "AgentHub PowerShell ready\r\n");
+    await dataEvent;
+    await vi.advanceTimersByTimeAsync(INPUT_READY_FIRST_OUTPUT_DELAY_MS);
+
+    expect(factory.pty.writes).toEqual(["dir"]);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(factory.pty.writes).toEqual(["dir", "\r"]);
+  });
+
+  it("flushes buffered programmatic input after the ready timeout", async () => {
+    vi.useFakeTimers();
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    manager.write(session.sessionId, "dir\r\n");
+    expect(factory.pty.writes).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(INPUT_READY_TIMEOUT_MS);
+
+    expect(factory.pty.writes).toEqual(["dir"]);
+  });
+
+  it("does not buffer direct user terminal input", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+    const session = await manager.startPowerShell({
+      workspacePath,
+      cols: 80,
+      rows: 24,
+    });
+
+    manager.write(session.sessionId, "dir", "user");
+
+    expect(factory.pty.writes).toEqual(["dir"]);
   });
 
   it("submits batched terminal input by writing text and enter separately", async () => {
@@ -552,7 +652,7 @@ describe("PtySessionManager", () => {
       rows: 24,
     });
 
-    manager.write(session.sessionId, "ask Claude\r\n");
+    manager.write(session.sessionId, "ask Claude\r\n", "user");
 
     expect(factory.pty.writes).toEqual(["ask Claude"]);
     await waitForCondition(() => factory.pty.writes.length === 2);
@@ -585,7 +685,7 @@ describe("PtySessionManager", () => {
       24,
     );
 
-    manager.write(session.sessionId, "line 1\nline 2\r\n");
+    manager.write(session.sessionId, "line 1\nline 2\r\n", "user");
 
     expect(factory.pty.writes).toEqual(["\x1b[200~line 1\nline 2\x1b[201~"]);
     await waitForCondition(() => factory.pty.writes.length === 2);
@@ -618,7 +718,7 @@ describe("PtySessionManager", () => {
       24,
     );
 
-    manager.write(session.sessionId, "review this proposal\nwith several lines\nand submit it\r\n");
+    manager.write(session.sessionId, "review this proposal\nwith several lines\nand submit it\r\n", "user");
 
     await waitForCondition(() => factory.pty.writes.length === 3, 2000);
     expect(factory.pty.writes).toEqual([

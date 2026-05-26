@@ -20,6 +20,8 @@ import {
   type RouteInputRequest,
   type RouteInputResponse,
   type RunHistoryDto,
+  type SaveClipboardImageRequest,
+  type SavedAttachmentDto,
   type SessionErrorEvent,
   type SessionExitEvent,
   type StartOrchestrationRequest,
@@ -32,6 +34,7 @@ import {
   type TaskPlanActionRequest,
   type TaskPlanDto,
   type TaskPlanSourceDto,
+  type TerminalAckRequest,
   type TerminalDataEvent,
   type TerminalInputRequest,
   type TerminalResizeRequest,
@@ -110,12 +113,20 @@ const agenthub = {
     return ipcRenderer.invoke(IpcChannels.TerminalResize, request) as Promise<void>;
   },
 
+  terminalAck(request: TerminalAckRequest): Promise<void> {
+    return ipcRenderer.invoke(IpcChannels.TerminalAck, request) as Promise<void>;
+  },
+
   readClipboardText(): Promise<string> {
     return ipcRenderer.invoke(IpcChannels.ClipboardReadText) as Promise<string>;
   },
 
   writeClipboardText(request: ClipboardWriteTextRequest): Promise<void> {
     return ipcRenderer.invoke(IpcChannels.ClipboardWriteText, request) as Promise<void>;
+  },
+
+  saveClipboardImage(request: SaveClipboardImageRequest = {}): Promise<SavedAttachmentDto | null> {
+    return ipcRenderer.invoke(IpcChannels.AttachmentsSaveClipboardImage, request) as Promise<SavedAttachmentDto | null>;
   },
 
   stopSession(sessionId: string): Promise<void> {

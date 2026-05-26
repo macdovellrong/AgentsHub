@@ -6,9 +6,11 @@ import {
   IpcChannels,
   isConversationActionRequest,
   isCreateTaskPlanRequest,
+  isSaveClipboardImageRequest,
   isStartManagerConversationRequest,
   isStartPairNegotiationConversationRequest,
   isStartRoundtableConversationRequest,
+  isTerminalAckRequest,
   isTaskPlanActionRequest,
   isWorkspaceRequest,
   type AppendEventRequest,
@@ -22,6 +24,7 @@ import {
   type ForwardActionRequest,
   type ReadRunRawLogRequest,
   type RouteInputRequest,
+  type SaveClipboardImageRequest,
   type StartManagerConversationRequest,
   type StartOrchestrationRequest,
   type StartPairNegotiationConversationRequest,
@@ -29,6 +32,7 @@ import {
   type StartPowerShellRequest,
   type StartRoundtableConversationRequest,
   type TaskPlanActionRequest,
+  type TerminalInputRequest,
   type UpdateProfileRequest,
   type UpdateTaskRequest,
   type WorkspaceActivateRequest,
@@ -36,6 +40,7 @@ import {
   type WorkspaceOpenFolderRequest,
   type WorkspaceRequest,
 } from "../shared/ipc";
+import { AttachmentStore } from "./attachment-store";
 import { EventStore } from "./event-store";
 import { hideDefaultApplicationMenu } from "./application-menu";
 import { ConversationOrchestrator } from "./conversation-orchestrator";
@@ -77,6 +82,7 @@ const conversationStore = new ConversationStore();
 const taskStore = new TaskStore();
 const taskPlanStore = new TaskPlanStore();
 const teamStore = new TeamStore();
+const attachmentStore = new AttachmentStore();
 const runHistoryStore = new RunHistoryStore();
 const writeLocks = new WorkspaceWriteLockService();
 let conversationOrchestrator: ConversationOrchestrator | null = null;
@@ -194,6 +200,17 @@ async function initializeWorkspaces(): Promise<void> {
 
 function resolveRequestWorkspace(workspacePath?: string): string {
   return resolveWorkspacePath(workspacePath, activeWorkspacePath);
+}
+
+function resolveAttachmentWorkspace(request: SaveClipboardImageRequest): string {
+  if (request.sessionId) {
+    const session = manager.listSessions().find((candidate) => candidate.sessionId === request.sessionId);
+    if (!session) {
+      throw new Error(`Unknown session: ${request.sessionId}`);
+    }
+    return session.workspacePath;
+  }
+  return resolveRequestWorkspace(request.workspacePath);
 }
 
 function toSessionResponse(session: PtySession): {
@@ -463,6 +480,22 @@ function registerIpcHandlers(): void {
     clipboard.writeText(request.text);
   });
 
+  ipcMain.handle(IpcChannels.AttachmentsSaveClipboardImage, async (_event, request: unknown = {}) => {
+    if (!isSaveClipboardImageRequest(request)) {
+      throw new Error("Invalid clipboard image request");
+    }
+    const image = clipboard.readImage();
+    if (image.isEmpty()) {
+      return null;
+    }
+    return attachmentStore.saveImage({
+      workspacePath: resolveAttachmentWorkspace(request),
+      mimeType: "image/png",
+      fileName: request.fileName ?? "clipboard-image.png",
+      data: image.toPNG(),
+    });
+  });
+
   ipcMain.handle(IpcChannels.ConversationsList, (_event, request: WorkspaceRequest = {}) =>
     conversationStore.list(resolveRequestWorkspace(request.workspacePath)),
   );
@@ -563,8 +596,15 @@ function registerIpcHandlers(): void {
     return decision.ok ? { ok: true } : { ok: false, reason: decision.reason };
   });
 
-  ipcMain.handle(IpcChannels.TerminalInput, (_event, request: { sessionId: string; data: string }) => {
-    manager.write(request.sessionId, request.data);
+  ipcMain.handle(IpcChannels.TerminalInput, (_event, request: TerminalInputRequest) => {
+    manager.write(request.sessionId, request.data, request.source);
+  });
+
+  ipcMain.handle(IpcChannels.TerminalAck, (_event, request: unknown) => {
+    if (!isTerminalAckRequest(request)) {
+      throw new Error("Invalid terminal ACK request");
+    }
+    manager.ack(request.sessionId, request.byteLength);
   });
 
   ipcMain.handle(IpcChannels.TerminalResize, (_event, request: { sessionId: string; cols: number; rows: number }) => {

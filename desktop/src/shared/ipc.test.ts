@@ -7,9 +7,11 @@ import {
   isStartRoundtableConversationRequest,
   isEventAppendedEvent,
   isSessionErrorEvent,
+  isTerminalAckRequest,
   isTerminalDataEvent,
   isSessionExitEvent,
   type SessionErrorEvent,
+  type TerminalAckRequest,
   type TerminalDataEvent,
 } from "./ipc";
 
@@ -20,6 +22,7 @@ describe("IPC contract", () => {
     expect(IpcChannels.WorkspaceOpenFolder).toBe("workspace:openFolder");
     expect(IpcChannels.StartPowerShell).toBe("agent:startPowerShell");
     expect(IpcChannels.TerminalData).toBe("terminal:data");
+    expect(IpcChannels.TerminalAck).toBe("terminal:ack");
     expect(IpcChannels.EventAppended).toBe("events:appended");
     expect(IpcChannels.ConversationsList).toBe("conversations:list");
     expect(IpcChannels.ConversationsStartManager).toBe("conversations:startManager");
@@ -30,16 +33,33 @@ describe("IPC contract", () => {
     expect(IpcChannels.ConversationsStop).toBe("conversations:stop");
     expect(IpcChannels.ClipboardReadText).toBe("clipboard:readText");
     expect(IpcChannels.ClipboardWriteText).toBe("clipboard:writeText");
+    expect(IpcChannels.AttachmentsSaveClipboardImage).toBe("attachments:saveClipboardImage");
   });
 
   it("recognizes terminal data events", () => {
     const event: TerminalDataEvent = {
       sessionId: "session-1",
       data: "\u001b[32mready\u001b[0m",
+      seq: 1,
+      byteLength: 18,
     };
 
     expect(isTerminalDataEvent(event)).toBe(true);
     expect(isTerminalDataEvent({ sessionId: "session-1" })).toBe(false);
+    expect(isTerminalDataEvent({ sessionId: "session-1", data: "ready", seq: 1, byteLength: "5" })).toBe(false);
+    expect(isTerminalDataEvent({ sessionId: "session-1", data: "ready", seq: 0, byteLength: 5 })).toBe(false);
+  });
+
+  it("recognizes terminal ACK requests", () => {
+    const request: TerminalAckRequest = {
+      sessionId: "session-1",
+      byteLength: 128,
+    };
+
+    expect(isTerminalAckRequest(request)).toBe(true);
+    expect(isTerminalAckRequest({ sessionId: "session-1", byteLength: 0 })).toBe(false);
+    expect(isTerminalAckRequest({ sessionId: "session-1", byteLength: Number.NaN })).toBe(false);
+    expect(isTerminalAckRequest({ sessionId: 42, byteLength: 128 })).toBe(false);
   });
 
   it("recognizes session exit events", () => {

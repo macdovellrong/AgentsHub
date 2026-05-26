@@ -10,4 +10,5 @@ desktop/dev-smoke*.log
 desktop/dev-start*.log
 desktop/electron-*.png
 desktop/.agenthub-dev/
+OtherProject/
 *.egg-info/

@@ -17,6 +17,7 @@ export const IpcChannels = {
   TerminalInput: "terminal:input",
   TerminalResize: "terminal:resize",
   TerminalData: "terminal:data",
+  TerminalAck: "terminal:ack",
   SessionExit: "session:exit",
   SessionError: "session:error",
   RouteInput: "input:route",
@@ -49,6 +50,7 @@ export const IpcChannels = {
   ConversationsStop: "conversations:stop",
   ClipboardReadText: "clipboard:readText",
   ClipboardWriteText: "clipboard:writeText",
+  AttachmentsSaveClipboardImage: "attachments:saveClipboardImage",
   WorkspaceLockStatus: "workspace-lock:status",
 } as const;
 
@@ -97,6 +99,7 @@ export type StartProfileRequest = {
 export type TerminalInputRequest = {
   sessionId: string;
   data: string;
+  source?: "user" | "program";
 };
 
 export type TerminalResizeRequest = {
@@ -109,9 +112,29 @@ export type ClipboardWriteTextRequest = {
   text: string;
 };
 
+export type SaveClipboardImageRequest = WorkspaceRequest & {
+  sessionId?: string;
+  fileName?: string;
+};
+
+export type SavedAttachmentDto = {
+  absolutePath: string;
+  relativePath: string;
+  terminalText: string;
+  bytes: number;
+  mimeType: string;
+};
+
 export type TerminalDataEvent = {
   sessionId: string;
   data: string;
+  seq: number;
+  byteLength: number;
+};
+
+export type TerminalAckRequest = {
+  sessionId: string;
+  byteLength: number;
 };
 
 export type SessionExitEvent = {
@@ -349,7 +372,20 @@ export function isTerminalDataEvent(value: unknown): value is TerminalDataEvent 
     return false;
   }
   const candidate = value as Record<string, unknown>;
-  return typeof candidate.sessionId === "string" && typeof candidate.data === "string";
+  return (
+    typeof candidate.sessionId === "string" &&
+    typeof candidate.data === "string" &&
+    isPositiveInteger(candidate.seq) &&
+    isPositiveInteger(candidate.byteLength)
+  );
+}
+
+export function isTerminalAckRequest(value: unknown): value is TerminalAckRequest {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.sessionId === "string" && isPositiveInteger(candidate.byteLength);
 }
 
 export function isSessionExitEvent(value: unknown): value is SessionExitEvent {
@@ -484,6 +520,21 @@ export function isWorkspaceRequest(value: unknown): value is WorkspaceRequest {
   return isOptionalString(candidate.workspacePath);
 }
 
+export function isSaveClipboardImageRequest(value: unknown): value is SaveClipboardImageRequest {
+  if (value === undefined) {
+    return true;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    isOptionalString(candidate.workspacePath) &&
+    isOptionalString(candidate.sessionId) &&
+    isOptionalString(candidate.fileName)
+  );
+}
+
 export function isCreateTaskPlanRequest(value: unknown): value is CreateTaskPlanRequest {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -530,6 +581,10 @@ function isOptionalDeliveryStatus(value: unknown): boolean {
 
 function isOptionalNumberOrNull(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
 function isOptionalRecord(value: unknown): boolean {
