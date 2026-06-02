@@ -36,7 +36,7 @@ AgentHub 会确保 `config.toml` 中启用：
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 并在 `hooks.json` 的 `Stop` 事件中追加 AgentHub command hook。

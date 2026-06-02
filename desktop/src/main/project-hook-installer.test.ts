@@ -68,7 +68,8 @@ describe("installProjectAgentHooks", () => {
 
     const codexConfig = await readFile(path.join(workspacePath, ".codex", "config.toml"), "utf8");
     expect(codexConfig).toContain("other_feature = true");
-    expect(codexConfig).toContain("codex_hooks = true");
+    expect(codexConfig).toContain("hooks = true");
+    expect(codexConfig).not.toContain("codex_hooks");
 
     const codexHooks = JSON.parse(await readFile(path.join(workspacePath, ".codex", "hooks.json"), "utf8"));
     expect(codexHooks.hooks.Stop).toHaveLength(2);
@@ -87,5 +88,23 @@ describe("installProjectAgentHooks", () => {
     expect(JSON.stringify(geminiSettings)).toContain("existing-gemini");
     expect(JSON.stringify(geminiSettings.hooks.AfterAgent)).toContain("agenthub_gemini_after_agent.py");
     expect(JSON.stringify(geminiSettings).match(/agenthub_gemini_after_agent\.py/g)).toHaveLength(1);
+  });
+
+  it("removes deprecated Codex hook feature flags from existing project configs", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-project-hooks-"));
+    const sourceHooksDir = await createHookSource();
+    await mkdir(path.join(workspacePath, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(workspacePath, ".codex", "config.toml"),
+      "[features]\ncodex_hooks = true\nother_feature = true\n",
+      "utf8",
+    );
+
+    await installProjectAgentHooks(workspacePath, { sourceHooksDir });
+
+    const codexConfig = await readFile(path.join(workspacePath, ".codex", "config.toml"), "utf8");
+    expect(codexConfig).toContain("hooks = true");
+    expect(codexConfig).toContain("other_feature = true");
+    expect(codexConfig).not.toContain("codex_hooks");
   });
 });

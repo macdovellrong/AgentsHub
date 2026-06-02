@@ -146,13 +146,13 @@ async function updateCodexConfig(configPath: string): Promise<void> {
 function ensureCodexHooksFeature(raw: string): string {
   const text = stripBom(raw).replace(/\r\n/g, "\n");
   if (!text.trim()) {
-    return "[features]\ncodex_hooks = true\n";
+    return "[features]\nhooks = true\n";
   }
 
   const lines = text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
   const sectionStart = lines.findIndex((line) => line.trim() === "[features]");
   if (sectionStart < 0) {
-    return `${lines.join("\n").trimEnd()}\n\n[features]\ncodex_hooks = true\n`;
+    return `${lines.join("\n").trimEnd()}\n\n[features]\nhooks = true\n`;
   }
 
   let sectionEnd = lines.length;
@@ -164,13 +164,19 @@ function ensureCodexHooksFeature(raw: string): string {
     }
   }
 
-  const hookLineIndex = lines
-    .slice(sectionStart + 1, sectionEnd)
-    .findIndex((line) => /^\s*codex_hooks\s*=/.test(line));
+  const featureLines = lines.slice(sectionStart + 1, sectionEnd);
+  const hookLineIndex = featureLines.findIndex((line) => /^\s*hooks\s*=/.test(line));
   if (hookLineIndex >= 0) {
-    lines[sectionStart + 1 + hookLineIndex] = "codex_hooks = true";
+    lines[sectionStart + 1 + hookLineIndex] = "hooks = true";
   } else {
-    lines.splice(sectionStart + 1, 0, "codex_hooks = true");
+    lines.splice(sectionStart + 1, 0, "hooks = true");
+    sectionEnd += 1;
+  }
+
+  for (let index = sectionEnd - 1; index > sectionStart; index -= 1) {
+    if (/^\s*codex_hooks\s*=/.test(lines[index])) {
+      lines.splice(index, 1);
+    }
   }
   return `${lines.join("\n").trimEnd()}\n`;
 }
