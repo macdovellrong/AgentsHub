@@ -8,6 +8,7 @@ import {
   buildRoutedTerminalMessage,
   buildTerminalSubmitInput,
   buildProfileSavePayload,
+  buildComposerDraftStorageKey,
   canResumeProfile,
   clampTaskPlanSplitRatio,
   countOnlineSessionsForWorkspace,
@@ -23,6 +24,9 @@ import {
   getMentionCandidates,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
+  isPlainEnterKey,
+  isComposerSubmitKey,
+  normalizeComposerSubmitShortcut,
   pickSelectedSessionId,
   splitListInput,
 } from "./dashboard-helpers";
@@ -46,6 +50,35 @@ describe("splitListInput", () => {
 
   it("trims empty items", () => {
     expect(splitListInput("  @codex\n\n@coder  ")).toEqual(["@codex", "@coder"]);
+  });
+});
+
+describe("isPlainEnterKey", () => {
+  it("submits only plain Enter so Shift+Enter can insert a newline", () => {
+    expect(isPlainEnterKey({ key: "Enter", shiftKey: false })).toBe(true);
+    expect(isPlainEnterKey({ key: "Enter", shiftKey: true })).toBe(false);
+    expect(isPlainEnterKey({ key: "a", shiftKey: false })).toBe(false);
+  });
+});
+
+describe("composer input helpers", () => {
+  it("uses separate draft storage keys per workspace", () => {
+    expect(buildComposerDraftStorageKey("C:\\work\\AgentHub")).toBe("agenthub.composerDraft:c:/work/agenthub");
+    expect(buildComposerDraftStorageKey("")).toBe("agenthub.composerDraft:default");
+  });
+
+  it("normalizes unsupported submit shortcuts to Enter", () => {
+    expect(normalizeComposerSubmitShortcut("ctrlEnter")).toBe("ctrlEnter");
+    expect(normalizeComposerSubmitShortcut("other")).toBe("enter");
+    expect(normalizeComposerSubmitShortcut(null)).toBe("enter");
+  });
+
+  it("supports Enter or Ctrl+Enter submit modes without blocking Shift+Enter", () => {
+    expect(isComposerSubmitKey({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false }, "enter")).toBe(true);
+    expect(isComposerSubmitKey({ key: "Enter", shiftKey: true, ctrlKey: false, metaKey: false }, "enter")).toBe(false);
+    expect(isComposerSubmitKey({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false }, "ctrlEnter")).toBe(false);
+    expect(isComposerSubmitKey({ key: "Enter", shiftKey: false, ctrlKey: true, metaKey: false }, "ctrlEnter")).toBe(true);
+    expect(isComposerSubmitKey({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: true }, "ctrlEnter")).toBe(true);
   });
 });
 

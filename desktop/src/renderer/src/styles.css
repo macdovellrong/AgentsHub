@@ -649,8 +649,18 @@ label {
   position: relative;
 }
 
-.composer-row input {
+.composer-row textarea {
   flex: 1 1 260px;
+  line-height: 1.35;
+  max-height: 120px;
+  min-height: 38px;
+  resize: vertical;
+}
+
+.composer-shortcut-select {
+  flex: 0 0 auto;
+  min-width: 132px;
+  width: auto;
 }
 
 .conversation-manager-list {
@@ -761,7 +771,8 @@ label {
   white-space: pre-wrap;
 }
 
-.input-row input {
+.input-row input,
+.input-row textarea {
   min-width: 0;
 }
 

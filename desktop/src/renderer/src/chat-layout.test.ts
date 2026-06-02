@@ -14,6 +14,24 @@ function cssBlock(source: string, selector: string): string {
 }
 
 describe("chat layout", () => {
+  it("uses a multiline textarea for the chat composer", () => {
+    const appSource = readRendererFile("App.tsx");
+    const styles = readRendererFile("styles.css");
+
+    expect(appSource).toContain('<textarea\n                className="composer-input"');
+    expect(appSource).toContain("resizeComposerInput");
+    expect(cssBlock(styles, ".composer-row textarea")).toContain("flex: 1 1 260px");
+  });
+
+  it("renders a compact composer shortcut selector", () => {
+    const appSource = readRendererFile("App.tsx");
+    const styles = readRendererFile("styles.css");
+
+    expect(appSource).toContain('className="composer-shortcut-select"');
+    expect(appSource).toContain('value="ctrlEnter"');
+    expect(cssBlock(styles, ".composer-shortcut-select")).toContain("flex: 0 0 auto");
+  });
+
   it("pins user messages to the right and non-user messages to the left responsively", () => {
     const styles = readRendererFile("styles.css");
 

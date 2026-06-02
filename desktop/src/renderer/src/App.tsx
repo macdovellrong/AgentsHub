@@ -23,6 +23,7 @@ import type {
 } from "../../shared/ipc";
 import {
   appendTerminalPreview,
+  buildComposerDraftStorageKey,
   applyMentionSelection,
   buildQuotedForwardMessage,
   buildProfileSavePayload,
@@ -43,7 +44,11 @@ import {
   getMentionCandidates,
   findOnlineSessionForProfile,
   findOnlineSessionForTarget,
+  isComposerSubmitKey,
+  isPlainEnterKey,
+  normalizeComposerSubmitShortcut,
   pickSelectedSessionId,
+  type ComposerSubmitShortcut,
   type MentionQuery,
   profileToFields,
   type QuotedForwardMessage,
@@ -53,6 +58,7 @@ import { TerminalPane } from "./components/TerminalPane";
 import { UI_TEXT, formatEventTypeLabel, formatStatusLabel } from "./ui-text";
 
 const RUN_STATUSES: Array<RunHistoryDto["status"] | "all"> = ["all", "running", "exited"];
+const COMPOSER_SHORTCUT_STORAGE_KEY = "agenthub.composerSubmitShortcut";
 const LAYOUT_STORAGE_KEYS = {
   sidebarCollapsed: "agenthub.layout.sidebarCollapsed",
   taskPlanCollapsed: "agenthub.layout.taskPlanCollapsed",
@@ -147,8 +153,46 @@ function writeStoredLayoutValue(key: string, value: string): void {
   }
 }
 
+function readStoredText(key: string): string {
+  try {
+    return window.localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredDraftValue(key: string, value: string): void {
+  try {
+    if (value) {
+      window.localStorage.setItem(key, value);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Draft persistence is optional; keep typing responsive if storage is unavailable.
+  }
+}
+
+function readStoredComposerSubmitShortcut(): ComposerSubmitShortcut {
+  try {
+    return normalizeComposerSubmitShortcut(window.localStorage.getItem(COMPOSER_SHORTCUT_STORAGE_KEY));
+  } catch {
+    return "enter";
+  }
+}
+
+function resizeComposerInput(input: HTMLTextAreaElement | null): void {
+  if (!input) {
+    return;
+  }
+  input.style.height = "auto";
+  input.style.height = `${Math.max(38, Math.min(input.scrollHeight, 120))}px`;
+  input.style.overflowY = input.scrollHeight > 120 ? "auto" : "hidden";
+}
+
 export function App(): React.JSX.Element {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerDraftKeyRef = useRef(buildComposerDraftStorageKey(""));
   const eventListRef = useRef<HTMLDivElement | null>(null);
   const centerStackRef = useRef<HTMLDivElement | null>(null);
   const [workspacePath, setWorkspacePath] = useState("");
@@ -165,6 +209,9 @@ export function App(): React.JSX.Element {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [startingProfileIds, setStartingProfileIds] = useState<Set<string>>(() => new Set());
   const [inputText, setInputText] = useState("");
+  const [composerSubmitShortcut, setComposerSubmitShortcut] = useState<ComposerSubmitShortcut>(
+    readStoredComposerSubmitShortcut,
+  );
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -240,6 +287,23 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     writeStoredLayoutValue(LAYOUT_STORAGE_KEYS.taskPlanSplitRatio, String(taskPlanSplitRatio));
   }, [taskPlanSplitRatio]);
+
+  useEffect(() => {
+    writeStoredLayoutValue(COMPOSER_SHORTCUT_STORAGE_KEY, composerSubmitShortcut);
+  }, [composerSubmitShortcut]);
+
+  useEffect(() => {
+    const nextKey = buildComposerDraftStorageKey(workspacePath);
+    composerDraftKeyRef.current = nextKey;
+    setInputText(readStoredText(nextKey));
+    setMentionQuery(null);
+    window.requestAnimationFrame(() => resizeComposerInput(inputRef.current));
+  }, [workspacePath]);
+
+  useEffect(() => {
+    writeStoredDraftValue(composerDraftKeyRef.current, inputText);
+    resizeComposerInput(inputRef.current);
+  }, [inputText]);
 
   const refreshMentionQuery = useCallback((text: string, cursor: number | null) => {
     if (cursor === null) {
@@ -859,7 +923,7 @@ export function App(): React.JSX.Element {
   );
 
   const handleComposerKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (mentionQuery && mentionCandidates.length > 0) {
         if (event.key === "ArrowDown") {
           event.preventDefault();
@@ -871,7 +935,7 @@ export function App(): React.JSX.Element {
           setSelectedMentionIndex((current) => (current - 1 + mentionCandidates.length) % mentionCandidates.length);
           return;
         }
-        if (event.key === "Enter") {
+        if (isPlainEnterKey(event)) {
           event.preventDefault();
           selectMentionCandidate(mentionCandidates[selectedMentionIndex]?.id ?? mentionCandidates[0].id);
           return;
@@ -884,11 +948,12 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      if (event.key === "Enter") {
+      if (isComposerSubmitKey(event, composerSubmitShortcut)) {
+        event.preventDefault();
         void routeMessage();
       }
     },
-    [mentionCandidates, mentionQuery, routeMessage, selectMentionCandidate, selectedMentionIndex],
+    [composerSubmitShortcut, mentionCandidates, mentionQuery, routeMessage, selectMentionCandidate, selectedMentionIndex],
   );
 
   const loadRunRawLog = useCallback(
@@ -1409,8 +1474,10 @@ export function App(): React.JSX.Element {
                   })}
                 </div>
               ) : null}
-              <input
+              <textarea
+                className="composer-input"
                 ref={inputRef}
+                rows={2}
                 value={inputText}
                 onChange={(event) => {
                   setInputText(event.target.value);
@@ -1425,6 +1492,16 @@ export function App(): React.JSX.Element {
                 onKeyDown={handleComposerKeyDown}
                 placeholder={UI_TEXT.placeholders.routedInput}
               />
+              <select
+                aria-label="发送快捷键"
+                className="composer-shortcut-select"
+                value={composerSubmitShortcut}
+                onChange={(event) => setComposerSubmitShortcut(normalizeComposerSubmitShortcut(event.target.value))}
+                title="发送快捷键"
+              >
+                <option value="enter">Enter 发送</option>
+                <option value="ctrlEnter">Ctrl+Enter 发送</option>
+              </select>
               <button type="button" onClick={() => void routeMessage()}>
                 {UI_TEXT.buttons.send}
               </button>

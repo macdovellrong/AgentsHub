@@ -29,6 +29,8 @@ export type QuotedForwardMessage = {
   message: string;
 };
 
+export type ComposerSubmitShortcut = "enter" | "ctrlEnter";
+
 const CONVERSATION_EVENT_TYPES = new Set<AgentHubEventDto["type"]>([
   "user_message",
   "agent_output",
@@ -64,6 +66,32 @@ export function splitListInput(value: string): string[] {
     .split(/\s+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+export function isPlainEnterKey(event: { key: string; shiftKey: boolean }): boolean {
+  return event.key === "Enter" && !event.shiftKey;
+}
+
+export function normalizeComposerSubmitShortcut(value: string | null): ComposerSubmitShortcut {
+  return value === "ctrlEnter" ? "ctrlEnter" : "enter";
+}
+
+export function isComposerSubmitKey(
+  event: { key: string; shiftKey: boolean; ctrlKey?: boolean; metaKey?: boolean },
+  shortcut: ComposerSubmitShortcut,
+): boolean {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return false;
+  }
+  if (shortcut === "ctrlEnter") {
+    return Boolean(event.ctrlKey || event.metaKey);
+  }
+  return !event.ctrlKey && !event.metaKey;
+}
+
+export function buildComposerDraftStorageKey(workspacePath: string): string {
+  const normalized = normalizeWorkspacePath(workspacePath) ?? "default";
+  return `agenthub.composerDraft:${normalized}`;
 }
 
 export function buildProfileSavePayload(
