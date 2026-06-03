@@ -5,8 +5,11 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import type { ProfileKind } from "../../../shared/ipc";
+import { createCodexTerminalDraftTracker } from "./terminal-codex-draft";
 import { hasClipboardImage } from "./terminal-clipboard";
 import { DEFAULT_TERMINAL_FONT_SIZE, resolveTerminalFontSize } from "./terminal-font-size";
+import { createTerminalInputQueue, type QueuedTerminalInputSender } from "./terminal-input-queue";
 import { isTerminalSoftNewlineKey, sendTerminalSoftNewline } from "./terminal-keyboard";
 import { createTerminalOutputAckBatcher } from "./terminal-output-ack";
 import { resolveTerminalRendererMode } from "./terminal-renderer";
@@ -14,6 +17,7 @@ import { fitAndReportTerminalSize, type TerminalSize } from "./terminal-size";
 
 type TerminalPaneProps = {
   sessionId: string | null;
+  profileKind: ProfileKind | null;
   onResize(cols: number, rows: number): void;
 };
 
@@ -23,21 +27,35 @@ type TerminalContextMenu = {
   hasSelection: boolean;
 };
 
-export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.JSX.Element {
+export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneProps): React.JSX.Element {
   const terminalSurfaceRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const reportedSizeRef = useRef<TerminalSize | null>(null);
   const sessionIdRef = useRef(sessionId);
+  const profileKindRef = useRef(profileKind);
   const onResizeRef = useRef(onResize);
   const fontSizeRef = useRef(DEFAULT_TERMINAL_FONT_SIZE);
+  const queuedTerminalInputRef = useRef<QueuedTerminalInputSender | null>(null);
+  const codexDraftRef = useRef(createCodexTerminalDraftTracker());
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
+
+  if (!queuedTerminalInputRef.current) {
+    queuedTerminalInputRef.current = createTerminalInputQueue((request) => window.agenthub.terminalInput(request));
+  }
+  const sendQueuedTerminalInput = queuedTerminalInputRef.current;
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
     reportedSizeRef.current = null;
+    codexDraftRef.current.reset();
   }, [sessionId]);
+
+  useEffect(() => {
+    profileKindRef.current = profileKind;
+    codexDraftRef.current.reset();
+  }, [profileKind]);
 
   useEffect(() => {
     onResizeRef.current = onResize;
@@ -53,6 +71,12 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     terminalRef.current?.focus();
   }, []);
 
+  const recordCodexTerminalInput = useCallback((data: string) => {
+    if (profileKindRef.current === "codex") {
+      codexDraftRef.current.recordUserInput(data);
+    }
+  }, []);
+
   const pasteClipboardImage = useCallback(async (): Promise<boolean> => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
@@ -62,14 +86,15 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     if (!saved) {
       return false;
     }
-    await window.agenthub.terminalInput({
+    sendQueuedTerminalInput({
       sessionId: currentSessionId,
       data: saved.terminalText,
       source: "user",
     });
+    recordCodexTerminalInput(saved.terminalText);
     terminalRef.current?.focus();
     return true;
-  }, []);
+  }, [recordCodexTerminalInput, sendQueuedTerminalInput]);
 
   const pasteClipboard = useCallback(async () => {
     const currentSessionId = sessionIdRef.current;
@@ -85,13 +110,14 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       terminalRef.current?.focus();
       return;
     }
-    await window.agenthub.terminalInput({
+    sendQueuedTerminalInput({
       sessionId: currentSessionId,
       data: text,
       source: "user",
     });
+    recordCodexTerminalInput(text);
     terminalRef.current?.focus();
-  }, [pasteClipboardImage]);
+  }, [pasteClipboardImage, recordCodexTerminalInput, sendQueuedTerminalInput]);
 
   const searchTerminal = useCallback(() => {
     setContextMenu(null);
@@ -172,7 +198,12 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       }
       event.preventDefault();
       event.stopPropagation();
-      void sendTerminalSoftNewline(sessionIdRef.current, window.agenthub.terminalInput);
+      void sendTerminalSoftNewline(
+        sessionIdRef.current,
+        profileKindRef.current,
+        sendQueuedTerminalInput,
+        codexDraftRef.current,
+      );
       return false;
     });
     const rendererMode = resolveTerminalRendererMode(import.meta.env.VITE_AGENTHUB_TERMINAL_RENDERER);
@@ -212,11 +243,12 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
         return;
       }
 
-      void window.agenthub.terminalInput({
+      sendQueuedTerminalInput({
         sessionId: currentSessionId,
         data,
         source: "user",
       });
+      recordCodexTerminalInput(data);
     });
 
     const removeTerminalDataListener = window.agenthub.onTerminalData((event) => {
@@ -272,7 +304,7 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
       fitAddonRef.current = null;
       searchAddonRef.current = null;
     };
-  }, [pasteClipboardImage]);
+  }, [pasteClipboardImage, recordCodexTerminalInput, sendQueuedTerminalInput]);
 
   useEffect(() => {
     const hideContextMenu = () => setContextMenu(null);

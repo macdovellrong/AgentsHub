@@ -1765,6 +1765,7 @@ export function App(): React.JSX.Element {
                   <div className="terminal-host">
                     <TerminalPane
                       sessionId={session.sessionId}
+                      profileKind={session.kind}
                       onResize={(cols, rows) => resizeTerminal(session.sessionId, cols, rows)}
                     />
                   </div>
@@ -1816,6 +1817,7 @@ export function App(): React.JSX.Element {
                 >
                   <TerminalPane
                     sessionId={session.sessionId}
+                    profileKind={session.kind}
                     onResize={(cols, rows) => resizeTerminal(session.sessionId, cols, rows)}
                   />
                 </div>
