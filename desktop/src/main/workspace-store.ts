@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type WorkspaceRecord = {
@@ -114,18 +114,13 @@ export class WorkspaceStore {
 
   private async loadConfig(): Promise<WorkspaceConfig> {
     try {
-      const raw = await readFile(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as WorkspaceConfig;
-      return {
-        activeWorkspacePath: typeof parsed.activeWorkspacePath === "string" ? parsed.activeWorkspacePath : undefined,
-        workspaces: Array.isArray(parsed.workspaces) ? parsed.workspaces.filter((workspace) => this.isStoredWorkspace(workspace)) : [],
-      };
+      return await this.loadConfigFile(this.configPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return {};
       }
       if (error instanceof SyntaxError) {
-        return {};
+        return this.loadBackupConfig();
       }
       throw error;
     }
@@ -133,7 +128,51 @@ export class WorkspaceStore {
 
   private async saveConfig(config: Required<WorkspaceConfig>): Promise<void> {
     await mkdir(path.dirname(this.configPath), { recursive: true });
-    await writeFile(this.configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    await this.backupCurrentConfigIfValid();
+    const temporaryPath = `${this.configPath}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await writeFile(temporaryPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+      await rename(temporaryPath, this.configPath);
+    } catch (error) {
+      await rm(temporaryPath, { force: true });
+      throw error;
+    }
+  }
+
+  private async loadBackupConfig(): Promise<WorkspaceConfig> {
+    try {
+      return await this.loadConfigFile(this.backupConfigPath());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) {
+        return {};
+      }
+      throw error;
+    }
+  }
+
+  private async backupCurrentConfigIfValid(): Promise<void> {
+    try {
+      await this.loadConfigFile(this.configPath);
+      await copyFile(this.configPath, this.backupConfigPath());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async loadConfigFile(configPath: string): Promise<WorkspaceConfig> {
+    const raw = await readFile(configPath, "utf8");
+    const parsed = JSON.parse(raw) as WorkspaceConfig;
+    return {
+      activeWorkspacePath: typeof parsed.activeWorkspacePath === "string" ? parsed.activeWorkspacePath : undefined,
+      workspaces: Array.isArray(parsed.workspaces) ? parsed.workspaces.filter((workspace) => this.isStoredWorkspace(workspace)) : [],
+    };
+  }
+
+  private backupConfigPath(): string {
+    return `${this.configPath}.bak`;
   }
 
   private isStoredWorkspace(value: unknown): value is StoredWorkspace {

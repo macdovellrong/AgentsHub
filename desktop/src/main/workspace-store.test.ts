@@ -156,4 +156,50 @@ describe("WorkspaceStore", () => {
       workspaces: [{ path: "C:\\work\\AgentGroup", isActive: true }],
     });
   });
+
+  it("recovers a malformed workspace config from the backup file", async () => {
+    configRoot = await mkdtemp(path.join(tmpdir(), "agenthub-workspaces-"));
+    await writeFile(path.join(configRoot, "workspaces.json"), "{", "utf8");
+    await writeFile(
+      path.join(configRoot, "workspaces.json.bak"),
+      `${JSON.stringify({
+        activeWorkspacePath: "C:\\work\\openClashRule",
+        workspaces: [
+          {
+            path: "C:\\work\\openClashRule",
+            name: "openClashRule",
+            lastOpenedAt: "2026-04-29T01:00:00.000Z",
+          },
+          {
+            path: "C:\\work\\AgentGroup",
+            name: "AgentGroup",
+            lastOpenedAt: "2026-04-29T00:00:00.000Z",
+          },
+        ],
+      })}\n`,
+      "utf8",
+    );
+
+    const state = await createStore("2026-04-29T02:00:00.000Z").initialize("C:\\work\\AgentGroup");
+
+    expect(state.activeWorkspacePath).toBe("C:\\work\\openClashRule");
+    expect(state.workspaces.map((workspace) => workspace.path)).toEqual([
+      "C:\\work\\openClashRule",
+      "C:\\work\\AgentGroup",
+    ]);
+  });
+
+  it("keeps a backup of the previous valid workspace config when saving", async () => {
+    configRoot = await mkdtemp(path.join(tmpdir(), "agenthub-workspaces-"));
+    await createStore("2026-04-29T00:00:00.000Z").initialize("C:\\work\\AgentGroup");
+
+    await createStore("2026-04-29T01:00:00.000Z").activate("C:\\work\\openClashRule");
+
+    const backup = JSON.parse(await readFile(path.join(configRoot, "workspaces.json.bak"), "utf8")) as {
+      activeWorkspacePath: string;
+      workspaces: Array<{ path: string }>;
+    };
+    expect(backup.activeWorkspacePath).toBe("C:\\work\\AgentGroup");
+    expect(backup.workspaces.map((workspace) => workspace.path)).toEqual(["C:\\work\\AgentGroup"]);
+  });
 });
