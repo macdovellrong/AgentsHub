@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const rendererRoot = __dirname;
 
 function readRendererFile(relativePath: string): string {
-  return readFileSync(join(rendererRoot, relativePath), "utf8");
+  return readFileSync(join(rendererRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
 }
 
 function cssBlock(source: string, selector: string): string {

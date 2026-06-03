@@ -10,6 +10,7 @@ describe("TerminalPane keyboard integration", () => {
 
     expect(source).toContain("terminal.attachCustomKeyEventHandler");
     expect(source).toContain("isTerminalSoftNewlineKey");
-    expect(source).toContain('terminal.paste("\\n")');
+    expect(source).toContain("sendTerminalSoftNewline");
+    expect(source).not.toContain("terminal.paste");
   });
 });
