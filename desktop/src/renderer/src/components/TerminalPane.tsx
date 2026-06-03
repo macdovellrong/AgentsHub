@@ -7,6 +7,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { hasClipboardImage } from "./terminal-clipboard";
 import { DEFAULT_TERMINAL_FONT_SIZE, resolveTerminalFontSize } from "./terminal-font-size";
+import { isTerminalSoftNewlineKey } from "./terminal-keyboard";
 import { createTerminalOutputAckBatcher } from "./terminal-output-ack";
 import { resolveTerminalRendererMode } from "./terminal-renderer";
 import { fitAndReportTerminalSize, type TerminalSize } from "./terminal-size";
@@ -165,6 +166,15 @@ export function TerminalPane({ sessionId, onResize }: TerminalPaneProps): React.
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.open(terminalSurface);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (!isTerminalSoftNewlineKey(event)) {
+        return true;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      terminal.paste("\n");
+      return false;
+    });
     const rendererMode = resolveTerminalRendererMode(import.meta.env.VITE_AGENTHUB_TERMINAL_RENDERER);
     if (rendererMode === "webgl") {
       try {
