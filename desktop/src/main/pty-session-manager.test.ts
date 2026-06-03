@@ -149,6 +149,11 @@ function waitForCondition(condition: () => boolean, timeoutMs = 1000): Promise<v
   });
 }
 
+function markReadyForProgrammaticInput(manager: PtySessionManager, sessionId: string, pty: FakePty): void {
+  manager.write(sessionId, "ready", "user");
+  pty.writes = [];
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   if (workspacePath) {
@@ -695,6 +700,36 @@ describe("PtySessionManager", () => {
     expect(factory.pty.writes).toEqual(["dir"]);
   });
 
+  it("writes direct user key sequences ending in enter without submit transformation", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+    const session = await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      80,
+      24,
+    );
+
+    manager.write(session.sessionId, "\x1b\r", "user");
+
+    expect(factory.pty.writes).toEqual(["\x1b\r"]);
+  });
+
   it("submits batched terminal input by writing text and enter separately", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();
@@ -708,8 +743,9 @@ describe("PtySessionManager", () => {
       cols: 80,
       rows: 24,
     });
+    markReadyForProgrammaticInput(manager, session.sessionId, factory.pty);
 
-    manager.write(session.sessionId, "ask Claude\r\n", "user");
+    manager.write(session.sessionId, "ask Claude\r\n");
 
     expect(factory.pty.writes).toEqual(["ask Claude"]);
     await waitForCondition(() => factory.pty.writes.length === 2);
@@ -741,8 +777,9 @@ describe("PtySessionManager", () => {
       80,
       24,
     );
+    markReadyForProgrammaticInput(manager, session.sessionId, factory.pty);
 
-    manager.write(session.sessionId, "line 1\nline 2\r\n", "user");
+    manager.write(session.sessionId, "line 1\nline 2\r\n");
 
     expect(factory.pty.writes).toEqual(["\x1b[200~line 1\nline 2\x1b[201~"]);
     await waitForCondition(() => factory.pty.writes.length === 2);
@@ -774,8 +811,9 @@ describe("PtySessionManager", () => {
       80,
       24,
     );
+    markReadyForProgrammaticInput(manager, session.sessionId, factory.pty);
 
-    manager.write(session.sessionId, "review this proposal\nwith several lines\nand submit it\r\n", "user");
+    manager.write(session.sessionId, "review this proposal\nwith several lines\nand submit it\r\n");
 
     await waitForCondition(() => factory.pty.writes.length === 3, 2000);
     expect(factory.pty.writes).toEqual([

@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { ProfileKind } from "../../../shared/ipc";
-import { createCodexTerminalDraftTracker } from "./terminal-codex-draft";
+import { createTerminalCompositionState } from "./terminal-composition";
 import { hasClipboardImage } from "./terminal-clipboard";
 import { DEFAULT_TERMINAL_FONT_SIZE, resolveTerminalFontSize } from "./terminal-font-size";
 import { createTerminalInputQueue, type QueuedTerminalInputSender } from "./terminal-input-queue";
@@ -38,7 +38,7 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
   const onResizeRef = useRef(onResize);
   const fontSizeRef = useRef(DEFAULT_TERMINAL_FONT_SIZE);
   const queuedTerminalInputRef = useRef<QueuedTerminalInputSender | null>(null);
-  const codexDraftRef = useRef(createCodexTerminalDraftTracker());
+  const compositionStateRef = useRef(createTerminalCompositionState());
   const [contextMenu, setContextMenu] = useState<TerminalContextMenu | null>(null);
 
   if (!queuedTerminalInputRef.current) {
@@ -49,12 +49,12 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
   useEffect(() => {
     sessionIdRef.current = sessionId;
     reportedSizeRef.current = null;
-    codexDraftRef.current.reset();
+    compositionStateRef.current.clear(terminalRef.current?.textarea);
   }, [sessionId]);
 
   useEffect(() => {
     profileKindRef.current = profileKind;
-    codexDraftRef.current.reset();
+    compositionStateRef.current.clear(terminalRef.current?.textarea);
   }, [profileKind]);
 
   useEffect(() => {
@@ -71,12 +71,6 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
     terminalRef.current?.focus();
   }, []);
 
-  const recordCodexTerminalInput = useCallback((data: string) => {
-    if (profileKindRef.current === "codex") {
-      codexDraftRef.current.recordUserInput(data);
-    }
-  }, []);
-
   const pasteClipboardImage = useCallback(async (): Promise<boolean> => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
@@ -91,10 +85,9 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       data: saved.terminalText,
       source: "user",
     });
-    recordCodexTerminalInput(saved.terminalText);
     terminalRef.current?.focus();
     return true;
-  }, [recordCodexTerminalInput, sendQueuedTerminalInput]);
+  }, [sendQueuedTerminalInput]);
 
   const pasteClipboard = useCallback(async () => {
     const currentSessionId = sessionIdRef.current;
@@ -115,9 +108,8 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       data: text,
       source: "user",
     });
-    recordCodexTerminalInput(text);
     terminalRef.current?.focus();
-  }, [pasteClipboardImage, recordCodexTerminalInput, sendQueuedTerminalInput]);
+  }, [pasteClipboardImage, sendQueuedTerminalInput]);
 
   const searchTerminal = useCallback(() => {
     setContextMenu(null);
@@ -192,9 +184,31 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.open(terminalSurface);
+    const terminalTextarea = terminal.textarea;
+    const handleCompositionStart = () => {
+      compositionStateRef.current.start(terminalTextarea?.value ?? "");
+    };
+    const handleCompositionUpdate = (event: CompositionEvent) => {
+      compositionStateRef.current.update(event.data, terminalTextarea?.value ?? "");
+      window.setTimeout(() => {
+        compositionStateRef.current.update(event.data, terminalTextarea?.value ?? "");
+      }, 0);
+    };
+    const handleCompositionEnd = () => {
+      window.setTimeout(() => {
+        compositionStateRef.current.finish();
+      }, 0);
+    };
+    terminalTextarea?.addEventListener("compositionstart", handleCompositionStart);
+    terminalTextarea?.addEventListener("compositionupdate", handleCompositionUpdate);
+    terminalTextarea?.addEventListener("compositionend", handleCompositionEnd);
     terminal.attachCustomKeyEventHandler((event) => {
       if (!isTerminalSoftNewlineKey(event)) {
         return true;
+      }
+      const pendingCompositionText = compositionStateRef.current.pendingText(terminal.textarea?.value ?? "");
+      if (pendingCompositionText) {
+        compositionStateRef.current.clear(terminal.textarea);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -202,7 +216,7 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
         sessionIdRef.current,
         profileKindRef.current,
         sendQueuedTerminalInput,
-        codexDraftRef.current,
+        pendingCompositionText,
       );
       return false;
     });
@@ -248,7 +262,6 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
         data,
         source: "user",
       });
-      recordCodexTerminalInput(data);
     });
 
     const removeTerminalDataListener = window.agenthub.onTerminalData((event) => {
@@ -293,6 +306,9 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       resizeObserver.disconnect();
       terminalSurface.removeEventListener("keydown", handleZoomKeyDown, { capture: true });
       terminalSurface.removeEventListener("paste", handlePaste, { capture: true });
+      terminalTextarea?.removeEventListener("compositionstart", handleCompositionStart);
+      terminalTextarea?.removeEventListener("compositionupdate", handleCompositionUpdate);
+      terminalTextarea?.removeEventListener("compositionend", handleCompositionEnd);
       removeTerminalDataListener();
       dataSubscription.dispose();
       ackBatcher.dispose();
@@ -304,7 +320,7 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       fitAddonRef.current = null;
       searchAddonRef.current = null;
     };
-  }, [pasteClipboardImage, recordCodexTerminalInput, sendQueuedTerminalInput]);
+  }, [pasteClipboardImage, sendQueuedTerminalInput]);
 
   useEffect(() => {
     const hideContextMenu = () => setContextMenu(null);

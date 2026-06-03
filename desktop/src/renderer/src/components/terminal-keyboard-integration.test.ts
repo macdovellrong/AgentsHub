@@ -9,10 +9,12 @@ describe("TerminalPane keyboard integration", () => {
     const source = readFileSync(join(componentsRoot, "TerminalPane.tsx"), "utf8");
 
     expect(source).toContain("terminal.attachCustomKeyEventHandler");
-    expect(source).toContain("createCodexTerminalDraftTracker");
-    expect(source).toContain("codexDraftRef.current.recordUserInput(data)");
+    expect(source).toContain("createTerminalCompositionState");
+    expect(source).toContain("compositionStateRef.current.pendingText");
+    expect(source).toContain("compositionStateRef.current.clear");
     expect(source).toContain("isTerminalSoftNewlineKey");
     expect(source).toContain("sendTerminalSoftNewline");
+    expect(source).not.toContain("createCodexTerminalDraftTracker");
     expect(source).not.toContain("terminal.paste");
   });
 });

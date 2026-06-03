@@ -23,7 +23,7 @@ describe("createTerminalInputQueue", () => {
     });
 
     sendQueuedTerminalInput({ sessionId: "session-1", data: "A", source: "user" });
-    sendQueuedTerminalInput({ sessionId: "session-1", data: "\x1b[13;2u", source: "user" });
+    sendQueuedTerminalInput({ sessionId: "session-1", data: "\n", source: "user" });
     sendQueuedTerminalInput({ sessionId: "session-1", data: "B", source: "user" });
 
     await flushPromises();
@@ -32,6 +32,6 @@ describe("createTerminalInputQueue", () => {
     releaseFirst();
     await flushPromises();
 
-    expect(calls).toEqual(["A", "\x1b[13;2u", "B"]);
+    expect(calls).toEqual(["A", "\n", "B"]);
   });
 });

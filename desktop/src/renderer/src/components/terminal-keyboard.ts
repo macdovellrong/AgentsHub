@@ -1,41 +1,48 @@
 import type { ProfileKind } from "../../../shared/ipc";
-import type { CodexTerminalDraftTracker } from "./terminal-codex-draft";
 
 type TerminalKeyEvent = {
   key: string;
+  code?: string;
   shiftKey: boolean;
   type: string;
 };
 
 type TerminalInputSender = (request: { sessionId: string; data: string; source: "user" }) => Promise<void> | void;
 
-export const TERMINAL_SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
-export const DEFAULT_TERMINAL_SHIFT_ENTER_SEQUENCE = "\n";
+export const TERMINAL_SOFT_NEWLINE_SEQUENCE = "\n";
+export const CODEX_TERMINAL_SOFT_NEWLINE_SEQUENCE = "\x1b\r";
 
 export function isTerminalSoftNewlineKey(event: TerminalKeyEvent): boolean {
-  return event.type === "keydown" && event.key === "Enter" && event.shiftKey;
+  const isEnterKey = event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
+  return event.type === "keydown" && isEnterKey && event.shiftKey;
 }
 
 export function resolveTerminalSoftNewlineSequence(profileKind: ProfileKind | null | undefined): string {
   if (profileKind === "codex") {
-    return TERMINAL_SHIFT_ENTER_SEQUENCE;
+    return CODEX_TERMINAL_SOFT_NEWLINE_SEQUENCE;
   }
-  return DEFAULT_TERMINAL_SHIFT_ENTER_SEQUENCE;
+  return TERMINAL_SOFT_NEWLINE_SEQUENCE;
 }
 
 export async function sendTerminalSoftNewline(
   sessionId: string | null,
   profileKind: ProfileKind | null | undefined,
   sendTerminalInput: TerminalInputSender,
-  codexDraft?: CodexTerminalDraftTracker,
+  pendingCompositionText = "",
 ): Promise<boolean> {
   if (!sessionId) {
     return false;
   }
-  const codexSoftNewlineInput = profileKind === "codex" ? (codexDraft?.createSoftNewlineInput() ?? null) : null;
+  if (pendingCompositionText) {
+    await sendTerminalInput({
+      sessionId,
+      data: pendingCompositionText,
+      source: "user",
+    });
+  }
   await sendTerminalInput({
     sessionId,
-    data: codexSoftNewlineInput ?? resolveTerminalSoftNewlineSequence(profileKind),
+    data: resolveTerminalSoftNewlineSequence(profileKind),
     source: "user",
   });
   return true;

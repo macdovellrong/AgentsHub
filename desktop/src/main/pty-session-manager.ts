@@ -372,10 +372,14 @@ export class PtySessionManager extends EventEmitter {
       stored.inputBuffer.push(data);
       return;
     }
-    this.writeImmediately(stored, data);
+    this.writeImmediately(stored, data, source);
   }
 
-  private writeImmediately(stored: StoredSession, data: string): void {
+  private writeImmediately(stored: StoredSession, data: string, source: TerminalInputSource = "program"): void {
+    if (source === "user") {
+      stored.pty.write(data);
+      return;
+    }
     const submittedInput = splitSubmittedTerminalInput(data);
     if (!submittedInput) {
       stored.pty.write(data);
