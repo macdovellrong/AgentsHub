@@ -6,7 +6,7 @@ type TerminalKeyEvent = {
 
 type TerminalInputSender = (request: { sessionId: string; data: string; source: "user" }) => Promise<void>;
 
-export const TERMINAL_SOFT_NEWLINE_INPUT = "\n";
+export const TERMINAL_SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
 
 export function isTerminalSoftNewlineKey(event: TerminalKeyEvent): boolean {
   return event.type === "keydown" && event.key === "Enter" && event.shiftKey;
@@ -21,7 +21,7 @@ export async function sendTerminalSoftNewline(
   }
   await sendTerminalInput({
     sessionId,
-    data: TERMINAL_SOFT_NEWLINE_INPUT,
+    data: TERMINAL_SHIFT_ENTER_SEQUENCE,
     source: "user",
   });
   return true;
