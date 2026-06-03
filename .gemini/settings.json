@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agenthub-result",
+            "type": "command",
+            "command": "py -3 \"V:\\AgentGroup\\.gemini\\hooks\\agenthub_gemini_after_agent.py\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

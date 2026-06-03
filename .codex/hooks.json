@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"V:\\AgentGroup\\.codex\\hooks\\agenthub_codex_stop.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
