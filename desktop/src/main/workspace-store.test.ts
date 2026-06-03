@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -96,6 +96,20 @@ describe("WorkspaceStore", () => {
       { path: "C:\\work\\openClashRule", isActive: false, lastOpenedAt: "2026-04-29T01:00:00.000Z" },
       { path: "C:\\work\\AgentGroup", isActive: true, lastOpenedAt: "2026-04-29T00:00:00.000Z" },
     ]);
+  });
+
+  it("does not rewrite an unchanged workspace config during initialization", async () => {
+    configRoot = await mkdtemp(path.join(tmpdir(), "agenthub-workspaces-"));
+    await createStore("2026-04-29T00:00:00.000Z").initialize("C:\\work\\AgentGroup");
+    const configPath = path.join(configRoot, "workspaces.json");
+    const before = await stat(configPath);
+
+    const state = await createStore("2026-04-29T01:00:00.000Z").initialize("C:\\work\\AgentGroup");
+
+    const after = await stat(configPath);
+    await expect(readFile(path.join(configRoot, "workspaces.json.bak"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(state.workspaces.map((workspace) => workspace.path)).toEqual(["C:\\work\\AgentGroup"]);
   });
 
   it("removes a non-active workspace from the remembered list", async () => {
