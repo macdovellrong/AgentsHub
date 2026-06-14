@@ -13,6 +13,7 @@ import { createTerminalInputQueue, type QueuedTerminalInputSender } from "./term
 import { isTerminalSoftNewlineKey, sendTerminalSoftNewline } from "./terminal-keyboard";
 import { createTerminalOutputAckBatcher } from "./terminal-output-ack";
 import { resolveTerminalRendererMode } from "./terminal-renderer";
+import { createTerminalResizeScheduler } from "./terminal-resize-scheduler";
 import { fitAndReportTerminalSize, type TerminalSize } from "./terminal-size";
 
 type TerminalPaneProps = {
@@ -282,6 +283,8 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       );
     };
 
+    const resizeScheduler = createTerminalResizeScheduler(fitAndReport);
+
     const handleZoomKeyDown = (event: KeyboardEvent) => {
       const nextFontSize = resolveTerminalFontSize(fontSizeRef.current, event);
 
@@ -293,16 +296,17 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
       event.stopPropagation();
       fontSizeRef.current = nextFontSize;
       terminal.options.fontSize = nextFontSize;
-      fitAndReport();
+      resizeScheduler.schedule();
       terminal.focus();
     };
 
-    const resizeObserver = new ResizeObserver(fitAndReport);
+    const resizeObserver = new ResizeObserver(() => resizeScheduler.schedule());
     resizeObserver.observe(terminalSurface);
     terminalSurface.addEventListener("keydown", handleZoomKeyDown, { capture: true });
-    fitAndReport();
+    resizeScheduler.schedule();
 
     return () => {
+      resizeScheduler.dispose();
       resizeObserver.disconnect();
       terminalSurface.removeEventListener("keydown", handleZoomKeyDown, { capture: true });
       terminalSurface.removeEventListener("paste", handlePaste, { capture: true });
