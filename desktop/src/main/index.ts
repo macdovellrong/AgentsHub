@@ -73,6 +73,7 @@ import { selectWorkspacePath } from "./workspace-dialog";
 import { getDefaultWorkspacePath, resolveWorkspacePath } from "./workspace-path";
 import { WorkspaceStore } from "./workspace-store";
 import { openWorkspaceFolderPath } from "./workspace-folder";
+import { ensureWorkspaceGitIgnore } from "./workspace-gitignore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -198,6 +199,14 @@ function getWorkspaceStore(): WorkspaceStore {
 async function initializeWorkspaces(): Promise<void> {
   const state = await getWorkspaceStore().initialize(activeWorkspacePath);
   activeWorkspacePath = state.activeWorkspacePath;
+  await ensureWorkspaceGitIgnore(activeWorkspacePath);
+}
+
+async function activateWorkspacePath(workspacePath: string): Promise<string> {
+  const state = await getWorkspaceStore().activate(workspacePath);
+  activeWorkspacePath = state.activeWorkspacePath;
+  await ensureWorkspaceGitIgnore(activeWorkspacePath);
+  return activeWorkspacePath;
 }
 
 function resolveRequestWorkspace(workspacePath?: string): string {
@@ -251,9 +260,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IpcChannels.WorkspaceActivate, async (_event, request: WorkspaceActivateRequest) => {
-    const state = await getWorkspaceStore().activate(resolveWorkspacePath(request.workspacePath, activeWorkspacePath));
-    activeWorkspacePath = state.activeWorkspacePath;
-    return activeWorkspacePath;
+    return activateWorkspacePath(resolveWorkspacePath(request.workspacePath, activeWorkspacePath));
   });
 
   ipcMain.handle(IpcChannels.WorkspaceDelete, async (_event, request: WorkspaceDeleteRequest) => {
@@ -279,9 +286,7 @@ function registerIpcHandlers(): void {
       };
       return mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options);
     });
-    const state = await getWorkspaceStore().activate(selectedWorkspacePath);
-    activeWorkspacePath = state.activeWorkspacePath;
-    return activeWorkspacePath;
+    return activateWorkspacePath(selectedWorkspacePath);
   });
 
   ipcMain.handle(IpcChannels.StartPowerShell, async (_event, request: StartPowerShellRequest) => {
