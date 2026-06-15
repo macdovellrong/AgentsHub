@@ -113,6 +113,7 @@ const POWERSHELL_ARGS = [
 
 const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 const PROJECT_HOOK_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
+const CODEX_NO_ALT_SCREEN_ARG = "--no-alt-screen";
 export const INPUT_READY_FIRST_OUTPUT_DELAY_MS = 120;
 export const INPUT_READY_TIMEOUT_MS = 3000;
 
@@ -194,7 +195,7 @@ function getSubmitDelays(kind: AgentProfileKind, text: string): number[] {
 }
 
 export function buildProfileLaunchArgs(profile: AgentProfile, options: StartProfileOptions = {}): string[] {
-  const args = [...profile.args];
+  const args = buildBaseProfileArgs(profile);
   if (!options.resumeLast || !RESUMABLE_PROFILE_KINDS.has(profile.kind)) {
     return args;
   }
@@ -218,6 +219,14 @@ export function buildProfileLaunchArgs(profile: AgentProfile, options: StartProf
     return args.some((arg) => arg === "--resume" || arg === "-r") ? args : [...args, "--resume", "latest"];
   }
   return args;
+}
+
+function buildBaseProfileArgs(profile: AgentProfile): string[] {
+  const args = [...profile.args];
+  if (profile.kind !== "codex" || args.includes(CODEX_NO_ALT_SCREEN_ARG)) {
+    return args;
+  }
+  return [CODEX_NO_ALT_SCREEN_ARG, ...args];
 }
 
 export class PtySessionManager extends EventEmitter {

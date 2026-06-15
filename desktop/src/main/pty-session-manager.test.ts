@@ -180,7 +180,7 @@ describe("PtySessionManager", () => {
         },
         { resumeLast: true, workspacePath: "V:/AgentGroup" },
       ),
-    ).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", "V:/AgentGroup"]);
+    ).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", "V:/AgentGroup"]);
     expect(
       buildProfileLaunchArgs(
         {
@@ -234,6 +234,38 @@ describe("PtySessionManager", () => {
     ).toEqual(["run"]);
   });
 
+  it("starts Codex without alternate screen mode so xterm scrollback remains available", () => {
+    expect(
+      buildProfileLaunchArgs({
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.cmd",
+        args: [],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: true,
+      }),
+    ).toEqual(["--no-alt-screen"]);
+
+    expect(
+      buildProfileLaunchArgs({
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.cmd",
+        args: ["--no-alt-screen", "--model", "gpt-5"],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: true,
+      }),
+    ).toEqual(["--no-alt-screen", "--model", "gpt-5"]);
+  });
+
   it("records and spawns the resumed launch arguments", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();
@@ -262,9 +294,9 @@ describe("PtySessionManager", () => {
       { resumeLast: true },
     );
 
-    expect(factory.args).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+    expect(factory.args).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
     const meta = JSON.parse(await readFile(logStore.lastMetaPath!, "utf8"));
-    expect(meta.args).toEqual(["--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+    expect(meta.args).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
   });
 
   it("resolves profile commands from PATH before spawning", async () => {
@@ -363,7 +395,7 @@ describe("PtySessionManager", () => {
     );
 
     expect(factory.command).toBe("codex.exe");
-    expect(factory.args).toEqual(["--model", "gpt-5"]);
+    expect(factory.args).toEqual(["--no-alt-screen", "--model", "gpt-5"]);
     expect(factory.options?.cwd).toBe(workspacePath);
     expect(factory.options?.env.CODEX_HOME).toBe("C:/codex");
     expect(factory.options?.env.AGENTHUB_HOOK_URL).toBe("http://127.0.0.1:38765/api/agent-result");
