@@ -113,6 +113,7 @@ const POWERSHELL_ARGS = [
 
 const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 const PROJECT_HOOK_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
+const RAW_LOG_DISABLED_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 const CODEX_NO_ALT_SCREEN_ARG = "--no-alt-screen";
 export const INPUT_READY_FIRST_OUTPUT_DELAY_MS = 120;
 export const INPUT_READY_TIMEOUT_MS = 3000;
@@ -227,6 +228,10 @@ function buildBaseProfileArgs(profile: AgentProfile): string[] {
     return args;
   }
   return [CODEX_NO_ALT_SCREEN_ARG, ...args];
+}
+
+function shouldPersistRawTerminalOutput(kind: AgentProfileKind): boolean {
+  return !RAW_LOG_DISABLED_PROFILE_KINDS.has(kind);
 }
 
 export class PtySessionManager extends EventEmitter {
@@ -429,11 +434,13 @@ export class PtySessionManager extends EventEmitter {
   }
 
   private async persistAndEmitData(stored: StoredSession, data: string): Promise<void> {
-    try {
-      await this.logStore.appendRaw(stored.session.runId, data);
-    } catch (error) {
-      this.emitPtyError(stored.session.sessionId, error);
-      return;
+    if (shouldPersistRawTerminalOutput(stored.session.kind)) {
+      try {
+        await this.logStore.appendRaw(stored.session.runId, data);
+      } catch (error) {
+        this.emitPtyError(stored.session.sessionId, error);
+        return;
+      }
     }
     const byteLength = countUtf8Bytes(data);
     stored.outputSeq += 1;

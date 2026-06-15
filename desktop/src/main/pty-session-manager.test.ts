@@ -498,6 +498,58 @@ describe("PtySessionManager", () => {
     await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("queued\r\n");
   });
 
+  it("keeps managed agent raw PTY output out of raw.log while still emitting terminal data", async () => {
+    const managedProfiles = [
+      { id: "codex", kind: "codex", command: "codex.exe" },
+      { id: "claude", kind: "claude", command: "claude.exe" },
+      { id: "gemini", kind: "gemini", command: "gemini.exe" },
+    ] as const;
+
+    for (const profile of managedProfiles) {
+      workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+      const factory = new FakeFactory();
+      const logStore = new DelayedLogStore();
+      const manager = new PtySessionManager({
+        ptyFactory: factory,
+        logStore,
+      });
+      const events: string[] = [];
+      manager.on("data", (event) => events.push(event.data));
+
+      const session = await manager.startProfile(
+        {
+          id: profile.id,
+          name: profile.id,
+          kind: profile.kind,
+          command: profile.command,
+          args: [],
+          aliases: [],
+          rolePrompt: "",
+          env: {},
+          defaultCwd: null,
+          useWorkspaceWriteLock: false,
+        },
+        workspacePath,
+        80,
+        24,
+      );
+
+      factory.pty.emit("data", `${profile.id} output\r\n`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      try {
+        expect(logStore.appendStarted).toBe(false);
+        expect(events).toEqual([`${profile.id} output\r\n`]);
+        await expect(readFile(session.rawLogPath, "utf8")).resolves.toBe("");
+      } finally {
+        logStore.unblockAppend();
+      }
+
+      await rm(workspacePath, { recursive: true, force: true });
+      workspacePath = undefined;
+    }
+  });
+
   it("keeps raw PTY output out of workspace events", async () => {
     workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
     const factory = new FakeFactory();
