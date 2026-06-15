@@ -12,3 +12,6 @@ desktop/electron-*.png
 desktop/.agenthub-dev/
 OtherProject/
 *.egg-info/
+.codex/
+.claude/
+.gemini/
