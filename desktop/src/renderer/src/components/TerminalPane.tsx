@@ -7,6 +7,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { ProfileKind } from "../../../shared/ipc";
 import { createTerminalCompositionState } from "./terminal-composition";
+import { createTerminalAltBufferTracker } from "./terminal-alt-buffer";
 import { hasClipboardImage } from "./terminal-clipboard";
 import { DEFAULT_TERMINAL_FONT_SIZE, resolveTerminalFontSize } from "./terminal-font-size";
 import { createTerminalInputQueue, type QueuedTerminalInputSender } from "./terminal-input-queue";
@@ -27,6 +28,10 @@ type TerminalContextMenu = {
   y: number;
   hasSelection: boolean;
 };
+
+function isManagedAgentProfileKind(kind: ProfileKind | null): boolean {
+  return kind === "codex" || kind === "claude" || kind === "gemini";
+}
 
 export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneProps): React.JSX.Element {
   const terminalSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -264,6 +269,17 @@ export function TerminalPane({ sessionId, profileKind, onResize }: TerminalPaneP
         source: "user",
       });
     });
+
+    const altBufferTracker = createTerminalAltBufferTracker(terminal, () => {
+      const currentKind = profileKindRef.current;
+      if (!isManagedAgentProfileKind(currentKind)) {
+        return;
+      }
+      console.warn(
+        `[AgentHub] ${currentKind} terminal entered alternate buffer; scrollback may be unavailable for session ${sessionIdRef.current ?? "unknown"}.`,
+      );
+    });
+    rendererDisposables.push(altBufferTracker);
 
     const removeTerminalDataListener = window.agenthub.onTerminalData((event) => {
       if (event.sessionId === sessionIdRef.current) {

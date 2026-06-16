@@ -80,6 +80,43 @@ VS Code 也使用 xterm 生态。其仓库 `package.json` 中能看到 `@xterm/x
 https://github.com/microsoft/vscode/blob/main/package.json
 ```
 
+## VS Code 近期可参考修复
+
+当前先不升级 AgentHub 的 `@xterm/xterm` 或 `node-pty`，只参考 VS Code 已落地的修复思路。
+
+重点关联项：
+
+- https://github.com/microsoft/vscode/pull/314795
+  - `Guard terminal resize/dispose race against xterm.js dimension getters`
+  - 该 PR 明确处理 `Cannot read properties of undefined (reading 'dimensions')`。
+  - AgentHub 曾出现同类 xterm 报错，因此应先加强 resize/dispose 竞态防护。
+
+- https://github.com/microsoft/vscode/pull/318177
+  - `Replace @debounce with disposable RunOnceScheduler in TerminalResizeDebouncer`
+  - 该 PR 的核心是确保 resize 延迟任务在 terminal/xterm dispose 后不会继续访问已销毁对象。
+  - AgentHub 当前已有 `requestAnimationFrame` 调度和 dispose 取消逻辑，可以继续补充异常隔离，避免一次 xterm 内部异常打断 renderer。
+
+- https://github.com/microsoft/vscode/pull/315407
+  - `Add agent host xterm/headless`
+  - VS Code 为 Agent Host 增加 headless xterm，用来镜像 PTY 输出并追踪 terminal state。
+  - AgentHub 暂不引入 headless xterm，但可以先在可见 xterm 上增加 alt buffer 状态跟踪。
+
+- https://github.com/microsoft/vscode/pull/316177
+  - `Prevent alt-buffer hang in agent host terminals`
+  - VS Code 检测命令是否进入 alternate buffer，并把这类交互式 TUI 作为特殊状态处理。
+  - AgentHub 对 Codex 已通过 `--no-alt-screen` 尽量避免进入 alternate buffer；下一步应记录实际是否仍进入 alt buffer，便于判断笔记本问题是不是同一类。
+
+- https://github.com/microsoft/vscode/pull/320646
+  - VS Code 在 2026-06-09 升级到 `@xterm/xterm 6.1.0-beta.285`。
+  - AgentHub 当前仍使用 `@xterm/xterm ^5.5.0`。这可能解释部分差异，但当前策略是先不升级，避免引入新变量。
+
+本轮 AgentHub 修复策略：
+
+1. 不升级依赖。
+2. 先补 `dimensions` 读取异常和 resize/dispose 竞态防护。
+3. 增加 Codex/Claude/Gemini 进入 alt buffer 的 renderer 侧诊断日志。
+4. 用户在笔记本验证后，再决定是否需要继续对齐 VS Code 的 headless xterm 或 xterm 版本。
+
 ## 对“触摸板导致”的判断
 
 触摸板有可能影响滚动事件，但目前它不是第一优先级的根因。

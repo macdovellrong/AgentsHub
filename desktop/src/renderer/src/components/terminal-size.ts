@@ -24,7 +24,11 @@ export function fitAndReportTerminalSize(
     return lastReportedSize;
   }
 
-  const nextSize = { cols: terminal.cols, rows: terminal.rows };
+  const nextSize = readTerminalSize(terminal);
+
+  if (!nextSize) {
+    return lastReportedSize;
+  }
 
   if (lastReportedSize?.cols === nextSize.cols && lastReportedSize.rows === nextSize.rows) {
     return lastReportedSize;
@@ -32,4 +36,16 @@ export function fitAndReportTerminalSize(
 
   onResize(nextSize.cols, nextSize.rows);
   return nextSize;
+}
+
+function readTerminalSize(terminal: TerminalSize): TerminalSize | null {
+  try {
+    const nextSize = { cols: terminal.cols, rows: terminal.rows };
+    if (!Number.isFinite(nextSize.cols) || !Number.isFinite(nextSize.rows) || nextSize.cols < 1 || nextSize.rows < 1) {
+      return null;
+    }
+    return nextSize;
+  } catch {
+    return null;
+  }
 }
