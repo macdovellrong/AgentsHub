@@ -6,7 +6,13 @@ import path from "node:path";
 import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
 import { EventStore } from "./event-store";
-import { getDefaultProfiles, type AgentProfile, type AgentProfileKind } from "./profile-store";
+import {
+  defaultLaunchModeForProfileKind,
+  getDefaultProfiles,
+  type AgentProfile,
+  type AgentProfileKind,
+  type AgentProfileLaunchMode,
+} from "./profile-store";
 import type { ProjectHookInstaller } from "./project-hook-installer";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
 import { shouldBufferTerminalInput, type TerminalInputSource } from "./terminal-input-readiness";
@@ -230,6 +236,64 @@ function buildBaseProfileArgs(profile: AgentProfile): string[] {
   return [CODEX_NO_ALT_SCREEN_ARG, ...args];
 }
 
+function resolveLaunchMode(profile: AgentProfile): AgentProfileLaunchMode {
+  return profile.launchMode ?? defaultLaunchModeForProfileKind(profile.kind);
+}
+
+type PtySpawnPlan = {
+  command: string;
+  args: string[];
+};
+
+function buildPtySpawnPlan(profile: AgentProfile, launchArgs: string[], cwd: string, env: NodeJS.ProcessEnv): PtySpawnPlan {
+  const targetCommand = resolveProfileCommand(profile.command, env);
+  const launchMode = resolveLaunchMode(profile);
+
+  if (launchMode === "powershell") {
+    return {
+      command: resolveProfileCommand("powershell.exe", env),
+      args: buildPowerShellHostedArgs(targetCommand, launchArgs, cwd),
+    };
+  }
+  if (launchMode === "cmd") {
+    return {
+      command: resolveProfileCommand("cmd.exe", env),
+      args: buildCmdHostedArgs(targetCommand, launchArgs, cwd),
+    };
+  }
+  return {
+    command: targetCommand,
+    args: launchArgs,
+  };
+}
+
+function buildPowerShellHostedArgs(command: string, args: string[], cwd: string): string[] {
+  const commandInvocation = [`& ${quotePowerShellString(command)}`, ...args.map(quotePowerShellString)].join(" ");
+  const script = [
+    "Remove-Module PSReadLine -ErrorAction SilentlyContinue",
+    "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8",
+    "$OutputEncoding=[System.Text.Encoding]::UTF8",
+    "chcp 65001 | Out-Null",
+    `Set-Location -LiteralPath ${quotePowerShellString(cwd)}`,
+    commandInvocation,
+  ].join("; ");
+
+  return ["-NoLogo", "-NoProfile", "-NoExit", "-Command", script];
+}
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function buildCmdHostedArgs(command: string, args: string[], cwd: string): string[] {
+  const commandInvocation = [quoteCmdArg(command), ...args.map(quoteCmdArg)].join(" ");
+  return ["/K", `chcp 65001 > nul && cd /d ${quoteCmdArg(cwd)} && ${commandInvocation}`];
+}
+
+function quoteCmdArg(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
 function shouldPersistRawTerminalOutput(kind: AgentProfileKind): boolean {
   return !RAW_LOG_DISABLED_PROFILE_KINDS.has(kind);
 }
@@ -302,11 +366,13 @@ export class PtySessionManager extends EventEmitter {
             }
           : {}),
       };
-      pty = this.ptyFactory.spawn(resolveProfileCommand(profile.command, env), launchArgs, {
+      const cwd = profile.defaultCwd ?? workspacePath;
+      const spawnPlan = buildPtySpawnPlan(profile, launchArgs, cwd, env);
+      pty = this.ptyFactory.spawn(spawnPlan.command, spawnPlan.args, {
         name: "xterm-256color",
         cols,
         rows,
-        cwd: profile.defaultCwd ?? workspacePath,
+        cwd,
         env,
       });
     } catch (error) {

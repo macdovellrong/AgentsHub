@@ -294,9 +294,96 @@ describe("PtySessionManager", () => {
       { resumeLast: true },
     );
 
-    expect(factory.args).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+    expect(factory.command.toLowerCase()).toContain("powershell");
+    expect(factory.args.at(-1)).toContain("--no-alt-screen");
+    expect(factory.args.at(-1)).toContain("--model");
+    expect(factory.args.at(-1)).toContain("gpt-5");
+    expect(factory.args.at(-1)).toContain("resume");
+    expect(factory.args.at(-1)).toContain("--last");
     const meta = JSON.parse(await readFile(logStore.lastMetaPath!, "utf8"));
     expect(meta.args).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+  });
+
+  it("launches managed agent profiles through PowerShell by default", async () => {
+    workspacePath = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    const factory = new FakeFactory();
+    const logStore = new CapturingLogStore();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore,
+    });
+
+    await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.exe",
+        args: ["--model", "gpt-5"],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        useWorkspaceWriteLock: false,
+      },
+      workspacePath,
+      120,
+      40,
+      { resumeLast: true },
+    );
+
+    expect(factory.command.toLowerCase()).toContain("powershell");
+    expect(factory.args).toContain("-NoExit");
+    const script = factory.args.at(-1) ?? "";
+    expect(script).toContain("Set-Location -LiteralPath");
+    expect(script).toContain(workspacePath);
+    expect(script).toContain("codex.exe");
+    expect(script).toContain("--no-alt-screen");
+    expect(script).toContain("resume");
+    expect(script).toContain("--last");
+    expect(factory.options?.cwd).toBe(workspacePath);
+    const meta = JSON.parse(await readFile(logStore.lastMetaPath!, "utf8"));
+    expect(meta.command).toBe("codex.exe");
+    expect(meta.args).toEqual(["--no-alt-screen", "--model", "gpt-5", "resume", "--last", "--cd", workspacePath]);
+  });
+
+  it("launches managed agent profiles through cmd when configured", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "agenthub-pty-"));
+    workspacePath = path.join(tempRoot, "Agent Hub Workspace");
+    await mkdir(workspacePath, { recursive: true });
+    const factory = new FakeFactory();
+    const manager = new PtySessionManager({
+      ptyFactory: factory,
+      logStore: new RunLogStore(),
+    });
+
+    await manager.startProfile(
+      {
+        id: "codex",
+        name: "Codex",
+        kind: "codex",
+        command: "codex.cmd",
+        args: ["--model", "gpt-5"],
+        aliases: [],
+        rolePrompt: "",
+        env: {},
+        defaultCwd: null,
+        launchMode: "cmd",
+        useWorkspaceWriteLock: false,
+      } as any,
+      workspacePath,
+      100,
+      30,
+    );
+
+    expect(factory.command.toLowerCase()).toContain("cmd");
+    expect(factory.args[0]).toBe("/K");
+    expect(factory.args[1]).toContain("chcp 65001");
+    expect(factory.args[1]).toContain(`cd /d "${workspacePath}"`);
+    expect(factory.args[1]).toContain("codex.cmd");
+    expect(factory.args[1]).toContain("--no-alt-screen");
+    expect(factory.args[1]).toContain("--model");
+    expect(factory.args[1]).toContain("gpt-5");
   });
 
   it("resolves profile commands from PATH before spawning", async () => {
@@ -387,6 +474,7 @@ describe("PtySessionManager", () => {
         rolePrompt: "Implement changes.",
         env: { CODEX_HOME: "C:/codex" },
         defaultCwd: null,
+        launchMode: "direct",
         useWorkspaceWriteLock: true,
       },
       workspacePath,

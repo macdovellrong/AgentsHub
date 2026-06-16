@@ -95,16 +95,18 @@ describe("buildProfileSavePayload", () => {
         rolePrompt: "",
         env: { EXISTING: "1" },
         defaultCwd: null,
+        launchMode: "powershell",
         useWorkspaceWriteLock: false,
-      },
+      } as any,
       {
         name: " Runner ",
         command: " tool.exe ",
         argsText: "run\n--json",
         aliasesText: "@runner r",
         rolePrompt: "Implement only.",
+        launchMode: "cmd",
         useWorkspaceWriteLock: true,
-      },
+      } as any,
     );
 
     expect(payload).toEqual({
@@ -116,6 +118,7 @@ describe("buildProfileSavePayload", () => {
       rolePrompt: "Implement only.",
       env: { EXISTING: "1" },
       defaultCwd: null,
+      launchMode: "cmd",
       useWorkspaceWriteLock: true,
     });
   });

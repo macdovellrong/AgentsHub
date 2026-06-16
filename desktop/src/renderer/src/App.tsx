@@ -71,6 +71,7 @@ const emptyEditorFields: ProfileEditorFields = {
   argsText: "",
   aliasesText: "",
   rolePrompt: "",
+  launchMode: "direct",
   useWorkspaceWriteLock: false,
 };
 
@@ -773,6 +774,7 @@ export function App(): React.JSX.Element {
         rolePrompt: "",
         env: {},
         defaultCwd: null,
+        launchMode: "direct",
         useWorkspaceWriteLock: false,
       });
       setProfiles((current) => [...current, created]);
@@ -1355,7 +1357,7 @@ export function App(): React.JSX.Element {
                   >
                     <div>
                       <strong>{profile.name}</strong>
-                      <span>{profile.kind}</span>
+                      <span>{profile.kind} / {profile.launchMode ?? "direct"}</span>
                     </div>
                     <div className="profile-actions">
                       <span className={`status-pill ${onlineSessions.length > 0 ? "status-online" : "status-exited"}`}>
@@ -1912,6 +1914,22 @@ export function App(): React.JSX.Element {
                   value={editorFields.argsText}
                   onChange={(event) => setEditorFields((current) => ({ ...current, argsText: event.target.value }))}
                 />
+              </label>
+              <label>
+                启动方式
+                <select
+                  value={editorFields.launchMode}
+                  onChange={(event) =>
+                    setEditorFields((current) => ({
+                      ...current,
+                      launchMode: event.target.value === "cmd" || event.target.value === "direct" ? event.target.value : "powershell",
+                    }))
+                  }
+                >
+                  <option value="powershell">PowerShell</option>
+                  <option value="cmd">cmd</option>
+                  <option value="direct">direct</option>
+                </select>
               </label>
               <label>
                 {UI_TEXT.labels.aliases}

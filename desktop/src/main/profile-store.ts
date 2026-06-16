@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type AgentProfileKind = "powershell" | "codex" | "claude" | "gemini" | "custom";
+export type AgentProfileLaunchMode = "direct" | "powershell" | "cmd";
 
 export type AgentProfile = {
   id: string;
@@ -14,6 +15,7 @@ export type AgentProfile = {
   rolePrompt: string;
   env: Record<string, string>;
   defaultCwd: string | null;
+  launchMode?: AgentProfileLaunchMode;
   useWorkspaceWriteLock: boolean;
 };
 
@@ -41,6 +43,7 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     rolePrompt: "",
     env: {},
     defaultCwd: null,
+    launchMode: "direct",
     useWorkspaceWriteLock: false,
   },
   {
@@ -53,6 +56,7 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     rolePrompt: "Implement the requested change in the selected workspace.",
     env: {},
     defaultCwd: null,
+    launchMode: "powershell",
     useWorkspaceWriteLock: true,
   },
   {
@@ -65,6 +69,7 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     rolePrompt: "Plan and decompose implementation work.",
     env: {},
     defaultCwd: null,
+    launchMode: "powershell",
     useWorkspaceWriteLock: false,
   },
   {
@@ -77,6 +82,7 @@ const DEFAULT_PROFILES: AgentProfile[] = [
     rolePrompt: "Review implementation output and identify risks.",
     env: {},
     defaultCwd: null,
+    launchMode: "powershell",
     useWorkspaceWriteLock: false,
   },
 ];
@@ -184,6 +190,7 @@ export class ProfileStore {
       rolePrompt: profile.rolePrompt ?? "",
       env: { ...(profile.env ?? {}) },
       defaultCwd: profile.defaultCwd ?? null,
+      launchMode: normalizeLaunchMode(profile.launchMode, profile.kind),
       useWorkspaceWriteLock: Boolean(profile.useWorkspaceWriteLock),
     };
     if (this.isLegacyWritableClaudeDefault(normalized)) {
@@ -211,6 +218,19 @@ export class ProfileStore {
     const slug = name.toLowerCase().trim().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
     return `${slug || "profile"}-${randomUUID().slice(0, 8)}`;
   }
+}
+
+export function defaultLaunchModeForProfileKind(kind: AgentProfileKind): AgentProfileLaunchMode {
+  return kind === "codex" || kind === "claude" || kind === "gemini" ? "powershell" : "direct";
+}
+
+function normalizeLaunchMode(
+  launchMode: AgentProfileLaunchMode | undefined,
+  kind: AgentProfileKind,
+): AgentProfileLaunchMode {
+  return launchMode === "direct" || launchMode === "powershell" || launchMode === "cmd"
+    ? launchMode
+    : defaultLaunchModeForProfileKind(kind);
 }
 
 export function getDefaultProfiles(): AgentProfile[] {

@@ -24,20 +24,24 @@ describe("ProfileStore", () => {
     expect(profiles.find((profile) => profile.id === "powershell")).toMatchObject({
       kind: "powershell",
       command: "powershell.exe",
+      launchMode: "direct",
       useWorkspaceWriteLock: false,
     });
     expect(profiles.find((profile) => profile.id === "codex")).toMatchObject({
       kind: "codex",
       command: "codex.cmd",
+      launchMode: "powershell",
       useWorkspaceWriteLock: true,
     });
     expect(profiles.find((profile) => profile.id === "claude")).toMatchObject({
       kind: "claude",
+      launchMode: "powershell",
       useWorkspaceWriteLock: false,
     });
     expect(profiles.find((profile) => profile.id === "gemini")).toMatchObject({
       kind: "gemini",
       command: "gemini.cmd",
+      launchMode: "powershell",
     });
   });
 
@@ -55,6 +59,7 @@ describe("ProfileStore", () => {
       rolePrompt: "Review only.",
       env: { REVIEW_MODE: "1" },
       defaultCwd: "C:/work",
+      launchMode: "cmd",
       useWorkspaceWriteLock: true,
     });
     const updated = await store.update(created.id, { name: "Reviewer 2", args: ["--fast"] });
@@ -70,8 +75,52 @@ describe("ProfileStore", () => {
     expect(profiles.find((profile) => profile.id === "reviewer-copy")).toMatchObject({
       aliases: ["review"],
       args: ["--fast"],
+      launchMode: "cmd",
     });
     await expect(readFile(configPath, "utf8")).resolves.toContain("reviewer-copy");
+  });
+
+  it("normalizes legacy profiles without launch modes", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agenthub-profiles-"));
+    const configPath = path.join(tempDir, "profiles.json");
+    await writeFile(
+      configPath,
+      `${JSON.stringify({
+        profiles: [
+          {
+            id: "codex",
+            name: "Codex",
+            kind: "codex",
+            command: "codex.cmd",
+            args: [],
+            aliases: [],
+            rolePrompt: "",
+            env: {},
+            defaultCwd: null,
+            useWorkspaceWriteLock: true,
+          },
+          {
+            id: "custom",
+            name: "Custom",
+            kind: "custom",
+            command: "tool.exe",
+            args: [],
+            aliases: [],
+            rolePrompt: "",
+            env: {},
+            defaultCwd: null,
+            useWorkspaceWriteLock: false,
+          },
+        ],
+      })}\n`,
+      "utf8",
+    );
+    const store = new ProfileStore({ configPath });
+
+    const profiles = await store.list();
+
+    expect(profiles.find((profile) => profile.id === "codex")).toMatchObject({ launchMode: "powershell" });
+    expect(profiles.find((profile) => profile.id === "custom")).toMatchObject({ launchMode: "direct" });
   });
 
   it("migrates the legacy built-in Claude profile to read-only planning", async () => {

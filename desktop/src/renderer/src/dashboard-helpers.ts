@@ -5,6 +5,7 @@ import type {
   ConversationMode,
   ConversationStatus,
   CreateProfileRequest,
+  ProfileLaunchMode,
   StartPowerShellResponse,
 } from "../../shared/ipc";
 import { UI_TEXT } from "./ui-text";
@@ -15,6 +16,7 @@ export type ProfileEditorFields = {
   argsText: string;
   aliasesText: string;
   rolePrompt: string;
+  launchMode: ProfileLaunchMode;
   useWorkspaceWriteLock: boolean;
 };
 
@@ -107,6 +109,7 @@ export function buildProfileSavePayload(
     rolePrompt: fields.rolePrompt,
     env: { ...profile.env },
     defaultCwd: profile.defaultCwd,
+    launchMode: fields.launchMode,
     useWorkspaceWriteLock: fields.useWorkspaceWriteLock,
   };
 }
@@ -118,8 +121,13 @@ export function profileToFields(profile: AgentProfileDto): ProfileEditorFields {
     argsText: profile.args.join("\n"),
     aliasesText: profile.aliases.join(" "),
     rolePrompt: profile.rolePrompt,
+    launchMode: profile.launchMode ?? defaultLaunchModeForProfileKind(profile.kind),
     useWorkspaceWriteLock: profile.useWorkspaceWriteLock,
   };
+}
+
+export function defaultLaunchModeForProfileKind(kind: AgentProfileDto["kind"]): ProfileLaunchMode {
+  return kind === "codex" || kind === "claude" || kind === "gemini" ? "powershell" : "direct";
 }
 
 export function canResumeProfile(profile: AgentProfileDto): boolean {

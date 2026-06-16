@@ -56,6 +56,7 @@ export const IpcChannels = {
 
 export type SessionStatus = "starting" | "online" | "exited" | "error";
 export type ProfileKind = "powershell" | "codex" | "claude" | "gemini" | "custom";
+export type ProfileLaunchMode = "direct" | "powershell" | "cmd";
 
 export type AgentProfileDto = {
   id: string;
@@ -67,6 +68,7 @@ export type AgentProfileDto = {
   rolePrompt: string;
   env: Record<string, string>;
   defaultCwd: string | null;
+  launchMode?: ProfileLaunchMode;
   useWorkspaceWriteLock: boolean;
 };
 
