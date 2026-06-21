@@ -1,22 +1,22 @@
 import { EventEmitter } from "node:events";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import * as nodePty from "node-pty";
 import { RunLogStore } from "./log-store";
 import { EventStore } from "./event-store";
-import {
-  defaultLaunchModeForProfileKind,
-  getDefaultProfiles,
-  type AgentProfile,
-  type AgentProfileKind,
-  type AgentProfileLaunchMode,
-} from "./profile-store";
+import { getDefaultProfiles, type AgentProfile, type AgentProfileKind } from "./profile-store";
 import type { ProjectHookInstaller } from "./project-hook-installer";
 import { WorkspaceWriteLockService } from "./workspace-write-lock";
-import { shouldBufferTerminalInput, type TerminalInputSource } from "./terminal-input-readiness";
+import type { TerminalInputSource } from "./terminal-input-readiness";
 import { countUtf8Bytes, subtractAckedBytes } from "./terminal-output-ack";
+import { buildAgentHostLaunchPlan } from "./agent-host-launcher";
+import { AgentTranscriptStore, type AgentTranscriptEvent } from "./agent-transcript-store";
+import type { AgentHostLaunchPlan, AgentHostShellKind } from "./agent-host-types";
+import { createAgentHostSession, type AgentHostSession } from "./agent-host-session";
+import type { RawTerminalStateSnapshot } from "./raw-terminal-state";
+
+export { resolveProfileCommand } from "./agent-host-launcher";
+export { INPUT_READY_FIRST_OUTPUT_DELAY_MS, INPUT_READY_TIMEOUT_MS } from "./terminal-input-controller";
 
 export type PtySpawnOptions = {
   name: string;
@@ -61,6 +61,8 @@ export type PtySession = {
   workspacePath: string;
   rawLogPath: string;
   metaPath: string;
+  hostKind?: AgentHostShellKind;
+  terminalState?: RawTerminalStateSnapshot;
 };
 
 export type PtyDataEvent = {
@@ -87,6 +89,7 @@ type PtySessionManagerOptions = {
   writeLocks?: WorkspaceWriteLockService;
   hookConfig?: AgentHookConfig;
   projectHooks?: ProjectHookInstaller;
+  transcriptStore?: AgentTranscriptStore;
 };
 
 export type AgentHookConfig = {
@@ -102,10 +105,7 @@ type StoredSession = {
   persistenceQueue: Promise<void>;
   outputSeq: number;
   unackedBytes: number;
-  inputReady: boolean;
-  inputBuffer: string[];
-  inputReadyTimeout: ReturnType<typeof setTimeout> | null;
-  firstOutputReadyTimer: ReturnType<typeof setTimeout> | null;
+  hostSession: AgentHostSession;
 };
 
 const POWERSHELL_COMMAND = "powershell.exe";
@@ -121,84 +121,11 @@ const RESUMABLE_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "g
 const PROJECT_HOOK_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 const RAW_LOG_DISABLED_PROFILE_KINDS = new Set<AgentProfileKind>(["codex", "claude", "gemini"]);
 const CODEX_NO_ALT_SCREEN_ARG = "--no-alt-screen";
-export const INPUT_READY_FIRST_OUTPUT_DELAY_MS = 120;
-export const INPUT_READY_TIMEOUT_MS = 3000;
 
 export class NodePtyFactory implements PtyFactory {
   spawn(command: string, args: string[], options: PtySpawnOptions): PtyLike {
     return nodePty.spawn(command, args, options);
   }
-}
-
-export function resolveProfileCommand(command: string, env: NodeJS.ProcessEnv = process.env): string {
-  if (path.isAbsolute(command) || command.includes("\\") || command.includes("/")) {
-    return command;
-  }
-
-  const pathValue = env.PATH ?? env.Path ?? env.path;
-  const hasExtension = path.extname(command).length > 0;
-  const extensions = process.platform === "win32" && !hasExtension
-    ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
-    : [""];
-
-  for (const directory of commandSearchDirectories(pathValue, env)) {
-    if (!directory) {
-      continue;
-    }
-    for (const extension of extensions) {
-      const candidate = path.join(directory, `${command}${extension}`);
-      if (existsSync(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  return command;
-}
-
-function commandSearchDirectories(pathValue: string | undefined, env: NodeJS.ProcessEnv): string[] {
-  const directories = pathValue ? pathValue.split(path.delimiter) : [];
-  const userProfile = env.USERPROFILE ?? env.HOME;
-  if (userProfile) {
-    directories.push(path.join(userProfile, ".local", "bin"));
-  }
-  if (env.APPDATA) {
-    directories.push(path.join(env.APPDATA, "npm"));
-  }
-  if (env.LOCALAPPDATA) {
-    directories.push(path.join(env.LOCALAPPDATA, "Microsoft", "WindowsApps"));
-  }
-  return [...new Set(directories.filter(Boolean))];
-}
-
-function splitSubmittedTerminalInput(data: string): { text: string } | null {
-  if (data.length <= 1 || !/[\r\n]$/.test(data)) {
-    return null;
-  }
-  return { text: data.replace(/[\r\n]+$/g, "") };
-}
-
-function shouldUseBracketedPaste(kind: AgentProfileKind): boolean {
-  return kind === "codex" || kind === "claude" || kind === "gemini";
-}
-
-function bracketedPaste(text: string): string {
-  return `\x1b[200~${normalizePastedText(text)}\x1b[201~`;
-}
-
-function normalizePastedText(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function getSubmitDelays(kind: AgentProfileKind, text: string): number[] {
-  if (!shouldUseBracketedPaste(kind)) {
-    return [25];
-  }
-  const isMultiline = /[\r\n]/.test(text);
-  if (kind === "codex" && isMultiline) {
-    return [450, 1400];
-  }
-  return [450];
 }
 
 export function buildProfileLaunchArgs(profile: AgentProfile, options: StartProfileOptions = {}): string[] {
@@ -236,64 +163,6 @@ function buildBaseProfileArgs(profile: AgentProfile): string[] {
   return [CODEX_NO_ALT_SCREEN_ARG, ...args];
 }
 
-function resolveLaunchMode(profile: AgentProfile): AgentProfileLaunchMode {
-  return profile.launchMode ?? defaultLaunchModeForProfileKind(profile.kind);
-}
-
-type PtySpawnPlan = {
-  command: string;
-  args: string[];
-};
-
-function buildPtySpawnPlan(profile: AgentProfile, launchArgs: string[], cwd: string, env: NodeJS.ProcessEnv): PtySpawnPlan {
-  const targetCommand = resolveProfileCommand(profile.command, env);
-  const launchMode = resolveLaunchMode(profile);
-
-  if (launchMode === "powershell") {
-    return {
-      command: resolveProfileCommand("powershell.exe", env),
-      args: buildPowerShellHostedArgs(targetCommand, launchArgs, cwd),
-    };
-  }
-  if (launchMode === "cmd") {
-    return {
-      command: resolveProfileCommand("cmd.exe", env),
-      args: buildCmdHostedArgs(targetCommand, launchArgs, cwd),
-    };
-  }
-  return {
-    command: targetCommand,
-    args: launchArgs,
-  };
-}
-
-function buildPowerShellHostedArgs(command: string, args: string[], cwd: string): string[] {
-  const commandInvocation = [`& ${quotePowerShellString(command)}`, ...args.map(quotePowerShellString)].join(" ");
-  const script = [
-    "Remove-Module PSReadLine -ErrorAction SilentlyContinue",
-    "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8",
-    "$OutputEncoding=[System.Text.Encoding]::UTF8",
-    "chcp 65001 | Out-Null",
-    `Set-Location -LiteralPath ${quotePowerShellString(cwd)}`,
-    commandInvocation,
-  ].join("; ");
-
-  return ["-NoLogo", "-NoProfile", "-NoExit", "-Command", script];
-}
-
-function quotePowerShellString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
-function buildCmdHostedArgs(command: string, args: string[], cwd: string): string[] {
-  const commandInvocation = [quoteCmdArg(command), ...args.map(quoteCmdArg)].join(" ");
-  return ["/K", `chcp 65001 > nul && cd /d ${quoteCmdArg(cwd)} && ${commandInvocation}`];
-}
-
-function quoteCmdArg(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
-}
-
 function shouldPersistRawTerminalOutput(kind: AgentProfileKind): boolean {
   return !RAW_LOG_DISABLED_PROFILE_KINDS.has(kind);
 }
@@ -305,6 +174,7 @@ export class PtySessionManager extends EventEmitter {
   private readonly writeLocks: WorkspaceWriteLockService;
   private readonly hookConfig: AgentHookConfig | undefined;
   private readonly projectHooks: ProjectHookInstaller | undefined;
+  private readonly transcriptStore: AgentTranscriptStore;
   private readonly sessions = new Map<string, StoredSession>();
 
   constructor(options: PtySessionManagerOptions = {}) {
@@ -315,6 +185,7 @@ export class PtySessionManager extends EventEmitter {
     this.writeLocks = options.writeLocks ?? new WorkspaceWriteLockService();
     this.hookConfig = options.hookConfig;
     this.projectHooks = options.projectHooks;
+    this.transcriptStore = options.transcriptStore ?? new AgentTranscriptStore();
   }
 
   async startPowerShell(input: StartPowerShellInput): Promise<PtySession> {
@@ -348,6 +219,7 @@ export class PtySessionManager extends EventEmitter {
     });
     const sessionId = randomUUID();
     let pty: PtyLike;
+    let launchPlan: AgentHostLaunchPlan;
     try {
       const env = {
         ...process.env,
@@ -367,8 +239,13 @@ export class PtySessionManager extends EventEmitter {
           : {}),
       };
       const cwd = profile.defaultCwd ?? workspacePath;
-      const spawnPlan = buildPtySpawnPlan(profile, launchArgs, cwd, env);
-      pty = this.ptyFactory.spawn(spawnPlan.command, spawnPlan.args, {
+      launchPlan = buildAgentHostLaunchPlan({
+        profile,
+        launchArgs,
+        cwd,
+        env,
+      });
+      pty = this.ptyFactory.spawn(launchPlan.spawn.command, launchPlan.spawn.args, {
         name: "xterm-256color",
         cols,
         rows,
@@ -383,18 +260,30 @@ export class PtySessionManager extends EventEmitter {
       }
       throw error;
     }
-    const session: PtySession = {
+    const hostSession = createAgentHostSession({
       sessionId,
       runId: run.runId,
       profileId: profile.id,
       profileName: profile.name,
       kind: profile.kind,
       pid: pty.pid,
-      status: "online",
       workspacePath,
       rawLogPath: run.rawLogPath,
       metaPath: run.metaPath,
-    };
+      cols,
+      rows,
+      hostKind: launchPlan.host.kind,
+      write: (data) => pty.write(data),
+      onInput: (data, currentSession) => {
+        void this.appendTranscript(currentSession, {
+          type: "terminal_input",
+          sessionId: currentSession.sessionId,
+          profileId: currentSession.profileId,
+          bytes: countUtf8Bytes(data),
+        });
+      },
+    });
+    const session: PtySession = this.toPtySession(hostSession);
 
     let storedSession: StoredSession;
     const dataSubscription = pty.onData((data) => {
@@ -412,15 +301,9 @@ export class PtySessionManager extends EventEmitter {
       persistenceQueue: Promise.resolve(),
       outputSeq: 0,
       unackedBytes: 0,
-      inputReady: false,
-      inputBuffer: [],
-      inputReadyTimeout: null,
-      firstOutputReadyTimer: null,
+      hostSession,
     };
     this.sessions.set(session.sessionId, storedSession);
-    storedSession.inputReadyTimeout = setTimeout(() => {
-      this.markInputReady(session.sessionId);
-    }, INPUT_READY_TIMEOUT_MS);
     this.writeLocks.register({
       sessionId: session.sessionId,
       workspacePath,
@@ -435,46 +318,22 @@ export class PtySessionManager extends EventEmitter {
       profileId: profile.id,
       profileName: profile.name,
     });
+    await this.appendTranscript(session, {
+      type: "session_started",
+      sessionId: session.sessionId,
+      profileId: session.profileId,
+      hostKind: launchPlan.host.kind,
+    });
 
     return session;
   }
 
   listSessions(): PtySession[] {
-    return [...this.sessions.values()].map((stored) => ({ ...stored.session }));
+    return [...this.sessions.values()].map((stored) => this.toPtySession(stored.hostSession, stored.session.status));
   }
 
   write(sessionId: string, data: string, source: TerminalInputSource = "program"): void {
-    const stored = this.requireSession(sessionId);
-    if (source === "user" && !stored.inputReady) {
-      this.markInputReady(sessionId);
-    }
-    if (shouldBufferTerminalInput({ inputReady: stored.inputReady, source })) {
-      stored.inputBuffer.push(data);
-      return;
-    }
-    this.writeImmediately(stored, data, source);
-  }
-
-  private writeImmediately(stored: StoredSession, data: string, source: TerminalInputSource = "program"): void {
-    if (source === "user") {
-      stored.pty.write(data);
-      return;
-    }
-    const submittedInput = splitSubmittedTerminalInput(data);
-    if (!submittedInput) {
-      stored.pty.write(data);
-      return;
-    }
-    stored.pty.write(
-      shouldUseBracketedPaste(stored.session.kind) ? bracketedPaste(submittedInput.text) : submittedInput.text,
-    );
-    for (const delayMs of getSubmitDelays(stored.session.kind, submittedInput.text)) {
-      setTimeout(() => {
-        if (this.sessions.has(stored.session.sessionId)) {
-          stored.pty.write("\r");
-        }
-      }, delayMs);
-    }
+    this.requireSession(sessionId).hostSession.inputController.write(data, source);
   }
 
   ack(sessionId: string, byteLength: number): number {
@@ -484,7 +343,9 @@ export class PtySessionManager extends EventEmitter {
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
-    this.requireSession(sessionId).pty.resize(cols, rows);
+    const stored = this.requireSession(sessionId);
+    stored.hostSession.terminalState.resize(cols, rows);
+    stored.pty.resize(cols, rows);
   }
 
   stop(sessionId: string): void {
@@ -500,6 +361,16 @@ export class PtySessionManager extends EventEmitter {
   }
 
   private async persistAndEmitData(stored: StoredSession, data: string): Promise<void> {
+    stored.hostSession.terminalState.recordOutput(data);
+    const terminalSnapshot = stored.hostSession.terminalState.snapshot();
+    void this.appendTranscript(stored.session, {
+      type: "terminal_output",
+      sessionId: stored.session.sessionId,
+      profileId: stored.session.profileId,
+      bytes: countUtf8Bytes(data),
+      preview: previewTerminalData(data),
+      alternateBuffer: terminalSnapshot.alternateBuffer,
+    });
     if (shouldPersistRawTerminalOutput(stored.session.kind)) {
       try {
         await this.logStore.appendRaw(stored.session.runId, data);
@@ -517,12 +388,13 @@ export class PtySessionManager extends EventEmitter {
       seq: stored.outputSeq,
       byteLength,
     } satisfies PtyDataEvent);
-    this.scheduleFirstOutputReady(stored);
+    stored.hostSession.inputController.handleOutput();
   }
 
   private async handleExit(stored: StoredSession, exitCode: number | null): Promise<void> {
     stored.session.status = "exited";
-    this.clearInputReadyTimers(stored);
+    stored.hostSession.session.status = "exited";
+    stored.hostSession.inputController.dispose();
     try {
       await stored.persistenceQueue;
     } catch (error) {
@@ -549,6 +421,12 @@ export class PtySessionManager extends EventEmitter {
       } catch (error) {
         this.emitPtyError(stored.session.sessionId, error);
       }
+      await this.appendTranscript(stored.session, {
+        type: "session_exited",
+        sessionId: stored.session.sessionId,
+        profileId: stored.session.profileId,
+        exitCode,
+      });
       this.emit("exit", {
         sessionId: stored.session.sessionId,
         exitCode,
@@ -564,38 +442,29 @@ export class PtySessionManager extends EventEmitter {
     this.emit("error", { sessionId, message } satisfies PtyErrorEvent);
   }
 
-  private scheduleFirstOutputReady(stored: StoredSession): void {
-    if (stored.inputReady || stored.firstOutputReadyTimer) {
-      return;
-    }
-    const sessionId = stored.session.sessionId;
-    stored.firstOutputReadyTimer = setTimeout(() => {
-      this.markInputReady(sessionId);
-    }, INPUT_READY_FIRST_OUTPUT_DELAY_MS);
-  }
-
-  private markInputReady(sessionId: string): void {
-    const stored = this.sessions.get(sessionId);
-    if (!stored || stored.inputReady) {
-      return;
-    }
-    stored.inputReady = true;
-    this.clearInputReadyTimers(stored);
-    const buffered = [...stored.inputBuffer];
-    stored.inputBuffer = [];
-    for (const data of buffered) {
-      this.writeImmediately(stored, data);
+  private async appendTranscript(session: PtySession, event: AgentTranscriptEvent): Promise<void> {
+    try {
+      await this.transcriptStore.append(session.workspacePath, session.runId, event);
+    } catch (error) {
+      this.emitPtyError(session.sessionId, error);
     }
   }
 
-  private clearInputReadyTimers(stored: StoredSession): void {
-    if (stored.inputReadyTimeout) {
-      clearTimeout(stored.inputReadyTimeout);
-      stored.inputReadyTimeout = null;
-    }
-    if (stored.firstOutputReadyTimer) {
-      clearTimeout(stored.firstOutputReadyTimer);
-      stored.firstOutputReadyTimer = null;
-    }
+  private toPtySession(hostSession: AgentHostSession, status = hostSession.session.status): PtySession {
+    return {
+      ...hostSession.session,
+      status,
+      hostKind: hostSession.hostKind,
+      terminalState: hostSession.terminalState.snapshot(),
+    };
   }
+}
+
+function previewTerminalData(data: string): string {
+  return data
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .slice(0, 500);
 }

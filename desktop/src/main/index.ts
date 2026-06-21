@@ -234,6 +234,8 @@ function toSessionResponse(session: PtySession): {
   status: PtySession["status"];
   rawLogPath: string;
   metaPath: string;
+  hostKind: PtySession["hostKind"];
+  terminalState: PtySession["terminalState"];
 } {
   return {
     sessionId: session.sessionId,
@@ -245,6 +247,8 @@ function toSessionResponse(session: PtySession): {
     status: session.status,
     rawLogPath: session.rawLogPath,
     metaPath: session.metaPath,
+    hostKind: session.hostKind,
+    terminalState: session.terminalState,
   };
 }
 

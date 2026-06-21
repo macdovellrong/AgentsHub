@@ -88,6 +88,15 @@ export type StartPowerShellResponse = {
   status: SessionStatus;
   rawLogPath: string;
   metaPath: string;
+  hostKind?: ProfileLaunchMode;
+  terminalState?: {
+    cols: number;
+    rows: number;
+    outputBytes: number;
+    inputBytes: number;
+    alternateBuffer: boolean;
+    lastOutputAt: string | null;
+  };
 };
 
 export type StartProfileRequest = {

@@ -1746,7 +1746,15 @@ export function App(): React.JSX.Element {
                   <div className="panel-header workspace-terminal-header">
                     <div>
                       <h2>{session.profileName}</h2>
-                      <span>{session.profileId}</span>
+                      <span>
+                        {session.profileId}
+                        {session.hostKind ? ` / ${session.hostKind}` : ""}
+                        {session.terminalState
+                          ? ` / ${session.terminalState.cols}x${session.terminalState.rows}${
+                              session.terminalState.alternateBuffer ? " / alt-buffer" : ""
+                            }`
+                          : ""}
+                      </span>
                     </div>
                     <div className="button-row">
                       {selectedSession?.sessionId === session.sessionId ? (
