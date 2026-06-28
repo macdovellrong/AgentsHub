@@ -4,4 +4,6 @@ public sealed record AgentSessionDescriptor(
     string Id,
     string ProfileId,
     string WorkspacePath,
-    DateTimeOffset StartedAt);
+    DateTimeOffset StartedAt,
+    string? RunId = null,
+    string? HookReceiverUrl = null);

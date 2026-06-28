@@ -22,6 +22,8 @@
 - [x] 用测试驱动实现 `AgentInputRouter`。
 - [x] WPF App 接入 `EasyWindowsTerminalControl`。
 - [x] WPF App 接入 hook receiver、hook installer、hook env 注入和输入栏。
+- [x] 多 session 列表支持 Stop selected、Stop all、切换时保留各自 terminal 实例。
+- [x] session 列表显示 profile、workspace、runId 和 hook receiver 状态。
 
 ## 后续任务
 
@@ -43,13 +45,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 - 使用 AgentHub 输入栏发送一行文本。
 - 等待 Codex 产生最终消息，确认 Hook 消息列表收到回传。
 
-### Task 2: 多 session 管理增强
-
-- 让 session list 支持停止 session。
-- 让不同 session 切换时保留 terminal 实例。
-- 显示 session 的 profile、workspace、runId、hook receiver 状态。
-
-### Task 3: 协作层迁移
+### Task 2: 协作层迁移
 
 - 把现有 Electron 版 conversation/task-plan 编排逻辑迁入 native Core，或先通过 IPC/HTTP 复用现有服务。
 - 输入仍走 `AgentInputRouter`。

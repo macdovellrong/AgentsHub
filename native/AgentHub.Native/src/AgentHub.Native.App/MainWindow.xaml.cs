@@ -259,10 +259,22 @@ public partial class MainWindow : Window
                 FontSizeWhenSettingTheme = 14
             };
 
-            var session = new SessionViewModel(sessionId, startupCommand.AgentKind, shellKind, workspace, terminal);
+            var descriptor = new AgentSessionDescriptor(
+                sessionId,
+                profileId,
+                workspace.Path,
+                DateTimeOffset.UtcNow,
+                runId,
+                hookInfo?.Url);
+            var session = new SessionViewModel(
+                descriptor,
+                startupCommand.AgentKind,
+                shellKind,
+                workspace,
+                terminal);
             sessions[sessionId] = session;
             inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
-            sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
+            sessionRegistry.Register(descriptor);
             SessionListBox.Items.Add(session);
             SessionListBox.SelectedItem = session;
             StatusTextBlock.Text = $"Started {session.DisplayName}";
@@ -697,19 +709,21 @@ public partial class MainWindow : Window
     }
 
     private sealed record SessionViewModel(
-        string Id,
+        AgentSessionDescriptor Descriptor,
         AgentKind AgentKind,
         ShellKind ShellKind,
         WorkspaceEntry Workspace,
         EasyTerminalControl Terminal)
     {
+        public string Id => Descriptor.Id;
+
         public string DisplayName => AgentKind == AgentKind.PowerShell
             ? $"{ShellKind} / {Workspace.Name}"
             : $"{AgentKind} via {ShellKind} / {Workspace.Name}";
 
         public override string ToString()
         {
-            return $"{Id}  {DisplayName}";
+            return AgentSessionDisplayFormatter.Format(Descriptor);
         }
     }
 }
