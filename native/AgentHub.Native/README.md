@@ -52,6 +52,26 @@
 .\scripts\start-native.ps1 -Check
 ```
 
+## 发布
+
+在开发机生成可复制到其他 Windows 电脑的发布目录：
+
+```powershell
+.\scripts\publish-native.ps1
+```
+
+默认输出到 `artifacts/native/win-x64`，并复制 Agent hook 脚本到发布目录内的 `scripts/hooks`。发布后可以在目标电脑运行：
+
+```powershell
+.\artifacts\native\win-x64\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume
+```
+
+只检查发布环境、不执行发布：
+
+```powershell
+.\scripts\publish-native.ps1 -Check
+```
+
 也可以直接运行项目：
 
 ```powershell
