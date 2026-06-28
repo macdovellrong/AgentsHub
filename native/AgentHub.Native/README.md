@@ -91,6 +91,8 @@
 .\artifacts\native\win-x64\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume
 ```
 
+发布版 `start-agenthub-native.bat` 会直接调用 native exe。native exe 同时兼容 `-Workspace/-Agent/-Shell/-Python/-Resume` 和 `--workspace/--agent/--shell/--python/--resume` 两种参数风格。
+
 只检查发布环境、不执行发布：
 
 ```powershell

@@ -30,6 +30,14 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_powershell_style_long_workspace_option()
+    {
+        var options = NativeAppStartupOptions.Parse(["-Workspace", @"D:\GoldAgent"]);
+
+        Assert.Equal(@"D:\GoldAgent", options.InitialWorkspacePath);
+    }
+
+    [Fact]
     public void Parses_shell_option_with_separate_value()
     {
         var options = NativeAppStartupOptions.Parse(["--shell", "cmd"]);
@@ -46,6 +54,14 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_powershell_style_long_shell_option()
+    {
+        var options = NativeAppStartupOptions.Parse(["-Shell", "cmd"]);
+
+        Assert.Equal(ShellKind.Cmd, options.HostShell);
+    }
+
+    [Fact]
     public void Parses_python_option_with_separate_value()
     {
         var options = NativeAppStartupOptions.Parse(["--python", @"C:\Program Files\Python311\python.exe"]);
@@ -57,6 +73,14 @@ public sealed class NativeAppStartupOptionsTests
     public void Parses_python_option_with_equals_value()
     {
         var options = NativeAppStartupOptions.Parse(["--python=py -3.11"]);
+
+        Assert.Equal("py -3.11", options.HookPythonCommand);
+    }
+
+    [Fact]
+    public void Parses_powershell_style_long_python_option()
+    {
+        var options = NativeAppStartupOptions.Parse(["-Python", "py -3.11"]);
 
         Assert.Equal("py -3.11", options.HookPythonCommand);
     }
@@ -87,6 +111,15 @@ public sealed class NativeAppStartupOptionsTests
     public void Parses_agent_option_with_resume_flag()
     {
         var options = NativeAppStartupOptions.Parse(["--agent", "codex", "--resume"]);
+
+        Assert.Equal(AgentKind.Codex, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Resume, options.StartupMode);
+    }
+
+    [Fact]
+    public void Parses_powershell_style_long_agent_option_and_resume_flag()
+    {
+        var options = NativeAppStartupOptions.Parse(["-Agent", "codex", "-Resume"]);
 
         Assert.Equal(AgentKind.Codex, options.StartupAgentKind);
         Assert.Equal(AgentStartupMode.Resume, options.StartupMode);

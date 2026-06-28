@@ -23,32 +23,31 @@ public sealed record NativeAppStartupOptions(
         for (var index = 0; index < args.Count; index += 1)
         {
             var arg = args[index];
-            if (arg.StartsWith("--workspace=", StringComparison.OrdinalIgnoreCase))
+            if (TryReadInlineValue(arg, "--workspace=", "-workspace=", out var inlineWorkspacePath))
             {
-                workspacePath = arg["--workspace=".Length..];
+                workspacePath = inlineWorkspacePath;
                 continue;
             }
 
-            if (arg.StartsWith("--shell=", StringComparison.OrdinalIgnoreCase))
+            if (TryReadInlineValue(arg, "--shell=", "-shell=", out var inlineHostShell))
             {
-                hostShell = arg["--shell=".Length..];
+                hostShell = inlineHostShell;
                 continue;
             }
 
-            if (arg.StartsWith("--python=", StringComparison.OrdinalIgnoreCase))
+            if (TryReadInlineValue(arg, "--python=", "-python=", out var inlineHookPythonCommand))
             {
-                hookPythonCommand = arg["--python=".Length..];
+                hookPythonCommand = inlineHookPythonCommand;
                 continue;
             }
 
-            if (arg.StartsWith("--agent=", StringComparison.OrdinalIgnoreCase))
+            if (TryReadInlineValue(arg, "--agent=", "-agent=", out var inlineAgent))
             {
-                startupAgents.Add(arg["--agent=".Length..]);
+                startupAgents.Add(inlineAgent);
                 continue;
             }
 
-            if (string.Equals(arg, "--workspace", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(arg, "-w", StringComparison.OrdinalIgnoreCase))
+            if (IsOption(arg, "--workspace", "-workspace", "-w"))
             {
                 if (index + 1 < args.Count)
                 {
@@ -57,8 +56,7 @@ public sealed record NativeAppStartupOptions(
                 }
             }
 
-            if (string.Equals(arg, "--shell", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(arg, "-s", StringComparison.OrdinalIgnoreCase))
+            if (IsOption(arg, "--shell", "-shell", "-s"))
             {
                 if (index + 1 < args.Count)
                 {
@@ -67,7 +65,7 @@ public sealed record NativeAppStartupOptions(
                 }
             }
 
-            if (string.Equals(arg, "--python", StringComparison.OrdinalIgnoreCase))
+            if (IsOption(arg, "--python", "-python"))
             {
                 if (index + 1 < args.Count)
                 {
@@ -76,8 +74,7 @@ public sealed record NativeAppStartupOptions(
                 }
             }
 
-            if (string.Equals(arg, "--agent", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(arg, "-a", StringComparison.OrdinalIgnoreCase))
+            if (IsOption(arg, "--agent", "-agent", "-a"))
             {
                 if (index + 1 < args.Count)
                 {
@@ -86,7 +83,7 @@ public sealed record NativeAppStartupOptions(
                 }
             }
 
-            if (string.Equals(arg, "--resume", StringComparison.OrdinalIgnoreCase))
+            if (IsOption(arg, "--resume", "-resume"))
             {
                 resume = true;
             }
@@ -108,6 +105,29 @@ public sealed record NativeAppStartupOptions(
     {
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static bool IsOption(string arg, params string[] names)
+    {
+        return names.Any(name => string.Equals(arg, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryReadInlineValue(string arg, string longPrefix, string powershellPrefix, out string value)
+    {
+        if (arg.StartsWith(longPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = arg[longPrefix.Length..];
+            return true;
+        }
+
+        if (arg.StartsWith(powershellPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = arg[powershellPrefix.Length..];
+            return true;
+        }
+
+        value = "";
+        return false;
     }
 
     private static ShellKind? ParseShellKind(string? raw)
