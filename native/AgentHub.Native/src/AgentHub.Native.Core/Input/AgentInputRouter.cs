@@ -20,4 +20,14 @@ public sealed class AgentInputRouter
         await session.WriteAsync(text, cancellationToken).ConfigureAwait(false);
         await session.WriteAsync("\r", cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task StopAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (!sessions.Remove(sessionId, out var session))
+        {
+            throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
+        }
+
+        await session.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
 }

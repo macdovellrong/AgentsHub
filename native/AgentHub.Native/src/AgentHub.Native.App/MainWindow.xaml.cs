@@ -6,6 +6,7 @@ using AgentHub.Native.Core.Hooks;
 using AgentHub.Native.Core.Input;
 using AgentHub.Native.Core.Processes;
 using AgentHub.Native.Core.Profiles;
+using AgentHub.Native.Core.Workspaces;
 using EasyWindowsTerminalControl;
 
 namespace AgentHub.Native.App;
@@ -14,6 +15,7 @@ public partial class MainWindow : Window
 {
     private readonly AgentInputRouter inputRouter = new();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private int nextSessionNumber = 1;
     private string? selectedSessionId;
     private AgentHookReceiver? hookReceiver;
@@ -32,6 +34,7 @@ public partial class MainWindow : Window
         hookReceiver.EventReceived += HookReceiver_EventReceived;
         hookInfo = await hookReceiver.StartAsync();
         StatusTextBlock.Text = $"Hook receiver: {hookInfo.Url}";
+        await ReloadWorkspacesAsync();
     }
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
@@ -42,13 +45,40 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void AddWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        await AddCurrentWorkspaceAsync();
+    }
+
+    private async void RemoveWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        await workspaceStore.RemoveAsync(workspacePath);
+        await ReloadWorkspacesAsync();
+        StatusTextBlock.Text = "Workspace removed";
+    }
+
+    private void WorkspaceListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (WorkspaceListBox.SelectedItem is WorkspaceEntry workspace)
+        {
+            WorkspaceTextBox.Text = workspace.Path;
+        }
+    }
+
     private void HookReceiver_EventReceived(object? sender, AgentHookEvent hookEvent)
     {
         Dispatcher.Invoke(() =>
         {
             var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
             HookMessagesListBox.Items.Insert(0, $"{DateTime.Now:HH:mm:ss} {profile}: {hookEvent.Message}");
-            StatusTextBlock.Text = $"收到 hook: {profile}";
+            StatusTextBlock.Text = $"Hook received: {profile}";
         });
     }
 
@@ -74,18 +104,18 @@ public partial class MainWindow : Window
 
     private async Task StartAgentAsync(AgentKind agentKind, string command, IReadOnlyList<string> args)
     {
-        var workspace = WorkspaceTextBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(workspace))
+        var workspace = await AddCurrentWorkspaceAsync();
+        if (workspace is null)
         {
-            StatusTextBlock.Text = "请选择工作目录";
+            StatusTextBlock.Text = "Select or add a workspace first";
             return;
         }
 
         if (agentKind != AgentKind.PowerShell)
         {
-            StatusTextBlock.Text = "正在安装项目 hook...";
+            StatusTextBlock.Text = "Installing project hooks...";
             await ProjectAgentHookInstaller.InstallAsync(
-                workspace,
+                workspace.Path,
                 new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), "py -3"));
         }
 
@@ -100,8 +130,8 @@ public partial class MainWindow : Window
                 sessionId,
                 runId,
                 profileId,
-                workspace));
-        var request = new AgentLaunchRequest(agentKind, ShellKind.PowerShell, workspace, command, args, env);
+                workspace.Path));
+        var request = new AgentLaunchRequest(agentKind, ShellKind.PowerShell, workspace.Path, command, args, env);
         var plan = AgentLaunchPlanBuilder.Build(request);
         var startupCommandLine = WindowsCommandLineBuilder.Build(plan.Executable, plan.Arguments);
 
@@ -117,7 +147,62 @@ public partial class MainWindow : Window
         inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
         SessionListBox.Items.Add(session);
         SessionListBox.SelectedItem = session;
-        StatusTextBlock.Text = $"已启动 {session.DisplayName}";
+        StatusTextBlock.Text = $"Started {session.DisplayName}";
+    }
+
+    private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()
+    {
+        var workspacePath = CurrentWorkspacePath();
+        if (workspacePath is null)
+        {
+            return null;
+        }
+
+        var workspace = await workspaceStore.AddOrUpdateAsync(workspacePath);
+        await ReloadWorkspacesAsync(workspace.Path);
+        return workspace;
+    }
+
+    private string? CurrentWorkspacePath()
+    {
+        if (WorkspaceListBox.SelectedItem is WorkspaceEntry workspace)
+        {
+            return workspace.Path;
+        }
+
+        var typedPath = WorkspaceTextBox.Text.Trim();
+        return string.IsNullOrWhiteSpace(typedPath) ? null : typedPath;
+    }
+
+    private async Task ReloadWorkspacesAsync(string? selectPath = null)
+    {
+        var workspaces = await workspaceStore.LoadAsync();
+        WorkspaceListBox.Items.Clear();
+        foreach (var workspace in workspaces)
+        {
+            WorkspaceListBox.Items.Add(workspace);
+        }
+
+        if (workspaces.Count == 0)
+        {
+            return;
+        }
+
+        var selected = selectPath is null
+            ? workspaces[0]
+            : workspaces.FirstOrDefault(workspace =>
+                string.Equals(workspace.Path, selectPath, StringComparison.OrdinalIgnoreCase)) ?? workspaces[0];
+        WorkspaceListBox.SelectedItem = selected;
+        WorkspaceTextBox.Text = selected.Path;
+    }
+
+    private static string ResolveWorkspaceStorePath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var root = string.IsNullOrWhiteSpace(appData)
+            ? Path.Combine(AppContext.BaseDirectory, ".agenthub-native")
+            : Path.Combine(appData, "AgentHub", "Native");
+        return Path.Combine(root, "workspaces.json");
     }
 
     private static string ResolveHookScriptsDirectory()
@@ -157,6 +242,27 @@ public partial class MainWindow : Window
         await SendCurrentInputAsync();
     }
 
+    private async void StopSession_Click(object sender, RoutedEventArgs e)
+    {
+        if (SessionListBox.SelectedItem is not SessionViewModel session)
+        {
+            StatusTextBlock.Text = "No selected session";
+            return;
+        }
+
+        await inputRouter.StopAsync(session.Id);
+        sessions.Remove(session.Id);
+        SessionListBox.Items.Remove(session);
+        if (selectedSessionId == session.Id)
+        {
+            selectedSessionId = null;
+            TerminalHostGrid.Children.Clear();
+            CurrentSessionTextBlock.Text = "No session";
+        }
+
+        StatusTextBlock.Text = $"Stopped {session.Id}";
+    }
+
     private async void InjectTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter)
@@ -172,7 +278,7 @@ public partial class MainWindow : Window
     {
         if (selectedSessionId is null)
         {
-            StatusTextBlock.Text = "没有选中的会话";
+            StatusTextBlock.Text = "No selected session";
             return;
         }
 
@@ -184,7 +290,7 @@ public partial class MainWindow : Window
 
         await inputRouter.SendLineAsync(selectedSessionId, text);
         InjectTextBox.Clear();
-        StatusTextBlock.Text = $"已向 {selectedSessionId} 发送输入";
+        StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
     }
 
     private void SessionListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -203,10 +309,10 @@ public partial class MainWindow : Window
     private sealed record SessionViewModel(
         string Id,
         AgentKind AgentKind,
-        string Workspace,
+        WorkspaceEntry Workspace,
         EasyTerminalControl Terminal)
     {
-        public string DisplayName => $"{AgentKind} / {Workspace}";
+        public string DisplayName => $"{AgentKind} / {Workspace.Name}";
 
         public override string ToString()
         {

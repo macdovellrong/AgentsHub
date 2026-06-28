@@ -4,37 +4,66 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="AgentHub Native" Height="860" Width="1320"
+        Title="AgentHub Native" Height="900" Width="1400"
         Background="#111820">
     <Grid Margin="14">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="330" />
+            <ColumnDefinition Width="350" />
             <ColumnDefinition Width="12" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="14">
             <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Top" Text="AgentHub Native" Foreground="#F2F6FA" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,14" />
+                <TextBlock DockPanel.Dock="Top"
+                           Text="AgentHub Native"
+                           Foreground="#F2F6FA"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,14" />
 
                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
-                    <TextBlock Text="工作目录" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                    <TextBlock Text="Workspace path" Foreground="#9FB0C2" Margin="0,0,0,6" />
                     <TextBox x:Name="WorkspaceTextBox"
                              MinHeight="34"
                              Background="#0E151D"
                              Foreground="#F2F6FA"
-                             BorderBrush="#40566E"
-                             Text="V:\OrderManager" />
+                             BorderBrush="#40566E" />
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Add" Click="AddWorkspace_Click" MinHeight="32" />
+                        <Button Grid.Column="2" Content="Remove" Click="RemoveWorkspace_Click" MinHeight="32" />
+                    </Grid>
                 </StackPanel>
 
+                <TextBlock DockPanel.Dock="Top" Text="Workspaces" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                <ListBox x:Name="WorkspaceListBox"
+                         DockPanel.Dock="Top"
+                         MinHeight="140"
+                         MaxHeight="220"
+                         Background="#0E151D"
+                         Foreground="#F2F6FA"
+                         BorderBrush="#40566E"
+                         SelectionChanged="WorkspaceListBox_SelectionChanged"
+                         Margin="0,0,0,14" />
+
                 <UniformGrid DockPanel.Dock="Top" Columns="2" Rows="2" Margin="0,0,0,14">
-                    <Button Content="启动 Codex" Click="StartCodex_Click" Margin="0,0,6,6" MinHeight="36" />
-                    <Button Content="启动 Claude" Click="StartClaude_Click" Margin="6,0,0,6" MinHeight="36" />
-                    <Button Content="启动 Gemini" Click="StartGemini_Click" Margin="0,6,6,0" MinHeight="36" />
+                    <Button Content="Start Codex" Click="StartCodex_Click" Margin="0,0,6,6" MinHeight="36" />
+                    <Button Content="Start Claude" Click="StartClaude_Click" Margin="6,0,0,6" MinHeight="36" />
+                    <Button Content="Start Gemini" Click="StartGemini_Click" Margin="0,6,6,0" MinHeight="36" />
                     <Button Content="PowerShell" Click="StartPowerShell_Click" Margin="6,6,0,0" MinHeight="36" />
                 </UniformGrid>
 
-                <TextBlock DockPanel.Dock="Top" Text="会话" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                <TextBlock DockPanel.Dock="Top" Text="Sessions" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                <Button DockPanel.Dock="Bottom"
+                        Content="Stop selected"
+                        Click="StopSession_Click"
+                        Margin="0,10,0,0"
+                        MinHeight="34" />
                 <ListBox x:Name="SessionListBox"
                          Background="#0E151D"
                          Foreground="#F2F6FA"
@@ -54,7 +83,7 @@
             <Border Grid.Row="0" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                 <DockPanel>
                     <TextBlock x:Name="CurrentSessionTextBlock"
-                               Text="未启动会话"
+                               Text="No session"
                                Foreground="#F2F6FA"
                                FontSize="18"
                                FontWeight="SemiBold" />
@@ -67,7 +96,7 @@
 
             <Border Grid.Row="1" Background="#05080C" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6">
                 <Grid x:Name="TerminalHostGrid" ClipToBounds="True">
-                    <TextBlock Text="选择工作目录后启动 Codex / Claude / Gemini。"
+                    <TextBlock Text="Select a workspace, then start Codex / Claude / Gemini."
                                Foreground="#718196"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
@@ -76,7 +105,7 @@
 
             <Border Grid.Row="2" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,12,0,0">
                 <DockPanel LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Top" Text="Hook 消息" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                    <TextBlock DockPanel.Dock="Top" Text="Hook messages" Foreground="#9FB0C2" Margin="0,0,0,6" />
                     <ListBox x:Name="HookMessagesListBox"
                              Background="#0E151D"
                              Foreground="#F2F6FA"
@@ -97,7 +126,7 @@
                          Foreground="#F2F6FA"
                          BorderBrush="#40566E"
                          KeyDown="InjectTextBox_KeyDown" />
-                <Button Grid.Column="2" Content="发送输入" Click="SendInput_Click" MinHeight="38" />
+                <Button Grid.Column="2" Content="Send" Click="SendInput_Click" MinHeight="38" />
             </Grid>
         </Grid>
     </Grid>
