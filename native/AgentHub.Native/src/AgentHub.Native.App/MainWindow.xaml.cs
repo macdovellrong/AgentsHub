@@ -392,6 +392,13 @@ public partial class MainWindow : Window
 
     private async Task SendTextToTargetAsync(string text)
     {
+        var addressedMessage = AgentAddressedMessageParser.Parse(text);
+        if (addressedMessage is not null)
+        {
+            await SendTextToProfileAsync(addressedMessage.ProfileId, addressedMessage.Message);
+            return;
+        }
+
         var selectedTarget = TargetProfileComboBox.SelectedItem is ComboBoxItem item
             ? item.Content?.ToString()
             : null;
@@ -424,10 +431,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        await SendTextToProfileAsync(selectedTarget, text);
+    }
+
+    private async Task SendTextToProfileAsync(string targetProfileId, string text)
+    {
+        var workspacePath = CurrentWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
         var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
-        await messageRouter.SendToProfileAsync(workspacePath, selectedTarget, text);
-        await RecordUserMessageAsync(workspacePath, selectedTarget, text);
-        StatusTextBlock.Text = $"Sent input to latest {selectedTarget}";
+        await messageRouter.SendToProfileAsync(workspacePath, targetProfileId, text);
+        await RecordUserMessageAsync(workspacePath, targetProfileId, text);
+        StatusTextBlock.Text = $"Sent input to latest {targetProfileId}";
     }
 
     private async Task ReloadTimelineAsync(string workspacePath)
