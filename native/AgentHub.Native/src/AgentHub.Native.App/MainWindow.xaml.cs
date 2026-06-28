@@ -143,10 +143,13 @@ public partial class MainWindow : Window
         try
         {
             await collaborationEventStore.AppendAgentOutputAsync(hookEvent);
+            var dispatchResult = await DispatchAgentHubCommandsAsync(hookEvent.Workspace, hookEvent.Message);
             await Dispatcher.InvokeAsync(() =>
             {
                 var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
-                StatusTextBlock.Text = $"Hook received: {profile}";
+                StatusTextBlock.Text = dispatchResult.SentCount > 0
+                    ? $"Hook received: {profile}; routed {dispatchResult.SentCount} command(s)"
+                    : $"Hook received: {profile}";
             });
 
             var shouldReload = await Dispatcher.InvokeAsync(() => IsCurrentWorkspace(hookEvent.Workspace));
@@ -162,6 +165,12 @@ public partial class MainWindow : Window
                 StatusTextBlock.Text = $"Hook record failed: {ex.Message}";
             });
         }
+    }
+
+    private async Task<AgentHubCommandDispatchResult> DispatchAgentHubCommandsAsync(string workspacePath, string message)
+    {
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry));
+        return await dispatcher.DispatchAsync(workspacePath, message);
     }
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)
