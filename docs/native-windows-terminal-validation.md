@@ -45,6 +45,7 @@ git status --short --branch
 - PowerShell 和 cmd host shell 能找到。
 - `codex` 能在 PATH 中找到。
 - `py -3.11` 能启动 Python。
+- hook 脚本目录存在；如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，该目录内必须有 Codex/Claude/Gemini hook 脚本。
 - `powershell`、`cmd` 只提示使用 Host shell，不要求额外 Agent CLI。
 - publish check 输出 native project、hooks 目录和发布目录。
 

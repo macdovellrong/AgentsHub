@@ -248,8 +248,44 @@ function Test-HostShellCommand {
     Write-Host "  $path"
 }
 
+function Test-HookScriptsDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DefaultHooksDirectory
+    )
+
+    $override = $env:AGENTHUB_HOOKS_SOURCE_DIR
+    $hooksDirectory = if ([string]::IsNullOrWhiteSpace($override)) {
+        $DefaultHooksDirectory
+    }
+    else {
+        $override
+    }
+
+    $requiredScripts = @(
+        "agenthub_hook_common.py",
+        "agenthub_codex_stop.py",
+        "agenthub_claude_stop.py",
+        "agenthub_gemini_after_agent.py"
+    )
+
+    if (-not (Test-Path -LiteralPath $hooksDirectory -PathType Container)) {
+        throw "AgentHub hook scripts directory was not found: $hooksDirectory"
+    }
+
+    foreach ($scriptName in $requiredScripts) {
+        $scriptPath = Join-Path $hooksDirectory $scriptName
+        if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+            throw "AgentHub hook script was not found: $scriptPath"
+        }
+    }
+
+    Write-Host "Hook scripts check passed: $hooksDirectory"
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeProject = Join-Path $repoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
+$hookScriptsDirectory = Join-Path $repoRoot "scripts/hooks"
 
 if (-not (Test-Path -LiteralPath $nativeProject)) {
     throw "AgentHub Native project not found: $nativeProject"
@@ -282,6 +318,10 @@ if ($Check) {
     }
     elseif ($agentHooksRequired) {
         Test-HookPythonCommand -Command "py -3"
+    }
+
+    if ($agentHooksRequired) {
+        Test-HookScriptsDirectory -DefaultHooksDirectory $hookScriptsDirectory
     }
 
     Write-Host "AgentHub Native launch check passed."
