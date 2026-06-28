@@ -47,8 +47,8 @@ workspace 列表保存位置：
 1. 启动 AgentHub Native。
 2. 添加并选择出现滚动问题的项目目录。
 3. Host shell 先保持默认 PowerShell。
-4. 启动 Codex。
-5. 进入 resume。
+4. 点击 Resume Codex，直接启动 `codex resume`。
+5. 等待 Codex 进入恢复后的 TUI。
 6. 验证终端滚动条是否出现。
 7. 验证鼠标滚轮 / 触摸板滚动。
 8. 从 AgentHub 输入栏发送一行文本。

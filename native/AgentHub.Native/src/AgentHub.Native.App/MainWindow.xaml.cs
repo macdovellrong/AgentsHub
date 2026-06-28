@@ -105,25 +105,30 @@ public partial class MainWindow : Window
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)
     {
-        await StartAgentAsync(AgentKind.Codex, "codex", []);
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Start));
+    }
+
+    private async void ResumeCodex_Click(object sender, RoutedEventArgs e)
+    {
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Resume));
     }
 
     private async void StartClaude_Click(object sender, RoutedEventArgs e)
     {
-        await StartAgentAsync(AgentKind.Claude, "claude", []);
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.Claude, AgentStartupMode.Start));
     }
 
     private async void StartGemini_Click(object sender, RoutedEventArgs e)
     {
-        await StartAgentAsync(AgentKind.Gemini, "gemini", []);
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.Gemini, AgentStartupMode.Start));
     }
 
     private async void StartPowerShell_Click(object sender, RoutedEventArgs e)
     {
-        await StartAgentAsync(AgentKind.PowerShell, "", []);
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.PowerShell, AgentStartupMode.Start));
     }
 
-    private async Task StartAgentAsync(AgentKind agentKind, string command, IReadOnlyList<string> args)
+    private async Task StartAgentAsync(AgentStartupCommand startupCommand)
     {
         var workspace = await AddCurrentWorkspaceAsync();
         if (workspace is null)
@@ -132,7 +137,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (agentKind != AgentKind.PowerShell)
+        if (startupCommand.AgentKind != AgentKind.PowerShell)
         {
             StatusTextBlock.Text = "Installing project hooks...";
             await ProjectAgentHookInstaller.InstallAsync(
@@ -141,7 +146,7 @@ public partial class MainWindow : Window
         }
 
         var shellKind = SelectedShellKind();
-        var profileId = AgentProfileIdResolver.Resolve(agentKind, shellKind);
+        var profileId = AgentProfileIdResolver.Resolve(startupCommand.AgentKind, shellKind);
         var sessionId = $"{profileId}-{nextSessionNumber++}";
         var runId = $"{sessionId}-{DateTimeOffset.Now:yyyyMMddHHmmss}";
         var env = hookInfo is null
@@ -153,7 +158,13 @@ public partial class MainWindow : Window
                 runId,
                 profileId,
                 workspace.Path));
-        var request = new AgentLaunchRequest(agentKind, shellKind, workspace.Path, command, args, env);
+        var request = new AgentLaunchRequest(
+            startupCommand.AgentKind,
+            shellKind,
+            workspace.Path,
+            startupCommand.Command,
+            startupCommand.Arguments,
+            env);
         var plan = AgentLaunchPlanBuilder.Build(request);
         var startupCommandLine = WindowsCommandLineBuilder.Build(plan.Executable, plan.Arguments);
 
@@ -164,7 +175,7 @@ public partial class MainWindow : Window
             FontSizeWhenSettingTheme = 14
         };
 
-        var session = new SessionViewModel(sessionId, agentKind, shellKind, workspace, terminal);
+        var session = new SessionViewModel(sessionId, startupCommand.AgentKind, shellKind, workspace, terminal);
         sessions[sessionId] = session;
         inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
         sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
