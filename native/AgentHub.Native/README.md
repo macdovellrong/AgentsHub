@@ -141,6 +141,12 @@ Host shell 等本机设置保存位置：
 %LOCALAPPDATA%\AgentHub\Native\settings.json
 ```
 
+Agent hook 诊断日志位置：
+
+```text
+%LOCALAPPDATA%\AgentHub\Native\hooks.jsonl
+```
+
 ## 笔记本 Codex 验证
 
 1. 启动 AgentHub Native。

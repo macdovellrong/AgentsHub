@@ -6,4 +6,5 @@ public sealed record HookEnvironmentRequest(
     string SessionId,
     string RunId,
     string ProfileId,
-    string Workspace);
+    string Workspace,
+    string? HookLogPath = null);

@@ -6,7 +6,7 @@ public static class HookEnvironmentBuilder
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return new Dictionary<string, string>(StringComparer.Ordinal)
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["AGENTHUB_HOOK_URL"] = request.HookUrl,
             ["AGENTHUB_HOOK_TOKEN"] = request.HookToken,
@@ -16,5 +16,11 @@ public static class HookEnvironmentBuilder
             ["AGENTHUB_WORKSPACE"] = request.Workspace,
             ["AGENTHUB_TEAM_ID"] = "default"
         };
+        if (!string.IsNullOrWhiteSpace(request.HookLogPath))
+        {
+            environment["AGENTHUB_HOOK_LOG"] = request.HookLogPath;
+        }
+
+        return environment;
     }
 }

@@ -145,10 +145,11 @@ py -3.11 --version
 - 是刚进入 `codex resume` 就不显示，还是输出变多后才消失。
 - Windows Terminal 或 VS Code 终端里同一个 `codex resume` 是否能滚动。
 - AgentHub Native 状态栏最后显示的文本。
+- 如果 hook 回传没有进入 timeline，请附上 `%LOCALAPPDATA%\AgentHub\Native\hooks.jsonl` 的最后几行。
 
 ## 当前已知边界
 
 - 该分支是并行 native 原型，不替换 `desktop/` Electron 主线。
 - 终端控件来自 `EasyWindowsTerminalControl`，底层使用 Windows Terminal backend / ConPTY，但不是微软官方稳定嵌入式 TerminalControl API。
 - 当前项目 target framework 是 `.NET 10`。
-- native app 不记录 Codex 实时原始输出；只记录用户消息、hook 回传和自动转发事件。
+- native app 不记录 Codex 实时原始输出；只记录用户消息、hook 回传、自动转发事件，以及 hook 诊断事件。

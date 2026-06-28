@@ -240,7 +240,8 @@ public partial class MainWindow : Window
                     sessionId,
                     runId,
                     profileId,
-                    workspace.Path));
+                    workspace.Path,
+                    ResolveHookLogPath()));
             var request = new AgentLaunchRequest(
                 startupCommand.AgentKind,
                 shellKind,
@@ -389,6 +390,11 @@ public partial class MainWindow : Window
     private static string ResolveCollaborationEventsDirectory()
     {
         return Path.Combine(ResolveNativeDataDirectory(), "events");
+    }
+
+    private static string ResolveHookLogPath()
+    {
+        return Path.Combine(ResolveNativeDataDirectory(), "hooks.jsonl");
     }
 
     private static string ResolveNativeDataDirectory()

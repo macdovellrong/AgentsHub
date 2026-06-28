@@ -23,4 +23,23 @@ public sealed class HookEnvironmentBuilderTests
         Assert.Equal(@"V:\OrderManager", env["AGENTHUB_WORKSPACE"]);
         Assert.Equal("default", env["AGENTHUB_TEAM_ID"]);
     }
+
+    [Fact]
+    public void Includes_explicit_hook_diagnostic_log_path()
+    {
+        var request = new HookEnvironmentRequest(
+            "http://127.0.0.1:17321/api/agent-result",
+            "token-1",
+            "session-1",
+            "run-1",
+            "codex",
+            @"V:\OrderManager") with
+        {
+            HookLogPath = @"C:\Users\saber\AppData\Local\AgentHub\Native\hooks.jsonl"
+        };
+
+        var env = HookEnvironmentBuilder.Build(request);
+
+        Assert.Equal(@"C:\Users\saber\AppData\Local\AgentHub\Native\hooks.jsonl", env["AGENTHUB_HOOK_LOG"]);
+    }
 }
