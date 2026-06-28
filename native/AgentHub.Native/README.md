@@ -40,7 +40,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 ## 当前流程
 
 1. 启动 native app。
-2. 输入 workspace 路径，点击 Add 加入工作区列表。
+2. 输入 workspace 路径并点击 Add，或点击 Browse 选择目录并加入工作区列表。
 3. app 会在该 workspace 的 `.gitignore` 中幂等加入 `.agenthub/`、`.codex/`、`.claude/`、`.gemini/`。
 4. 选中 workspace 后选择 Host shell，默认 PowerShell，也可以切换为 cmd。
 5. 启动 Codex、Claude、Gemini 或普通 shell session。

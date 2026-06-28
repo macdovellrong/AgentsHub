@@ -34,9 +34,12 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Button Content="Add" Click="AddWorkspace_Click" MinHeight="32" />
-                        <Button Grid.Column="2" Content="Remove" Click="RemoveWorkspace_Click" MinHeight="32" />
+                        <Button Grid.Column="2" Content="Browse" Click="BrowseWorkspace_Click" MinHeight="32" />
+                        <Button Grid.Column="4" Content="Remove" Click="RemoveWorkspace_Click" MinHeight="32" />
                     </Grid>
                 </StackPanel>
 

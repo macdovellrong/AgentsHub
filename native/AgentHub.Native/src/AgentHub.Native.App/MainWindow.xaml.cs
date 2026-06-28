@@ -84,6 +84,36 @@ public partial class MainWindow : Window
         await AddCurrentWorkspaceAsync();
     }
 
+    private async void BrowseWorkspace_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select workspace"
+        };
+        var currentPath = CurrentWorkspacePath();
+        if (currentPath is not null && Directory.Exists(currentPath))
+        {
+            dialog.InitialDirectory = currentPath;
+        }
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        var selectedPath = WorkspacePathSelection.NormalizeSelectedPath(dialog.FolderName);
+        if (selectedPath is null)
+        {
+            return;
+        }
+
+        WorkspaceTextBox.Text = selectedPath;
+        var workspace = await AddCurrentWorkspaceAsync();
+        StatusTextBlock.Text = workspace is null
+            ? "No workspace selected"
+            : $"Workspace selected: {workspace.Name}";
+    }
+
     private async void RemoveWorkspace_Click(object sender, RoutedEventArgs e)
     {
         var workspacePath = CurrentWorkspacePath();
