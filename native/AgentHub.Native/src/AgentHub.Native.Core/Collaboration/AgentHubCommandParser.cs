@@ -11,10 +11,11 @@ public static class AgentHubCommandParser
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new AgentHubCommandParseResult([], []);
+            return new AgentHubCommandParseResult([], [], []);
         }
 
         var commands = new List<AgentHubSendMessageCommand>();
+        var planStatusCommands = new List<AgentHubPlanStatusCommand>();
         var errors = new List<AgentHubCommandParseError>();
         var cursor = 0;
         var index = 0;
@@ -45,9 +46,13 @@ public static class AgentHubCommandParser
             {
                 using var document = JsonDocument.Parse(block);
                 var result = ValidateCommand(document.RootElement, index, block);
-                if (result.Command is not null)
+                if (result.SendMessageCommand is not null)
                 {
-                    commands.Add(result.Command);
+                    commands.Add(result.SendMessageCommand);
+                }
+                else if (result.PlanStatusCommand is not null)
+                {
+                    planStatusCommands.Add(result.PlanStatusCommand);
                 }
                 else if (result.Error is not null)
                 {
@@ -66,7 +71,7 @@ public static class AgentHubCommandParser
             index += 1;
         }
 
-        return new AgentHubCommandParseResult(commands, errors);
+        return new AgentHubCommandParseResult(commands, planStatusCommands, errors);
     }
 
     private static ValidationResult ValidateCommand(JsonElement root, int index, string block)
@@ -79,6 +84,7 @@ public static class AgentHubCommandParser
         if (!TryGetString(root, "action", out var action))
         {
             return new ValidationResult(
+                null,
                 null,
                 new AgentHubCommandParseError(
                     index,
@@ -102,7 +108,18 @@ public static class AgentHubCommandParser
             return ValidateTaskPlanRoutingCommand(root, index, block, action);
         }
 
+        if (string.Equals(action, "approve_task", StringComparison.Ordinal))
+        {
+            return ValidateApproveTaskCommand(root, index, block);
+        }
+
+        if (string.Equals(action, "pause_plan", StringComparison.Ordinal))
+        {
+            return ValidatePausePlanCommand(root, index, block);
+        }
+
         return new ValidationResult(
+            null,
             null,
             new AgentHubCommandParseError(
                 index,
@@ -131,6 +148,7 @@ public static class AgentHubCommandParser
                 OptionalString(root, "task_id"),
                 null,
                 OptionalString(root, "conversation_id")),
+            null,
             null);
     }
 
@@ -159,6 +177,7 @@ public static class AgentHubCommandParser
                 taskId,
                 null,
                 null),
+            null,
             null);
     }
 
@@ -196,6 +215,48 @@ public static class AgentHubCommandParser
                 taskId,
                 planId,
                 null),
+            null,
+            null);
+    }
+
+    private static ValidationResult ValidateApproveTaskCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "plan_id", out var planId))
+        {
+            return ValidationResult.Invalid(index, block, "approve_task command requires string field \"plan_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "task_id", out var taskId))
+        {
+            return ValidationResult.Invalid(index, block, "approve_task command requires string field \"task_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "summary", out var summary))
+        {
+            return ValidationResult.Invalid(index, block, "approve_task command requires string field \"summary\"");
+        }
+
+        return new ValidationResult(
+            null,
+            new AgentHubPlanStatusCommand("approve_task", planId, taskId, summary),
+            null);
+    }
+
+    private static ValidationResult ValidatePausePlanCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "plan_id", out var planId))
+        {
+            return ValidationResult.Invalid(index, block, "pause_plan command requires string field \"plan_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "reason", out var reason))
+        {
+            return ValidationResult.Invalid(index, block, "pause_plan command requires string field \"reason\"");
+        }
+
+        return new ValidationResult(
+            null,
+            new AgentHubPlanStatusCommand("pause_plan", planId, null, reason),
             null);
     }
 
@@ -270,12 +331,14 @@ public static class AgentHubCommandParser
     }
 
     private sealed record ValidationResult(
-        AgentHubSendMessageCommand? Command,
+        AgentHubSendMessageCommand? SendMessageCommand,
+        AgentHubPlanStatusCommand? PlanStatusCommand,
         AgentHubCommandParseError? Error)
     {
         public static ValidationResult Invalid(int index, string block, string message)
         {
             return new ValidationResult(
+                null,
                 null,
                 new AgentHubCommandParseError(index, "invalid_command", message, block));
         }

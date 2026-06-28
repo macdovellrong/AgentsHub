@@ -74,6 +74,32 @@ public sealed class AgentHubCommandDispatcherTests
     }
 
     [Fact]
+    public async Task Accepts_task_plan_status_commands_without_terminal_dispatch()
+    {
+        var target = new RecordingTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+
+        var result = await dispatcher.DispatchAsync(
+            @"V:\OrderManager",
+            "<agenthub>{\"action\":\"approve_task\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"summary\":\"Looks good\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"pause_plan\",\"plan_id\":\"P001\",\"reason\":\"Need user decision\"}</agenthub>");
+
+        Assert.Equal(0, result.SentCount);
+        Assert.Empty(result.ParseErrors);
+        Assert.Empty(result.DispatchErrors);
+        Assert.Empty(result.SentMessages);
+        Assert.Empty(target.Writes);
+        Assert.Collection(
+            result.PlanStatusCommands,
+            command => Assert.Equal("approve_task", command.Action),
+            command => Assert.Equal("pause_plan", command.Action));
+    }
+
+    [Fact]
     public async Task Reports_dispatch_error_when_target_profile_is_offline()
     {
         var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));

@@ -56,6 +56,35 @@ public sealed class AgentHubCommandParserTests
     }
 
     [Fact]
+    public void Parses_task_plan_status_commands_without_routing_them()
+    {
+        const string text =
+            "<agenthub>{\"action\":\"approve_task\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"summary\":\"Looks good\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"pause_plan\",\"plan_id\":\"P001\",\"reason\":\"Need user decision\"}</agenthub>";
+
+        var result = AgentHubCommandParser.Parse(text);
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.SendMessages);
+        Assert.Collection(
+            result.PlanStatusCommands,
+            command =>
+            {
+                Assert.Equal("approve_task", command.Action);
+                Assert.Equal("P001", command.PlanId);
+                Assert.Equal("T001", command.TaskId);
+                Assert.Equal("Looks good", command.Message);
+            },
+            command =>
+            {
+                Assert.Equal("pause_plan", command.Action);
+                Assert.Equal("P001", command.PlanId);
+                Assert.Null(command.TaskId);
+                Assert.Equal("Need user decision", command.Message);
+            });
+    }
+
+    [Fact]
     public void Allows_agenthub_close_tag_inside_json_strings()
     {
         const string text =

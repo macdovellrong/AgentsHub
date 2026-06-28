@@ -62,6 +62,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
             1,
             [new AgentHubSendMessageCommand("codex", "Please inspect.", null, null, null, null)],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);

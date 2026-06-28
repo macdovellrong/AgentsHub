@@ -32,6 +32,11 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             }
         }
 
-        return new AgentHubCommandDispatchResult(sentCount, sentMessages, parsed.Errors, dispatchErrors);
+        return new AgentHubCommandDispatchResult(
+            sentCount,
+            sentMessages,
+            parsed.PlanStatusCommands,
+            parsed.Errors,
+            dispatchErrors);
     }
 }
