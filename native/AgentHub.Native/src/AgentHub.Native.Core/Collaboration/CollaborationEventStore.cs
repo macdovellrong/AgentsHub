@@ -61,7 +61,26 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 cancellationToken).ConfigureAwait(false));
         }
 
+        foreach (var command in result.PlanStatusCommands)
+        {
+            events.Add(await AppendUserMessageAsync(
+                new CollaborationUserMessage(
+                    workspacePath,
+                    "agenthub",
+                    "task-plan",
+                    FormatPlanStatusCommand(command)),
+                cancellationToken).ConfigureAwait(false));
+        }
+
         return events;
+    }
+
+    private static string FormatPlanStatusCommand(AgentHubPlanStatusCommand command)
+    {
+        var scope = command.TaskId is null
+            ? command.PlanId
+            : $"{command.PlanId}/{command.TaskId}";
+        return $"[{command.Action} {scope}] {command.Message}";
     }
 
     public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(

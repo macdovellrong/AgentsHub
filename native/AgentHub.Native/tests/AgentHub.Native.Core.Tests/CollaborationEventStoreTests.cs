@@ -74,6 +74,34 @@ public sealed class CollaborationEventStoreTests : IDisposable
         Assert.Equal("Please inspect.", item.Message);
     }
 
+    [Fact]
+    public async Task Appends_task_plan_status_commands_as_agenthub_timeline_messages()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [
+                new AgentHubPlanStatusCommand("approve_task", "P001", "T001", "Looks good"),
+                new AgentHubPlanStatusCommand("pause_plan", "P001", null, "Need user decision")
+            ],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.All(events, item =>
+        {
+            Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+            Assert.Equal("agenthub", item.ProfileId);
+            Assert.Equal("task-plan", item.TargetProfileId);
+        });
+        Assert.Equal("[approve_task P001/T001] Looks good", events[0].Message);
+        Assert.Equal("[pause_plan P001] Need user decision", events[1].Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
