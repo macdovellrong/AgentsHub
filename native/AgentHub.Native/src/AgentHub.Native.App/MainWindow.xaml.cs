@@ -142,9 +142,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            await collaborationEventStore.AppendAgentOutputAsync(hookEvent);
-            var dispatchResult = await DispatchAgentHubCommandsAsync(hookEvent.Workspace, hookEvent.Message);
-            await collaborationEventStore.AppendForwardedAgentHubCommandsAsync(hookEvent.Workspace, dispatchResult);
+            var dispatchResult = await ProcessHookEventAsync(hookEvent);
             await Dispatcher.InvokeAsync(() =>
             {
                 var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
@@ -168,10 +166,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<AgentHubCommandDispatchResult> DispatchAgentHubCommandsAsync(string workspacePath, string message)
+    private async Task<AgentHubCommandDispatchResult> ProcessHookEventAsync(AgentHookEvent hookEvent)
     {
-        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry));
-        return await dispatcher.DispatchAsync(workspacePath, message);
+        var processor = new AgentHookEventProcessor(
+            collaborationEventStore,
+            new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry)));
+        return await processor.ProcessAsync(hookEvent);
     }
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)
