@@ -17,6 +17,37 @@ public sealed class AgentInputRouter
             throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
         }
 
+        await WriteSubmittedLineAsync(session, text, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> TrySendLineAsync(string sessionId, string text, CancellationToken cancellationToken = default)
+    {
+        if (!sessions.TryGetValue(sessionId, out var session))
+        {
+            return false;
+        }
+
+        try
+        {
+            await WriteSubmittedLineAsync(session, text, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            sessions.Remove(sessionId);
+            return false;
+        }
+    }
+
+    private static async Task WriteSubmittedLineAsync(
+        IAgentTerminalSession session,
+        string text,
+        CancellationToken cancellationToken)
+    {
         if (IsMultiline(text))
         {
             await session.WriteAsync("\x1b[200~", cancellationToken).ConfigureAwait(false);

@@ -390,16 +390,7 @@ public partial class MainWindow : Window
         }
 
         var stopped = await inputRouter.TryStopAsync(session.Id);
-        sessionRegistry.Remove(session.Id);
-        sessions.Remove(session.Id);
-        SessionListBox.Items.Remove(session);
-        if (selectedSessionId == session.Id)
-        {
-            selectedSessionId = null;
-            TerminalHostGrid.Children.Clear();
-            CurrentSessionTextBlock.Text = "No session";
-        }
-
+        RemoveSessionView(session.Id);
         StatusTextBlock.Text = stopped ? $"Stopped {session.Id}" : $"Removed stale session {session.Id}";
     }
 
@@ -468,16 +459,24 @@ public partial class MainWindow : Window
                 return false;
             }
 
-            await inputRouter.SendLineAsync(selectedSessionId!, text);
-            var selectedWorkspacePath = sessions.TryGetValue(selectedSessionId, out var selectedSession)
+            var targetSessionId = selectedSessionId!;
+            var sent = await inputRouter.TrySendLineAsync(targetSessionId, text);
+            if (!sent)
+            {
+                RemoveSessionView(targetSessionId);
+                StatusTextBlock.Text = $"Removed stale session {targetSessionId}";
+                return false;
+            }
+
+            var selectedWorkspacePath = sessions.TryGetValue(targetSessionId, out var selectedSession)
                 ? selectedSession.Workspace.Path
                 : CurrentWorkspacePath();
             if (selectedWorkspacePath is not null)
             {
-                await RecordUserMessageAsync(selectedWorkspacePath, selectedSessionId, text);
+                await RecordUserMessageAsync(selectedWorkspacePath, targetSessionId, text);
             }
 
-            StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
+            StatusTextBlock.Text = $"Sent input to {targetSessionId}";
             return true;
         }
 
@@ -568,6 +567,26 @@ public partial class MainWindow : Window
         CurrentSessionTextBlock.Text = session.DisplayName;
         TerminalHostGrid.Children.Clear();
         TerminalHostGrid.Children.Add(session.Terminal);
+    }
+
+    private void RemoveSessionView(string sessionId)
+    {
+        sessionRegistry.Remove(sessionId);
+        sessions.Remove(sessionId);
+        var item = SessionListBox.Items
+            .OfType<SessionViewModel>()
+            .FirstOrDefault(session => string.Equals(session.Id, sessionId, StringComparison.OrdinalIgnoreCase));
+        if (item is not null)
+        {
+            SessionListBox.Items.Remove(item);
+        }
+
+        if (string.Equals(selectedSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+        {
+            selectedSessionId = null;
+            TerminalHostGrid.Children.Clear();
+            CurrentSessionTextBlock.Text = "No session";
+        }
     }
 
     private sealed record SessionViewModel(

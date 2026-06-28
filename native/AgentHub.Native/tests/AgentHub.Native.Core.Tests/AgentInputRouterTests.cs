@@ -37,6 +37,43 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Try_send_returns_false_when_session_is_unknown()
+    {
+        var router = new AgentInputRouter();
+
+        var sent = await router.TrySendLineAsync("missing", "hello");
+
+        Assert.False(sent);
+    }
+
+    [Fact]
+    public async Task Try_send_returns_true_after_sending_to_registered_session()
+    {
+        var session = new RecordingTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var sent = await router.TrySendLineAsync("codex-1", "hello");
+
+        Assert.True(sent);
+        Assert.Equal(["hello", "\r"], session.Writes);
+    }
+
+    [Fact]
+    public async Task Try_send_returns_false_and_unregisters_when_session_write_fails()
+    {
+        var session = new ThrowingWriteTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var sent = await router.TrySendLineAsync("codex-1", "hello");
+
+        Assert.False(sent);
+        Assert.True(session.WriteAttempted);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
     public async Task Stops_and_unregisters_session()
     {
         var session = new RecordingTerminalSession("codex-1");
@@ -170,6 +207,23 @@ public sealed class AgentInputRouterTests
         {
             StopAttempted = true;
             throw new InvalidOperationException("stop failed");
+        }
+    }
+
+    private sealed class ThrowingWriteTerminalSession(string id) : IAgentTerminalSession
+    {
+        public string Id { get; } = id;
+        public bool WriteAttempted { get; private set; }
+
+        public Task WriteAsync(string text, CancellationToken cancellationToken = default)
+        {
+            WriteAttempted = true;
+            throw new InvalidOperationException("write failed");
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }
