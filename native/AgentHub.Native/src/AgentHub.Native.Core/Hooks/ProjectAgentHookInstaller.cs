@@ -279,7 +279,42 @@ public static class ProjectAgentHookInstaller
 
     private static string BuildPythonCommand(string pythonLauncher, string scriptPath)
     {
-        return $"{pythonLauncher} {QuoteCommandArgument(scriptPath)}";
+        return $"{QuotePythonLauncher(pythonLauncher)} {QuoteCommandArgument(scriptPath)}";
+    }
+
+    private static string QuotePythonLauncher(string pythonLauncher)
+    {
+        var trimmed = pythonLauncher.Trim();
+        if (trimmed.Length == 0 || trimmed.StartsWith('"'))
+        {
+            return trimmed;
+        }
+
+        if (!LooksLikeWindowsPath(trimmed))
+        {
+            return trimmed;
+        }
+
+        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        if (executableEnd < 0)
+        {
+            return trimmed.Any(char.IsWhiteSpace) ? QuoteCommandArgument(trimmed) : trimmed;
+        }
+
+        executableEnd += ".exe".Length;
+        var executable = trimmed[..executableEnd];
+        var arguments = trimmed[executableEnd..].TrimStart();
+        var quotedExecutable = executable.Any(char.IsWhiteSpace)
+            ? QuoteCommandArgument(executable)
+            : executable;
+        return arguments.Length == 0 ? quotedExecutable : $"{quotedExecutable} {arguments}";
+    }
+
+    private static bool LooksLikeWindowsPath(string value)
+    {
+        return value.Contains(':', StringComparison.Ordinal) ||
+               value.Contains('\\', StringComparison.Ordinal) ||
+               value.Contains('/', StringComparison.Ordinal);
     }
 
     private static string QuoteCommandArgument(string value)

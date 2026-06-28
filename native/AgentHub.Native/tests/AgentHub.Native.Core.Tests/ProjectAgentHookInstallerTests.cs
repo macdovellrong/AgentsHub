@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using AgentHub.Native.Core.Hooks;
 
 namespace AgentHub.Native.Core.Tests;
@@ -57,6 +58,24 @@ public sealed class ProjectAgentHookInstallerTests : IDisposable
         Assert.Equal(
             "node_modules/\n.codex/\n.agenthub/\n.claude/\n.gemini/\n",
             await File.ReadAllTextAsync(Path.Combine(workspace, ".gitignore")));
+    }
+
+    [Fact]
+    public async Task Quotes_full_python_launcher_path_when_installing_hooks()
+    {
+        var sourceHooks = CreateHookSource();
+        var workspace = Path.Combine(tempRoot, "workspace-python-path");
+        Directory.CreateDirectory(workspace);
+
+        await ProjectAgentHookInstaller.InstallAsync(
+            workspace,
+            new ProjectAgentHookInstallerOptions(sourceHooks, @"C:\Program Files\Python311\python.exe"));
+
+        var codexHooks = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(workspace, ".codex", "hooks.json")))!;
+        var command = codexHooks["hooks"]!["Stop"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+
+        Assert.StartsWith("\"C:\\Program Files\\Python311\\python.exe\" ", command);
+        Assert.EndsWith("agenthub_codex_stop.py\"", command, StringComparison.Ordinal);
     }
 
     [Fact]
