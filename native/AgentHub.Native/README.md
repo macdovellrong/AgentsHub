@@ -68,7 +68,7 @@
 .\scripts\start-native.ps1 -Check -Agent codex,claude,gemini -Python "py -3.11"
 ```
 
-`-Check` 带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中，并检查默认 hook Python 命令 `py -3`；如果传入 `-Python`，则检查指定命令是否能启动 Python。
+`-Check` 带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查默认 hook Python 命令 `py -3`；如果传入 `-Python`，则始终检查指定命令是否能启动 Python。
 
 ## 发布
 

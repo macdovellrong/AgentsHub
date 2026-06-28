@@ -159,6 +159,21 @@ function Test-AgentCommands {
     }
 }
 
+function Test-AgentHooksRequired {
+    param(
+        [string[]]$Agents
+    )
+
+    foreach ($agentName in (Split-AgentList -Agents $Agents)) {
+        $commandName = Resolve-AgentCommandName -AgentName $agentName
+        if (-not [string]::IsNullOrWhiteSpace($commandName)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeProject = Join-Path $repoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
 
@@ -179,14 +194,16 @@ if (-not ($sdks | Where-Object { $_ -match "^(1[0-9]|[2-9][0-9])\." })) {
 if ($Check) {
     $requestedAgents = Split-AgentList -Agents $Agent
     $agentWasRequested = $requestedAgents.Count -gt 0
+    $agentHooksRequired = $false
     if ($agentWasRequested) {
         Test-AgentCommands -Agents $requestedAgents
+        $agentHooksRequired = Test-AgentHooksRequired -Agents $requestedAgents
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Python)) {
         Test-HookPythonCommand -Command $Python
     }
-    elseif ($agentWasRequested) {
+    elseif ($agentHooksRequired) {
         Test-HookPythonCommand -Command "py -3"
     }
 
