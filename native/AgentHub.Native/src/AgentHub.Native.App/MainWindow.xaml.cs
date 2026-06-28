@@ -389,7 +389,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await inputRouter.StopAsync(session.Id);
+        var stopped = await inputRouter.TryStopAsync(session.Id);
         sessionRegistry.Remove(session.Id);
         sessions.Remove(session.Id);
         SessionListBox.Items.Remove(session);
@@ -400,7 +400,7 @@ public partial class MainWindow : Window
             CurrentSessionTextBlock.Text = "No session";
         }
 
-        StatusTextBlock.Text = $"Stopped {session.Id}";
+        StatusTextBlock.Text = stopped ? $"Stopped {session.Id}" : $"Removed stale session {session.Id}";
     }
 
     private async void StopAllSessions_Click(object sender, RoutedEventArgs e)

@@ -50,6 +50,30 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Try_stop_returns_false_when_session_is_unknown()
+    {
+        var router = new AgentInputRouter();
+
+        var stopped = await router.TryStopAsync("missing");
+
+        Assert.False(stopped);
+    }
+
+    [Fact]
+    public async Task Try_stop_stops_and_unregisters_existing_session()
+    {
+        var session = new RecordingTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var stopped = await router.TryStopAsync("codex-1");
+
+        Assert.True(stopped);
+        Assert.True(session.Stopped);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
     public async Task Stops_all_registered_sessions_and_unregisters_them()
     {
         var codex = new RecordingTerminalSession("codex-1");
