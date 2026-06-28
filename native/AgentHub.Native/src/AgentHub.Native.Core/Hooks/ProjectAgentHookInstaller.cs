@@ -18,11 +18,16 @@ public static class ProjectAgentHookInstaller
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
         ArgumentNullException.ThrowIfNull(options);
+        var workspaceValidation = WorkspaceDirectoryValidator.Validate(workspacePath);
+        if (!workspaceValidation.IsValid)
+        {
+            throw new DirectoryNotFoundException(workspaceValidation.ErrorMessage);
+        }
 
-        await WorkspaceGitIgnore.EnsureAsync(workspacePath, cancellationToken).ConfigureAwait(false);
-        await InstallCodexHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);
-        await InstallClaudeHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);
-        await InstallGeminiHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);
+        await WorkspaceGitIgnore.EnsureAsync(workspaceValidation.Path!, cancellationToken).ConfigureAwait(false);
+        await InstallCodexHooksAsync(workspaceValidation.Path!, options, cancellationToken).ConfigureAwait(false);
+        await InstallClaudeHooksAsync(workspaceValidation.Path!, options, cancellationToken).ConfigureAwait(false);
+        await InstallGeminiHooksAsync(workspaceValidation.Path!, options, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task InstallCodexHooksAsync(

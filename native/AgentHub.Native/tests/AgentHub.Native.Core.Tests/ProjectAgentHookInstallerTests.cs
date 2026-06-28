@@ -12,6 +12,7 @@ public sealed class ProjectAgentHookInstallerTests : IDisposable
     {
         var sourceHooks = CreateHookSource();
         var workspace = Path.Combine(tempRoot, "workspace");
+        Directory.CreateDirectory(workspace);
 
         await ProjectAgentHookInstaller.InstallAsync(
             workspace,
@@ -56,6 +57,21 @@ public sealed class ProjectAgentHookInstallerTests : IDisposable
         Assert.Equal(
             "node_modules/\n.codex/\n.agenthub/\n.claude/\n.gemini/\n",
             await File.ReadAllTextAsync(Path.Combine(workspace, ".gitignore")));
+    }
+
+    [Fact]
+    public async Task Rejects_missing_workspace_directory()
+    {
+        var sourceHooks = CreateHookSource();
+        var workspace = Path.Combine(tempRoot, "missing-workspace");
+
+        var ex = await Assert.ThrowsAsync<DirectoryNotFoundException>(() =>
+            ProjectAgentHookInstaller.InstallAsync(
+                workspace,
+                new ProjectAgentHookInstallerOptions(sourceHooks, "py -3")));
+
+        Assert.Contains(workspace, ex.Message);
+        Assert.False(Directory.Exists(workspace));
     }
 
     public void Dispose()
