@@ -1,7 +1,9 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using AgentHub.Native.App.Terminal;
+using AgentHub.Native.Core.Collaboration;
 using AgentHub.Native.Core.Hooks;
 using AgentHub.Native.Core.Input;
 using AgentHub.Native.Core.Processes;
@@ -14,6 +16,7 @@ namespace AgentHub.Native.App;
 public partial class MainWindow : Window
 {
     private readonly AgentInputRouter inputRouter = new();
+    private readonly AgentSessionRegistry sessionRegistry = new();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private int nextSessionNumber = 1;
@@ -145,6 +148,7 @@ public partial class MainWindow : Window
         var session = new SessionViewModel(sessionId, agentKind, workspace, terminal);
         sessions[sessionId] = session;
         inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
+        sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
         SessionListBox.Items.Add(session);
         SessionListBox.SelectedItem = session;
         StatusTextBlock.Text = $"Started {session.DisplayName}";
@@ -251,6 +255,7 @@ public partial class MainWindow : Window
         }
 
         await inputRouter.StopAsync(session.Id);
+        sessionRegistry.Remove(session.Id);
         sessions.Remove(session.Id);
         SessionListBox.Items.Remove(session);
         if (selectedSessionId == session.Id)
@@ -276,21 +281,45 @@ public partial class MainWindow : Window
 
     private async Task SendCurrentInputAsync()
     {
-        if (selectedSessionId is null)
-        {
-            StatusTextBlock.Text = "No selected session";
-            return;
-        }
-
         var text = InjectTextBox.Text;
         if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
-        await inputRouter.SendLineAsync(selectedSessionId, text);
+        await SendTextToTargetAsync(text);
         InjectTextBox.Clear();
-        StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
+    }
+
+    private async Task SendTextToTargetAsync(string text)
+    {
+        var selectedTarget = TargetProfileComboBox.SelectedItem is ComboBoxItem item
+            ? item.Content?.ToString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(selectedTarget) || selectedTarget == "Selected session")
+        {
+            if (selectedSessionId is null)
+            {
+                StatusTextBlock.Text = "No selected session";
+                return;
+            }
+
+            await inputRouter.SendLineAsync(selectedSessionId!, text);
+            StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
+            return;
+        }
+
+        var workspacePath = CurrentWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
+        await messageRouter.SendToProfileAsync(workspacePath, selectedTarget, text);
+        StatusTextBlock.Text = $"Sent input to latest {selectedTarget}";
     }
 
     private void SessionListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

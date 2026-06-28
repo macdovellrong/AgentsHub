@@ -115,18 +115,34 @@
 
             <Grid Grid.Row="3" Margin="0,12,0,0">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="170" />
+                    <ColumnDefinition Width="10" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="10" />
                     <ColumnDefinition Width="120" />
                 </Grid.ColumnDefinitions>
 
-                <TextBox x:Name="InjectTextBox"
+                <ComboBox x:Name="TargetProfileComboBox"
+                          MinHeight="38"
+                          Background="#0E151D"
+                          Foreground="#F2F6FA"
+                          BorderBrush="#40566E"
+                          SelectedIndex="0">
+                    <ComboBoxItem Content="Selected session" />
+                    <ComboBoxItem Content="codex" />
+                    <ComboBoxItem Content="claude" />
+                    <ComboBoxItem Content="gemini" />
+                    <ComboBoxItem Content="powershell" />
+                </ComboBox>
+
+                <TextBox Grid.Column="2"
+                         x:Name="InjectTextBox"
                          MinHeight="38"
                          Background="#0E151D"
                          Foreground="#F2F6FA"
                          BorderBrush="#40566E"
                          KeyDown="InjectTextBox_KeyDown" />
-                <Button Grid.Column="2" Content="Send" Click="SendInput_Click" MinHeight="38" />
+                <Button Grid.Column="4" Content="Send" Click="SendInput_Click" MinHeight="38" />
             </Grid>
         </Grid>
     </Grid>

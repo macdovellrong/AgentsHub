@@ -25,8 +25,9 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 4. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
 5. app 会启动本地 hook receiver，并向 PowerShell-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
 6. 可以用底部输入栏向选中的 terminal session 发送一行文本。
-7. hook 结果会显示在 Hook messages 列表中。
-8. 可以用 Stop selected 停止当前 session。
+7. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini` 或 `powershell`，按当前 workspace/profile 路由到最新 session。
+8. hook 结果会显示在 Hook messages 列表中。
+9. 可以用 Stop selected 停止当前 session。
 
 workspace 列表保存在：
 
