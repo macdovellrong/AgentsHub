@@ -32,14 +32,17 @@ git status --short --branch
 从仓库根目录执行：
 
 ```powershell
-.\scripts\start-native.ps1 -Check -Agent codex -Python "py -3.11"
-.\scripts\start-native.ps1 -Check -Agent powershell
-.\scripts\start-native.ps1 -Check -Agent cmd
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent powershell
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent cmd
 .\scripts\publish-native.ps1 -Check
 ```
 
 期望结果：
 
+- workspace 路径存在，并且能被当前电脑访问。
+- PowerShell 和 cmd host shell 能找到。
 - `codex` 能在 PATH 中找到。
 - `py -3.11` 能启动 Python。
 - `powershell`、`cmd` 只提示使用 Host shell，不要求额外 Agent CLI。
@@ -131,7 +134,8 @@ where.exe codex
 codex --version
 py -0p
 py -3.11 --version
-.\scripts\start-native.ps1 -Check -Agent codex -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex -Python "py -3.11"
 ```
 
 同时说明：

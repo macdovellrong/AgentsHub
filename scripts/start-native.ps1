@@ -175,6 +175,79 @@ function Test-AgentHooksRequired {
     return $false
 }
 
+function Test-WorkspacePath {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+
+    try {
+        $resolvedPath = Convert-Path -LiteralPath $Path -ErrorAction Stop
+    }
+    catch {
+        throw "Workspace path was not found or is not a directory: $Path"
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Container)) {
+        throw "Workspace path was not found or is not a directory: $Path"
+    }
+
+    Write-Host "Workspace check passed: $resolvedPath"
+}
+
+function Resolve-HostShellForCheck {
+    param(
+        [string]$Shell,
+        [string[]]$Agents
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Shell)) {
+        return $Shell.ToLowerInvariant()
+    }
+
+    foreach ($agentName in (Split-AgentList -Agents $Agents)) {
+        switch ($agentName) {
+            "cmd" { return "cmd" }
+            "powershell" { return "powershell" }
+            "shell" { return "powershell" }
+        }
+    }
+
+    return $null
+}
+
+function Test-HostShellCommand {
+    param(
+        [string]$Shell
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Shell)) {
+        return
+    }
+
+    switch ($Shell.ToLowerInvariant()) {
+        "cmd" {
+            $path = Join-Path ([Environment]::SystemDirectory) "cmd.exe"
+        }
+        "powershell" {
+            $path = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell/v1.0/powershell.exe"
+        }
+        default {
+            throw "Unsupported Host shell '$Shell'. Supported values: powershell, cmd."
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Host shell executable was not found: $path"
+    }
+
+    Write-Host "Host shell check passed: $Shell"
+    Write-Host "  $path"
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeProject = Join-Path $repoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
 
@@ -194,6 +267,9 @@ if (-not ($sdks | Where-Object { $_ -match "^(1[0-9]|[2-9][0-9])\." })) {
 
 if ($Check) {
     $requestedAgents = Split-AgentList -Agents $Agent
+    Test-WorkspacePath -Path $Workspace
+    Test-HostShellCommand -Shell (Resolve-HostShellForCheck -Shell $Shell -Agents $requestedAgents)
+
     $agentWasRequested = $requestedAgents.Count -gt 0
     $agentHooksRequired = $false
     if ($agentWasRequested) {
