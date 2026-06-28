@@ -116,7 +116,8 @@ public partial class MainWindow : Window
 
     private async void RemoveWorkspace_Click(object sender, RoutedEventArgs e)
     {
-        var workspacePath = CurrentWorkspacePath();
+        var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
+        var workspacePath = WorkspacePathSelection.ResolveRemovalPath(WorkspaceTextBox.Text, selectedPath);
         if (workspacePath is null)
         {
             StatusTextBlock.Text = "No workspace selected";

@@ -7,6 +7,11 @@ public static class WorkspacePathSelection
         return NormalizeSelectedPath(typedPath) ?? NormalizeSelectedPath(selectedPath);
     }
 
+    public static string? ResolveRemovalPath(string? typedPath, string? selectedPath)
+    {
+        return NormalizeSelectedPath(selectedPath) ?? NormalizeSelectedPath(typedPath);
+    }
+
     public static string? NormalizeSelectedPath(string? selectedPath)
     {
         if (string.IsNullOrWhiteSpace(selectedPath))

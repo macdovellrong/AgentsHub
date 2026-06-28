@@ -40,4 +40,24 @@ public sealed class WorkspacePathSelectionTests
 
         Assert.Equal(@"V:\OrderManager", path);
     }
+
+    [Fact]
+    public void Prefers_selected_workspace_path_for_removal()
+    {
+        var path = WorkspacePathSelection.ResolveRemovalPath(
+            @"D:\Typed",
+            @"V:\Selected");
+
+        Assert.Equal(@"V:\Selected", path);
+    }
+
+    [Fact]
+    public void Falls_back_to_typed_workspace_path_for_removal_when_selection_is_empty()
+    {
+        var path = WorkspacePathSelection.ResolveRemovalPath(
+            @"D:\Typed\",
+            null);
+
+        Assert.Equal(@"D:\Typed", path);
+    }
 }
