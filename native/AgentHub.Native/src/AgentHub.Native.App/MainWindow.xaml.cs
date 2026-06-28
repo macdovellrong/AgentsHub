@@ -41,11 +41,18 @@ public partial class MainWindow : Window
         await ReloadWorkspacesAsync();
     }
 
-    private async void MainWindow_Closed(object? sender, EventArgs e)
+    private void MainWindow_Closed(object? sender, EventArgs e)
     {
-        if (hookReceiver is not null)
+        try
         {
-            await hookReceiver.DisposeAsync();
+            inputRouter.StopAllAsync().GetAwaiter().GetResult();
+        }
+        finally
+        {
+            if (hookReceiver is not null)
+            {
+                hookReceiver.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
         }
     }
 

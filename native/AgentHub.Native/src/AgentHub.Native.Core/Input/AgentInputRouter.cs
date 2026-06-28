@@ -30,4 +30,16 @@ public sealed class AgentInputRouter
 
         await session.StopAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task<int> StopAllAsync(CancellationToken cancellationToken = default)
+    {
+        var currentSessions = sessions.Values.ToArray();
+        sessions.Clear();
+        foreach (var session in currentSessions)
+        {
+            await session.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return currentSessions.Length;
+    }
 }

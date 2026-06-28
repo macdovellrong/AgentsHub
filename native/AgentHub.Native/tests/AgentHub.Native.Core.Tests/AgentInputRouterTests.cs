@@ -37,6 +37,25 @@ public sealed class AgentInputRouterTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
     }
 
+    [Fact]
+    public async Task Stops_all_registered_sessions_and_unregisters_them()
+    {
+        var codex = new RecordingTerminalSession("codex-1");
+        var claude = new RecordingTerminalSession("claude-1");
+        var router = new AgentInputRouter();
+        router.Register(codex);
+        router.Register(claude);
+
+        var stoppedCount = await router.StopAllAsync();
+
+        Assert.Equal(2, stoppedCount);
+        Assert.True(codex.Stopped);
+        Assert.True(claude.Stopped);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("claude-1", "hello"));
+        Assert.Equal(0, await router.StopAllAsync());
+    }
+
     private sealed class RecordingTerminalSession(string id) : IAgentTerminalSession
     {
         public string Id { get; } = id;
