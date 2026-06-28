@@ -17,7 +17,17 @@ public sealed class AgentInputRouter
             throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
         }
 
-        await session.WriteAsync(text, cancellationToken).ConfigureAwait(false);
+        if (IsMultiline(text))
+        {
+            await session.WriteAsync("\x1b[200~", cancellationToken).ConfigureAwait(false);
+            await session.WriteAsync(NormalizeLineEndings(text), cancellationToken).ConfigureAwait(false);
+            await session.WriteAsync("\x1b[201~", cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await session.WriteAsync(text, cancellationToken).ConfigureAwait(false);
+        }
+
         await session.WriteAsync("\r", cancellationToken).ConfigureAwait(false);
     }
 
@@ -52,5 +62,15 @@ public sealed class AgentInputRouter
         }
 
         return currentSessions.Length;
+    }
+
+    private static bool IsMultiline(string text)
+    {
+        return text.Contains('\n') || text.Contains('\r');
+    }
+
+    private static string NormalizeLineEndings(string text)
+    {
+        return text.Replace("\r\n", "\n").Replace('\r', '\n');
     }
 }

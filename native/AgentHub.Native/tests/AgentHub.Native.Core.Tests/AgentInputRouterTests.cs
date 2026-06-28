@@ -17,6 +17,18 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Sends_multiline_text_as_bracketed_paste_then_enter()
+    {
+        var session = new RecordingTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        await router.SendLineAsync("codex-1", "first line\r\nsecond line");
+
+        Assert.Equal(["\x1b[200~", "first line\nsecond line", "\x1b[201~", "\r"], session.Writes);
+    }
+
+    [Fact]
     public async Task Throws_when_session_is_unknown()
     {
         var router = new AgentInputRouter();
