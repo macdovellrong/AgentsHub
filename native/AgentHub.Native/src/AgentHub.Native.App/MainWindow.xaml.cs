@@ -110,7 +110,7 @@ public partial class MainWindow : Window
         WorkspaceTextBox.Text = selectedPath;
         var workspace = await AddCurrentWorkspaceAsync();
         StatusTextBlock.Text = workspace is null
-            ? "No workspace selected"
+            ? WorkspaceStatusResolver.ResolveMissingWorkspaceStatus(StatusTextBlock.Text, "No workspace selected")
             : $"Workspace selected: {workspace.Name}";
     }
 
@@ -195,7 +195,9 @@ public partial class MainWindow : Window
             var workspace = await AddCurrentWorkspaceAsync();
             if (workspace is null)
             {
-                StatusTextBlock.Text = "Select or add a workspace first";
+                StatusTextBlock.Text = WorkspaceStatusResolver.ResolveMissingWorkspaceStatus(
+                    StatusTextBlock.Text,
+                    "Select or add a workspace first");
                 return;
             }
 
