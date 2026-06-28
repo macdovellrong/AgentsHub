@@ -4,7 +4,20 @@ namespace AgentHub.Native.Core.Collaboration;
 
 public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessionRegistry sessionRegistry)
 {
-    public Task SendToProfileAsync(
+    public async Task SendToProfileAsync(
+        string workspacePath,
+        string profileId,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var sent = await TrySendToProfileAsync(workspacePath, profileId, message, cancellationToken).ConfigureAwait(false);
+        if (!sent)
+        {
+            throw new KeyNotFoundException($"No active session for profile '{profileId}' in workspace '{workspacePath}'.");
+        }
+    }
+
+    public async Task<bool> TrySendToProfileAsync(
         string workspacePath,
         string profileId,
         string message,
@@ -13,9 +26,10 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
         var session = sessionRegistry.FindLatest(workspacePath, profileId);
         if (session is null)
         {
-            throw new KeyNotFoundException($"No active session for profile '{profileId}' in workspace '{workspacePath}'.");
+            return false;
         }
 
-        return inputRouter.SendLineAsync(session.Id, message, cancellationToken);
+        await inputRouter.SendLineAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 }

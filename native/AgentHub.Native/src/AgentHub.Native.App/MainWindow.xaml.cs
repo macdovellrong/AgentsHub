@@ -386,17 +386,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        await SendTextToTargetAsync(text);
-        InjectTextBox.Clear();
+        if (await SendTextToTargetAsync(text))
+        {
+            InjectTextBox.Clear();
+        }
     }
 
-    private async Task SendTextToTargetAsync(string text)
+    private async Task<bool> SendTextToTargetAsync(string text)
     {
         var addressedMessage = AgentAddressedMessageParser.Parse(text);
         if (addressedMessage is not null)
         {
-            await SendTextToProfileAsync(addressedMessage.ProfileId, addressedMessage.Message);
-            return;
+            return await SendTextToProfileAsync(addressedMessage.ProfileId, addressedMessage.Message);
         }
 
         var selectedTarget = TargetProfileComboBox.SelectedItem is ComboBoxItem item
@@ -408,7 +409,7 @@ public partial class MainWindow : Window
             if (selectedSessionId is null)
             {
                 StatusTextBlock.Text = "No selected session";
-                return;
+                return false;
             }
 
             await inputRouter.SendLineAsync(selectedSessionId!, text);
@@ -421,32 +422,39 @@ public partial class MainWindow : Window
             }
 
             StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
-            return;
+            return true;
         }
 
         var workspacePath = CurrentWorkspacePath();
         if (workspacePath is null)
         {
             StatusTextBlock.Text = "No workspace selected";
-            return;
+            return false;
         }
 
-        await SendTextToProfileAsync(selectedTarget, text);
+        return await SendTextToProfileAsync(selectedTarget, text);
     }
 
-    private async Task SendTextToProfileAsync(string targetProfileId, string text)
+    private async Task<bool> SendTextToProfileAsync(string targetProfileId, string text)
     {
         var workspacePath = CurrentWorkspacePath();
         if (workspacePath is null)
         {
             StatusTextBlock.Text = "No workspace selected";
-            return;
+            return false;
         }
 
         var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
-        await messageRouter.SendToProfileAsync(workspacePath, targetProfileId, text);
+        var sent = await messageRouter.TrySendToProfileAsync(workspacePath, targetProfileId, text);
+        if (!sent)
+        {
+            StatusTextBlock.Text = $"{targetProfileId} is not online";
+            return false;
+        }
+
         await RecordUserMessageAsync(workspacePath, targetProfileId, text);
         StatusTextBlock.Text = $"Sent input to latest {targetProfileId}";
+        return true;
     }
 
     private async Task ReloadTimelineAsync(string workspacePath)

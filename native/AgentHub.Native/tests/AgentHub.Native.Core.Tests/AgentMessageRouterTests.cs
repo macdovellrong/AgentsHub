@@ -30,6 +30,32 @@ public sealed class AgentMessageRouterTests
             router.SendToProfileAsync(@"V:\OrderManager", "codex", "hello"));
     }
 
+    [Fact]
+    public async Task Try_send_returns_false_when_target_profile_has_no_session()
+    {
+        var router = new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry());
+
+        var sent = await router.TrySendToProfileAsync(@"V:\OrderManager", "codex", "hello");
+
+        Assert.False(sent);
+    }
+
+    [Fact]
+    public async Task Try_send_returns_true_after_sending_to_latest_session()
+    {
+        var session = new RecordingTerminalSession("codex-2");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(session);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-2", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var router = new AgentMessageRouter(inputRouter, registry);
+
+        var sent = await router.TrySendToProfileAsync(@"V:\OrderManager", "codex", "please review");
+
+        Assert.True(sent);
+        Assert.Equal(["please review", "\r"], session.Writes);
+    }
+
     private sealed class RecordingTerminalSession(string id) : IAgentTerminalSession
     {
         public string Id { get; } = id;
