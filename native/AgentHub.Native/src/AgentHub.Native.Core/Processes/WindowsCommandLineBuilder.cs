@@ -29,14 +29,35 @@ public static class WindowsCommandLineBuilder
 
         var builder = new StringBuilder(value.Length + 2);
         builder.Append('"');
+        var pendingBackslashes = 0;
         foreach (var character in value)
         {
+            if (character == '\\')
+            {
+                pendingBackslashes += 1;
+                continue;
+            }
+
             if (character == '"')
             {
-                builder.Append('\\');
+                builder.Append('\\', pendingBackslashes * 2 + 1);
+                builder.Append(character);
+                pendingBackslashes = 0;
+                continue;
+            }
+
+            if (pendingBackslashes > 0)
+            {
+                builder.Append('\\', pendingBackslashes);
+                pendingBackslashes = 0;
             }
 
             builder.Append(character);
+        }
+
+        if (pendingBackslashes > 0)
+        {
+            builder.Append('\\', pendingBackslashes * 2);
         }
 
         builder.Append('"');
