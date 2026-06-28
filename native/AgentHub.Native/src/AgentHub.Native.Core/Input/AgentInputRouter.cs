@@ -1,0 +1,23 @@
+namespace AgentHub.Native.Core.Input;
+
+public sealed class AgentInputRouter
+{
+    private readonly Dictionary<string, IAgentTerminalSession> sessions = new(StringComparer.OrdinalIgnoreCase);
+
+    public void Register(IAgentTerminalSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        sessions[session.Id] = session;
+    }
+
+    public async Task SendLineAsync(string sessionId, string text, CancellationToken cancellationToken = default)
+    {
+        if (!sessions.TryGetValue(sessionId, out var session))
+        {
+            throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
+        }
+
+        await session.WriteAsync(text, cancellationToken).ConfigureAwait(false);
+        await session.WriteAsync("\r", cancellationToken).ConfigureAwait(false);
+    }
+}

@@ -10,6 +10,8 @@ desktop/dev-smoke*.log
 desktop/dev-start*.log
 desktop/electron-*.png
 desktop/.agenthub-dev/
+native/**/bin/
+native/**/obj/
 OtherProject/
 *.egg-info/
 .codex/
