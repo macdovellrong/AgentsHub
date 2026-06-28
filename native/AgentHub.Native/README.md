@@ -43,6 +43,12 @@ workspace 列表保存位置：
 %LOCALAPPDATA%\AgentHub\Native\events
 ```
 
+Host shell 等本机设置保存位置：
+
+```text
+%LOCALAPPDATA%\AgentHub\Native\settings.json
+```
+
 ## 笔记本 Codex 验证
 
 1. 启动 AgentHub Native。

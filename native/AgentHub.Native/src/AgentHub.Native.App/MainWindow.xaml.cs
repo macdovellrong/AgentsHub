@@ -8,6 +8,7 @@ using AgentHub.Native.Core.Hooks;
 using AgentHub.Native.Core.Input;
 using AgentHub.Native.Core.Processes;
 using AgentHub.Native.Core.Profiles;
+using AgentHub.Native.Core.Settings;
 using AgentHub.Native.Core.Workspaces;
 using EasyWindowsTerminalControl;
 
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     private readonly AgentSessionRegistry sessionRegistry = new();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
+    private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private int nextSessionNumber = 1;
     private string? selectedSessionId;
@@ -34,11 +36,32 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        await LoadSettingsAsync();
+        HostShellComboBox.SelectionChanged += HostShellComboBox_SelectionChanged;
         hookReceiver = new AgentHookReceiver(new AgentHookReceiverOptions(0, Guid.NewGuid().ToString("N")));
         hookReceiver.EventReceived += HookReceiver_EventReceived;
         hookInfo = await hookReceiver.StartAsync();
         StatusTextBlock.Text = $"Hook receiver: {hookInfo.Url}";
         await ReloadWorkspacesAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        var settings = await settingsStore.LoadAsync();
+        SelectHostShell(settings.HostShell);
+    }
+
+    private async void HostShellComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        try
+        {
+            await settingsStore.SaveAsync(new NativeAppSettings(SelectedShellKind()));
+            StatusTextBlock.Text = $"Host shell: {SelectedShellKind()}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Save settings failed: {ex.Message}";
+        }
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
@@ -201,6 +224,21 @@ public partial class MainWindow : Window
             : ShellKind.PowerShell;
     }
 
+    private void SelectHostShell(ShellKind shellKind)
+    {
+        var expected = shellKind == ShellKind.Cmd ? "cmd" : "PowerShell";
+        foreach (var item in HostShellComboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Content?.ToString(), expected, StringComparison.OrdinalIgnoreCase))
+            {
+                HostShellComboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        HostShellComboBox.SelectedIndex = 0;
+    }
+
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()
     {
         var workspacePath = CurrentWorkspacePath();
@@ -250,6 +288,11 @@ public partial class MainWindow : Window
     private static string ResolveWorkspaceStorePath()
     {
         return Path.Combine(ResolveNativeDataDirectory(), "workspaces.json");
+    }
+
+    private static string ResolveSettingsPath()
+    {
+        return Path.Combine(ResolveNativeDataDirectory(), "settings.json");
     }
 
     private static string ResolveCollaborationEventsDirectory()
