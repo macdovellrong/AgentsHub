@@ -22,7 +22,14 @@ public sealed class WorkspaceStore(string storePath)
             return [];
         }
 
-        return JsonSerializer.Deserialize<List<WorkspaceEntry>>(raw, SerializerOptions) ?? [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<WorkspaceEntry>>(raw, SerializerOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     public async Task<WorkspaceEntry> AddOrUpdateAsync(string workspacePath, CancellationToken cancellationToken = default)

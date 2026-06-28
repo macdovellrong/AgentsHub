@@ -39,6 +39,19 @@ public sealed class WorkspaceStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Returns_empty_list_when_workspace_store_json_is_invalid()
+    {
+        var storePath = Path.Combine(tempRoot, "workspaces.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(storePath)!);
+        await File.WriteAllTextAsync(storePath, "{ not json");
+        var store = new WorkspaceStore(storePath);
+
+        var workspaces = await store.LoadAsync();
+
+        Assert.Empty(workspaces);
+    }
+
+    [Fact]
     public async Task Adds_agenthub_runtime_directories_to_gitignore_for_existing_workspace()
     {
         var workspacePath = Path.Combine(tempRoot, "OrderManager");
