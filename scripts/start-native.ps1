@@ -93,6 +93,72 @@ function Test-HookPythonCommand {
     }
 }
 
+function Split-AgentList {
+    param(
+        [string[]]$Agents
+    )
+
+    if ($null -eq $Agents) {
+        return @()
+    }
+
+    $parsedAgents = @()
+    foreach ($rawAgent in $Agents) {
+        if ([string]::IsNullOrWhiteSpace($rawAgent)) {
+            continue
+        }
+
+        foreach ($agentName in ($rawAgent -split ",")) {
+            $trimmed = $agentName.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $parsedAgents += $trimmed.ToLowerInvariant()
+            }
+        }
+    }
+
+    return $parsedAgents
+}
+
+function Resolve-AgentCommandName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AgentName
+    )
+
+    switch ($AgentName.ToLowerInvariant()) {
+        "codex" { return "codex" }
+        "claude" { return "claude" }
+        "gemini" { return "gemini" }
+        "powershell" { return $null }
+        "shell" { return $null }
+        default {
+            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, powershell, shell."
+        }
+    }
+}
+
+function Test-AgentCommands {
+    param(
+        [string[]]$Agents
+    )
+
+    foreach ($agentName in (Split-AgentList -Agents $Agents)) {
+        $commandName = Resolve-AgentCommandName -AgentName $agentName
+        if ([string]::IsNullOrWhiteSpace($commandName)) {
+            Write-Host "Agent CLI check skipped: $agentName uses the selected Host shell."
+            continue
+        }
+
+        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            throw "Agent CLI '$commandName' was not found in PATH. Install it or update PATH before launching AgentHub Native."
+        }
+
+        Write-Host "Agent CLI check passed: $agentName"
+        Write-Host "  $($command.Source)"
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeProject = Join-Path $repoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
 
@@ -111,7 +177,12 @@ if (-not ($sdks | Where-Object { $_ -match "^(1[0-9]|[2-9][0-9])\." })) {
 }
 
 if ($Check) {
-    $agentWasRequested = $null -ne $Agent -and $Agent.Count -gt 0
+    $requestedAgents = Split-AgentList -Agents $Agent
+    $agentWasRequested = $requestedAgents.Count -gt 0
+    if ($agentWasRequested) {
+        Test-AgentCommands -Agents $requestedAgents
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($Python)) {
         Test-HookPythonCommand -Command $Python
     }
@@ -148,7 +219,7 @@ if ($null -ne $Agent -and $Agent.Count -gt 0) {
         $runArgs += "--"
     }
 
-    $agentList = ($Agent | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    $agentList = (Split-AgentList -Agents $Agent) -join ","
     if (-not [string]::IsNullOrWhiteSpace($agentList)) {
         $runArgs += @("--agent", $agentList)
     }
