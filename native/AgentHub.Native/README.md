@@ -21,14 +21,15 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 
 1. 启动 native app。
 2. 输入 workspace 路径，点击 Add 加入工作区列表。
-3. 选中 workspace 后选择 Host shell，默认 PowerShell，也可以切换为 cmd。
-4. 启动 Codex、Claude、Gemini 或普通 shell session。
-5. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
-6. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
-7. 可以用底部输入栏向选中的 terminal session 发送一行文本。
-8. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini`、`powershell` 或 `cmd`，按当前 workspace/profile 路由到最新 session。
-9. 用户发送的消息和 hook 回传会显示在 Collaboration timeline 列表中。
-10. 可以用 Stop selected 停止当前 session。
+3. app 会在该 workspace 的 `.gitignore` 中幂等加入 `.agenthub/`、`.codex/`、`.claude/`、`.gemini/`。
+4. 选中 workspace 后选择 Host shell，默认 PowerShell，也可以切换为 cmd。
+5. 启动 Codex、Claude、Gemini 或普通 shell session。
+6. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
+7. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
+8. 可以用底部输入栏向选中的 terminal session 发送一行文本。
+9. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini`、`powershell` 或 `cmd`，按当前 workspace/profile 路由到最新 session。
+10. 用户发送的消息和 hook 回传会显示在 Collaboration timeline 列表中。
+11. 可以用 Stop selected 停止当前 session。
 
 workspace 列表保存位置：
 

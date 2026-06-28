@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentHub.Native.Core.Workspaces;
 
 namespace AgentHub.Native.Core.Hooks;
 
@@ -18,6 +19,7 @@ public static class ProjectAgentHookInstaller
         ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
         ArgumentNullException.ThrowIfNull(options);
 
+        await WorkspaceGitIgnore.EnsureAsync(workspacePath, cancellationToken).ConfigureAwait(false);
         await InstallCodexHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);
         await InstallClaudeHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);
         await InstallGeminiHooksAsync(workspacePath, options, cancellationToken).ConfigureAwait(false);

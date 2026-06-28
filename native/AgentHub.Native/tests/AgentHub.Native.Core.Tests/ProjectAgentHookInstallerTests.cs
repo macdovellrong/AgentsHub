@@ -38,6 +38,26 @@ public sealed class ProjectAgentHookInstallerTests : IDisposable
         Assert.Single(Regex.Matches(geminiSettings, "agenthub_gemini_after_agent.py"));
     }
 
+    [Fact]
+    public async Task Adds_agenthub_runtime_directories_to_workspace_gitignore()
+    {
+        var sourceHooks = CreateHookSource();
+        var workspace = Path.Combine(tempRoot, "workspace-with-gitignore");
+        Directory.CreateDirectory(workspace);
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".gitignore"), "node_modules/\n.codex/\n");
+
+        await ProjectAgentHookInstaller.InstallAsync(
+            workspace,
+            new ProjectAgentHookInstallerOptions(sourceHooks, "py -3"));
+        await ProjectAgentHookInstaller.InstallAsync(
+            workspace,
+            new ProjectAgentHookInstallerOptions(sourceHooks, "py -3"));
+
+        Assert.Equal(
+            "node_modules/\n.codex/\n.agenthub/\n.claude/\n.gemini/\n",
+            await File.ReadAllTextAsync(Path.Combine(workspace, ".gitignore")));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

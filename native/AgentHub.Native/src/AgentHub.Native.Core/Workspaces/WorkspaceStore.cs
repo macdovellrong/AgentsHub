@@ -34,6 +34,11 @@ public sealed class WorkspaceStore(string storePath)
         entries.RemoveAll(existing => PathsEqual(existing.Path, entry.Path));
         entries.Insert(0, entry);
         await SaveAsync(entries, cancellationToken).ConfigureAwait(false);
+        if (Directory.Exists(normalizedPath))
+        {
+            await WorkspaceGitIgnore.EnsureAsync(normalizedPath, cancellationToken).ConfigureAwait(false);
+        }
+
         return entry;
     }
 

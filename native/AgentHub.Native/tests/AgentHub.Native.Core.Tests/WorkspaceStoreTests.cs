@@ -38,6 +38,23 @@ public sealed class WorkspaceStoreTests : IDisposable
         Assert.Equal(@"D:\GoldAgent", workspace.Path);
     }
 
+    [Fact]
+    public async Task Adds_agenthub_runtime_directories_to_gitignore_for_existing_workspace()
+    {
+        var workspacePath = Path.Combine(tempRoot, "OrderManager");
+        Directory.CreateDirectory(workspacePath);
+        await File.WriteAllTextAsync(Path.Combine(workspacePath, ".gitignore"), "node_modules/\n");
+        var storePath = Path.Combine(tempRoot, "workspaces.json");
+        var store = new WorkspaceStore(storePath);
+
+        await store.AddOrUpdateAsync(workspacePath);
+        await store.AddOrUpdateAsync(workspacePath);
+
+        Assert.Equal(
+            "node_modules/\n.agenthub/\n.codex/\n.claude/\n.gemini/\n",
+            await File.ReadAllTextAsync(Path.Combine(workspacePath, ".gitignore")));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
