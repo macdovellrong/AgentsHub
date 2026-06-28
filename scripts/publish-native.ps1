@@ -75,9 +75,14 @@ $starter = @"
 @echo off
 setlocal
 pushd "%~dp0" || exit /b 1
+set "AGENTHUB_HOOKS_SOURCE_DIR=%CD%\scripts\hooks"
 AgentHub.Native.App.exe %*
 set "AGENTHUB_NATIVE_EXIT_CODE=%ERRORLEVEL%"
 popd
+if not "%AGENTHUB_NATIVE_EXIT_CODE%"=="0" (
+  echo AgentHub Native exited with code %AGENTHUB_NATIVE_EXIT_CODE%.
+  pause
+)
 exit /b %AGENTHUB_NATIVE_EXIT_CODE%
 "@
 Set-Content -LiteralPath $starterPath -Value $starter -Encoding ASCII

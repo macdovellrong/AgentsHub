@@ -94,7 +94,7 @@ py -3.11 --version
 .\artifacts\native\win-x64\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume -Python "py -3.11"
 ```
 
-发布版 `start-agenthub-native.bat` 直接调用 native exe。native exe 同时兼容 `-Workspace/-Agent/-Resume/-Python` 和 `--workspace/--agent/--resume/--python` 两种参数风格。
+发布版 `start-agenthub-native.bat` 直接调用 native exe，并会把 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`。native exe 同时兼容 `-Workspace/-Agent/-Resume/-Python` 和 `--workspace/--agent/--resume/--python` 两种参数风格。
 
 需要确认发布目录存在：
 
