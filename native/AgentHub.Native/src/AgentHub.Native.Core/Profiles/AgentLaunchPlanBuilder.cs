@@ -55,15 +55,22 @@ public static class AgentLaunchPlanBuilder
 
     private static AgentLaunchPlan BuildCmdPlan(AgentLaunchRequest request)
     {
-        var commandText = $"cd /d {QuoteCmd(request.WorkingDirectory)}";
-        if (!string.Equals(request.Command, "cmd.exe", StringComparison.OrdinalIgnoreCase))
+        var commands = new List<string>();
+        commands.AddRange(BuildCmdEnvironmentAssignments(request.EnvironmentVariables));
+        commands.Add($"cd /d {QuoteCmd(request.WorkingDirectory)}");
+        if (!string.IsNullOrWhiteSpace(request.Command)
+            && !string.Equals(request.Command, "cmd.exe", StringComparison.OrdinalIgnoreCase))
         {
-            commandText = $"{commandText} && {QuoteCmd(request.Command)}";
+            var invocation = QuoteCmd(request.Command);
             if (request.Arguments.Count > 0)
             {
-                commandText = $"{commandText} {string.Join(" ", request.Arguments.Select(QuoteCmd))}";
+                invocation = $"{invocation} {string.Join(" ", request.Arguments.Select(QuoteCmd))}";
             }
+
+            commands.Add(invocation);
         }
+
+        var commandText = string.Join(" && ", commands);
 
         return new AgentLaunchPlan(
             request.AgentKind,
@@ -72,6 +79,20 @@ public static class AgentLaunchPlanBuilder
             Path.Combine(Environment.SystemDirectory, "cmd.exe"),
             ["/K", commandText],
             commandText);
+    }
+
+    private static IEnumerable<string> BuildCmdEnvironmentAssignments(
+        IReadOnlyDictionary<string, string>? environmentVariables)
+    {
+        if (environmentVariables is null)
+        {
+            yield break;
+        }
+
+        foreach (var item in environmentVariables.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            yield return $"set \"{item.Key}={item.Value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        }
     }
 
     private static string BuildPowerShellInvocation(string command, IReadOnlyList<string> args)

@@ -51,11 +51,24 @@
                          SelectionChanged="WorkspaceListBox_SelectionChanged"
                          Margin="0,0,0,14" />
 
+                <TextBlock DockPanel.Dock="Top" Text="Host shell" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                <ComboBox x:Name="HostShellComboBox"
+                          DockPanel.Dock="Top"
+                          MinHeight="34"
+                          Background="#0E151D"
+                          Foreground="#F2F6FA"
+                          BorderBrush="#40566E"
+                          SelectedIndex="0"
+                          Margin="0,0,0,14">
+                    <ComboBoxItem Content="PowerShell" />
+                    <ComboBoxItem Content="cmd" />
+                </ComboBox>
+
                 <UniformGrid DockPanel.Dock="Top" Columns="2" Rows="2" Margin="0,0,0,14">
                     <Button Content="Start Codex" Click="StartCodex_Click" Margin="0,0,6,6" MinHeight="36" />
                     <Button Content="Start Claude" Click="StartClaude_Click" Margin="6,0,0,6" MinHeight="36" />
                     <Button Content="Start Gemini" Click="StartGemini_Click" Margin="0,6,6,0" MinHeight="36" />
-                    <Button Content="PowerShell" Click="StartPowerShell_Click" Margin="6,6,0,0" MinHeight="36" />
+                    <Button Content="Start Shell" Click="StartPowerShell_Click" Margin="6,6,0,0" MinHeight="36" />
                 </UniformGrid>
 
                 <TextBlock DockPanel.Dock="Top" Text="Sessions" Foreground="#9FB0C2" Margin="0,0,0,6" />
@@ -133,6 +146,7 @@
                     <ComboBoxItem Content="claude" />
                     <ComboBoxItem Content="gemini" />
                     <ComboBoxItem Content="powershell" />
+                    <ComboBoxItem Content="cmd" />
                 </ComboBox>
 
                 <TextBox Grid.Column="2"

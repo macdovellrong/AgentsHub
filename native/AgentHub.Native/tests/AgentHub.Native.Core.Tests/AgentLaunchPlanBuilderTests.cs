@@ -60,4 +60,37 @@ public sealed class AgentLaunchPlanBuilderTests
         Assert.Equal(["/K", "cd /d \"D:\\Repo\""], plan.Arguments);
         Assert.Equal("cd /d \"D:\\Repo\"", plan.CommandText);
     }
+
+    [Fact]
+    public void Injects_hook_environment_before_launching_agent_in_cmd()
+    {
+        var plan = AgentLaunchPlanBuilder.Build(new AgentLaunchRequest(
+            AgentKind.Codex,
+            ShellKind.Cmd,
+            @"V:\OrderManager",
+            "codex",
+            ["resume"],
+            new Dictionary<string, string>
+            {
+                ["AGENTHUB_HOOK_TOKEN"] = "token&1",
+                ["AGENTHUB_HOOK_URL"] = "http://127.0.0.1:17321/api/agent-result"
+            }));
+
+        Assert.Equal(
+            "set \"AGENTHUB_HOOK_TOKEN=token&1\" && set \"AGENTHUB_HOOK_URL=http://127.0.0.1:17321/api/agent-result\" && cd /d \"V:\\OrderManager\" && \"codex\" \"resume\"",
+            plan.CommandText);
+    }
+
+    [Fact]
+    public void Builds_interactive_cmd_plan_when_command_is_empty()
+    {
+        var plan = AgentLaunchPlanBuilder.Build(new AgentLaunchRequest(
+            AgentKind.PowerShell,
+            ShellKind.Cmd,
+            @"D:\Repo",
+            "",
+            []));
+
+        Assert.Equal("cd /d \"D:\\Repo\"", plan.CommandText);
+    }
 }

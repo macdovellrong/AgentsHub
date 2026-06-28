@@ -140,8 +140,9 @@ public partial class MainWindow : Window
                 new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), "py -3"));
         }
 
-        var sessionId = $"{agentKind.ToString().ToLowerInvariant()}-{nextSessionNumber++}";
-        var profileId = agentKind.ToString().ToLowerInvariant();
+        var shellKind = SelectedShellKind();
+        var profileId = AgentProfileIdResolver.Resolve(agentKind, shellKind);
+        var sessionId = $"{profileId}-{nextSessionNumber++}";
         var runId = $"{sessionId}-{DateTimeOffset.Now:yyyyMMddHHmmss}";
         var env = hookInfo is null
             ? null
@@ -152,7 +153,7 @@ public partial class MainWindow : Window
                 runId,
                 profileId,
                 workspace.Path));
-        var request = new AgentLaunchRequest(agentKind, ShellKind.PowerShell, workspace.Path, command, args, env);
+        var request = new AgentLaunchRequest(agentKind, shellKind, workspace.Path, command, args, env);
         var plan = AgentLaunchPlanBuilder.Build(request);
         var startupCommandLine = WindowsCommandLineBuilder.Build(plan.Executable, plan.Arguments);
 
@@ -163,13 +164,23 @@ public partial class MainWindow : Window
             FontSizeWhenSettingTheme = 14
         };
 
-        var session = new SessionViewModel(sessionId, agentKind, workspace, terminal);
+        var session = new SessionViewModel(sessionId, agentKind, shellKind, workspace, terminal);
         sessions[sessionId] = session;
         inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
         sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
         SessionListBox.Items.Add(session);
         SessionListBox.SelectedItem = session;
         StatusTextBlock.Text = $"Started {session.DisplayName}";
+    }
+
+    private ShellKind SelectedShellKind()
+    {
+        var selected = HostShellComboBox.SelectedItem is ComboBoxItem item
+            ? item.Content?.ToString()
+            : null;
+        return string.Equals(selected, "cmd", StringComparison.OrdinalIgnoreCase)
+            ? ShellKind.Cmd
+            : ShellKind.PowerShell;
     }
 
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()
@@ -412,10 +423,13 @@ public partial class MainWindow : Window
     private sealed record SessionViewModel(
         string Id,
         AgentKind AgentKind,
+        ShellKind ShellKind,
         WorkspaceEntry Workspace,
         EasyTerminalControl Terminal)
     {
-        public string DisplayName => $"{AgentKind} / {Workspace.Name}";
+        public string DisplayName => AgentKind == AgentKind.PowerShell
+            ? $"{ShellKind} / {Workspace.Name}"
+            : $"{AgentKind} via {ShellKind} / {Workspace.Name}";
 
         public override string ToString()
         {
