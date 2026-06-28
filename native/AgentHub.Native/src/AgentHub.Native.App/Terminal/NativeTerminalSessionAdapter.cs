@@ -25,24 +25,12 @@ public sealed class NativeTerminalSessionAdapter : IAgentTerminalSession
     public Task WriteAsync(string text, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!connection.HasTerminal || !connection.IsProcessStarted)
-        {
-            throw new AgentTerminalNotReadyException($"Agent terminal session '{Id}' is still starting.");
-        }
-
-        if (connection.HasProcessExited)
-        {
-            throw new InvalidOperationException($"Agent terminal session '{Id}' has exited.");
-        }
-
-        connection.WriteToTerminal(text);
-        return Task.CompletedTask;
+        return connection.WriteAsync(text, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        connection.StopTerminal();
-        return Task.CompletedTask;
+        return connection.StopAsync(cancellationToken);
     }
 }

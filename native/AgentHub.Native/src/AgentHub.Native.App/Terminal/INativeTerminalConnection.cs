@@ -2,13 +2,7 @@ namespace AgentHub.Native.App.Terminal;
 
 public interface INativeTerminalConnection
 {
-    bool HasTerminal { get; }
+    Task WriteAsync(string text, CancellationToken cancellationToken = default);
 
-    bool IsProcessStarted { get; }
-
-    bool HasProcessExited { get; }
-
-    void WriteToTerminal(string text);
-
-    void StopTerminal();
+    Task StopAsync(CancellationToken cancellationToken = default);
 }
