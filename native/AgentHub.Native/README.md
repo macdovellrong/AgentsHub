@@ -24,6 +24,13 @@
 .\scripts\start-native.ps1
 ```
 
+启动时直接加入并选中某个 workspace：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager
+.\start-agenthub-native.bat -Workspace V:\OrderManager
+```
+
 只检查环境和路径、不启动 UI：
 
 ```powershell

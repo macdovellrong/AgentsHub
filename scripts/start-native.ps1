@@ -1,5 +1,7 @@
 param(
-    [switch]$Check
+    [switch]$Check,
+    [Alias("w")]
+    [string]$Workspace
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,4 +30,9 @@ if ($Check) {
 }
 
 Set-Location -LiteralPath $repoRoot
-dotnet run --project $nativeProject
+$runArgs = @("run", "--project", $nativeProject)
+if (-not [string]::IsNullOrWhiteSpace($Workspace)) {
+    $runArgs += @("--", "--workspace", $Workspace)
+}
+
+& dotnet @runArgs

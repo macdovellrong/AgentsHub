@@ -22,13 +22,20 @@ public partial class MainWindow : Window
     private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
     private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
+    private readonly NativeAppStartupOptions startupOptions;
     private int nextSessionNumber = 1;
     private string? selectedSessionId;
     private AgentHookReceiver? hookReceiver;
     private AgentHookReceiverInfo? hookInfo;
 
     public MainWindow()
+        : this(NativeAppStartupOptions.Empty)
     {
+    }
+
+    public MainWindow(NativeAppStartupOptions startupOptions)
+    {
+        this.startupOptions = startupOptions;
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -42,7 +49,7 @@ public partial class MainWindow : Window
         hookReceiver.EventReceived += HookReceiver_EventReceived;
         hookInfo = await hookReceiver.StartAsync();
         StatusTextBlock.Text = $"Hook receiver: {hookInfo.Url}";
-        await ReloadWorkspacesAsync();
+        await LoadStartupWorkspaceAsync();
     }
 
     private async Task LoadSettingsAsync()
@@ -287,6 +294,28 @@ public partial class MainWindow : Window
         }
 
         HostShellComboBox.SelectedIndex = 0;
+    }
+
+    private async Task LoadStartupWorkspaceAsync()
+    {
+        if (startupOptions.InitialWorkspacePath is null)
+        {
+            await ReloadWorkspacesAsync();
+            return;
+        }
+
+        WorkspaceTextBox.Text = startupOptions.InitialWorkspacePath;
+        var validation = WorkspaceDirectoryValidator.Validate(startupOptions.InitialWorkspacePath);
+        if (!validation.IsValid)
+        {
+            await ReloadWorkspacesAsync();
+            StatusTextBlock.Text = validation.ErrorMessage ?? "Invalid startup workspace";
+            return;
+        }
+
+        var workspace = await workspaceStore.AddOrUpdateAsync(validation.Path!);
+        await ReloadWorkspacesAsync(workspace.Path);
+        StatusTextBlock.Text = $"Workspace selected: {workspace.Name}";
     }
 
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()
