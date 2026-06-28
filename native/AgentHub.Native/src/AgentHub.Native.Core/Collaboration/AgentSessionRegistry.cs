@@ -15,6 +15,11 @@ public sealed class AgentSessionRegistry
         sessions.Remove(sessionId);
     }
 
+    public void Clear()
+    {
+        sessions.Clear();
+    }
+
     public AgentSessionDescriptor? FindLatest(string workspacePath, string profileId)
     {
         var normalizedWorkspace = NormalizePath(workspacePath);

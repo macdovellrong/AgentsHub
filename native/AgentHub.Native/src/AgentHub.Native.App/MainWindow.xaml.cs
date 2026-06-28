@@ -397,6 +397,18 @@ public partial class MainWindow : Window
         StatusTextBlock.Text = $"Stopped {session.Id}";
     }
 
+    private async void StopAllSessions_Click(object sender, RoutedEventArgs e)
+    {
+        var stoppedCount = await inputRouter.StopAllAsync();
+        sessionRegistry.Clear();
+        sessions.Clear();
+        SessionListBox.Items.Clear();
+        selectedSessionId = null;
+        TerminalHostGrid.Children.Clear();
+        CurrentSessionTextBlock.Text = "No session";
+        StatusTextBlock.Text = $"Stopped {stoppedCount} sessions";
+    }
+
     private async void InjectTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter)

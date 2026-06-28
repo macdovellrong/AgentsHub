@@ -28,4 +28,17 @@ public sealed class AgentSessionRegistryTests
 
         Assert.Null(registry.FindLatest(@"V:\OrderManager", "codex"));
     }
+
+    [Fact]
+    public void Clears_all_registered_sessions()
+    {
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", @"V:\OrderManager", DateTimeOffset.UtcNow));
+
+        registry.Clear();
+
+        Assert.Null(registry.FindLatest(@"V:\OrderManager", "codex"));
+        Assert.Null(registry.FindLatest(@"V:\OrderManager", "claude"));
+    }
 }
