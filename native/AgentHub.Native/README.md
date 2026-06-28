@@ -48,7 +48,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 7. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
 8. 可以用底部输入栏向选中的 terminal session 发送文本；Enter 发送，Shift+Enter 在输入框内换行。多行文本会用 bracketed paste 写入终端，再发送 Enter。
 9. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini`、`powershell` 或 `cmd`，按当前 workspace/profile 路由到最新 session。
-10. 输入栏支持 `@codex message`、`@claude message`、`@gemini message`、`@powershell message`、`@cmd message` 直接定向发送。
+10. 输入栏支持 `@codex message`、`@claude message`、`@gemini message`、`@powershell message`、`@cmd message` 直接定向发送，定向消息正文可以是多行。
 11. 用户发送的消息和 hook 回传会显示在 Collaboration timeline 列表中。
 12. 可以用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 

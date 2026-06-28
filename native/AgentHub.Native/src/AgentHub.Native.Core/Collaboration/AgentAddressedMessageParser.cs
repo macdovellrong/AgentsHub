@@ -38,6 +38,6 @@ public static partial class AgentAddressedMessageParser
             : new AgentAddressedMessage(profileId, message);
     }
 
-    [GeneratedRegex("^@(?<profile>[A-Za-z0-9_]+):?\\s+(?<message>.+)$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^@(?<profile>[A-Za-z0-9_]+):?\\s+(?<message>.+)$", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
     private static partial Regex AddressedMessageRegex();
 }

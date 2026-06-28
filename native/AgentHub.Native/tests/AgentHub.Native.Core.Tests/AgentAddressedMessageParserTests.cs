@@ -18,6 +18,16 @@ public sealed class AgentAddressedMessageParserTests
         Assert.Equal(expectedMessage, parsed.Message);
     }
 
+    [Fact]
+    public void Parses_multiline_addressed_message()
+    {
+        var parsed = AgentAddressedMessageParser.Parse("@codex first line\r\nsecond line");
+
+        Assert.NotNull(parsed);
+        Assert.Equal("codex", parsed.ProfileId);
+        Assert.Equal("first line\r\nsecond line", parsed.Message);
+    }
+
     [Theory]
     [InlineData("plain text")]
     [InlineData("@codex")]
