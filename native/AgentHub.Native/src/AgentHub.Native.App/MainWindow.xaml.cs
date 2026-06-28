@@ -225,7 +225,7 @@ public partial class MainWindow : Window
                 StatusTextBlock.Text = "Installing project hooks...";
                 await ProjectAgentHookInstaller.InstallAsync(
                     workspace.Path,
-                    new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), "py -3"));
+                    new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), ResolveHookPythonCommand()));
             }
 
             var shellKind = SelectedShellKind();
@@ -416,6 +416,11 @@ public partial class MainWindow : Window
         }
 
         throw new DirectoryNotFoundException($"AgentHub hook scripts not found. Checked: {string.Join(", ", candidates)}");
+    }
+
+    private string ResolveHookPythonCommand()
+    {
+        return startupOptions.HookPythonCommand ?? "py -3";
     }
 
     private static void AddAncestorCandidates(List<string> candidates, string startDirectory)

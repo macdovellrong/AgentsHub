@@ -46,6 +46,29 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_python_option_with_separate_value()
+    {
+        var options = NativeAppStartupOptions.Parse(["--python", @"C:\Program Files\Python311\python.exe"]);
+
+        Assert.Equal(@"C:\Program Files\Python311\python.exe", options.HookPythonCommand);
+    }
+
+    [Fact]
+    public void Parses_python_option_with_equals_value()
+    {
+        var options = NativeAppStartupOptions.Parse(["--python=py -3.11"]);
+
+        Assert.Equal("py -3.11", options.HookPythonCommand);
+    }
+
+    [Fact]
+    public void Ignores_empty_or_missing_python_option()
+    {
+        Assert.Null(NativeAppStartupOptions.Parse(["--python"]).HookPythonCommand);
+        Assert.Null(NativeAppStartupOptions.Parse(["--python", "   "]).HookPythonCommand);
+    }
+
+    [Fact]
     public void Ignores_unknown_shell_option()
     {
         var options = NativeAppStartupOptions.Parse(["--shell", "unknown"]);

@@ -46,6 +46,13 @@
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Shell cmd -Agent codex
 ```
 
+启动时指定 Agent hook 使用的 Python 命令；未指定时默认使用 `py -3`：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent codex -Resume -Python "C:\Program Files\Python311\python.exe"
+.\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume -Python "py -3.11"
+```
+
 只检查环境和路径、不启动 UI：
 
 ```powershell

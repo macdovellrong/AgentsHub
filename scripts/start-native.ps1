@@ -5,6 +5,7 @@ param(
     [Alias("s")]
     [ValidateSet("powershell", "cmd")]
     [string]$Shell,
+    [string]$Python,
     [Alias("a")]
     [ValidateSet("codex", "claude", "gemini", "powershell", "shell")]
     [string]$Agent,
@@ -47,6 +48,13 @@ if (-not [string]::IsNullOrWhiteSpace($Shell)) {
     }
 
     $runArgs += @("--shell", $Shell)
+}
+if (-not [string]::IsNullOrWhiteSpace($Python)) {
+    if (-not ($runArgs -contains "--")) {
+        $runArgs += "--"
+    }
+
+    $runArgs += @("--python", $Python)
 }
 if (-not [string]::IsNullOrWhiteSpace($Agent)) {
     if (-not ($runArgs -contains "--")) {

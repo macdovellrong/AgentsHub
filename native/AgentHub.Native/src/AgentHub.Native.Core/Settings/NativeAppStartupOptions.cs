@@ -6,15 +6,17 @@ namespace AgentHub.Native.Core.Settings;
 public sealed record NativeAppStartupOptions(
     string? InitialWorkspacePath,
     ShellKind? HostShell,
+    string? HookPythonCommand,
     AgentKind? StartupAgentKind,
     AgentStartupMode? StartupMode)
 {
-    public static NativeAppStartupOptions Empty { get; } = new(null, null, null, null);
+    public static NativeAppStartupOptions Empty { get; } = new(null, null, null, null, null);
 
     public static NativeAppStartupOptions Parse(IReadOnlyList<string> args)
     {
         string? workspacePath = null;
         string? hostShell = null;
+        string? hookPythonCommand = null;
         string? startupAgent = null;
         var resume = false;
         for (var index = 0; index < args.Count; index += 1)
@@ -29,6 +31,12 @@ public sealed record NativeAppStartupOptions(
             if (arg.StartsWith("--shell=", StringComparison.OrdinalIgnoreCase))
             {
                 hostShell = arg["--shell=".Length..];
+                continue;
+            }
+
+            if (arg.StartsWith("--python=", StringComparison.OrdinalIgnoreCase))
+            {
+                hookPythonCommand = arg["--python=".Length..];
                 continue;
             }
 
@@ -58,6 +66,15 @@ public sealed record NativeAppStartupOptions(
                 }
             }
 
+            if (string.Equals(arg, "--python", StringComparison.OrdinalIgnoreCase))
+            {
+                if (index + 1 < args.Count)
+                {
+                    hookPythonCommand = args[index + 1];
+                    index += 1;
+                }
+            }
+
             if (string.Equals(arg, "--agent", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(arg, "-a", StringComparison.OrdinalIgnoreCase))
             {
@@ -81,8 +98,15 @@ public sealed record NativeAppStartupOptions(
         return new NativeAppStartupOptions(
             WorkspacePathSelection.NormalizeSelectedPath(workspacePath),
             ParseShellKind(hostShell),
+            NormalizeOptional(hookPythonCommand),
             agentKind,
             startupMode);
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static ShellKind? ParseShellKind(string? raw)
