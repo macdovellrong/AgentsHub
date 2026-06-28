@@ -50,6 +50,19 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Stop_propagates_session_stop_failure_and_unregisters_session()
+    {
+        var session = new ThrowingStopTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => router.StopAsync("codex-1"));
+
+        Assert.True(session.StopAttempted);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
     public async Task Try_stop_returns_false_when_session_is_unknown()
     {
         var router = new AgentInputRouter();
@@ -70,6 +83,20 @@ public sealed class AgentInputRouterTests
 
         Assert.True(stopped);
         Assert.True(session.Stopped);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
+    public async Task Try_stop_returns_false_and_unregisters_when_session_stop_fails()
+    {
+        var session = new ThrowingStopTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var stopped = await router.TryStopAsync("codex-1");
+
+        Assert.False(stopped);
+        Assert.True(session.StopAttempted);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
     }
 

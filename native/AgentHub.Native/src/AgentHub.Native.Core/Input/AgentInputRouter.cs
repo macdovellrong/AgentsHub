@@ -33,10 +33,12 @@ public sealed class AgentInputRouter
 
     public async Task StopAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        if (!await TryStopAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        if (!sessions.Remove(sessionId, out var session))
         {
             throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
         }
+
+        await session.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> TryStopAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -46,8 +48,19 @@ public sealed class AgentInputRouter
             return false;
         }
 
-        await session.StopAsync(cancellationToken).ConfigureAwait(false);
-        return true;
+        try
+        {
+            await session.StopAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public async Task<int> StopAllAsync(CancellationToken cancellationToken = default)
