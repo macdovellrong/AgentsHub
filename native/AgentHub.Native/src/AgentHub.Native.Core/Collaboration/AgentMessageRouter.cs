@@ -29,10 +29,14 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
             return false;
         }
 
-        var sent = await inputRouter.TrySendLineAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
-        if (!sent)
+        var result = await inputRouter.TrySendLineDetailedAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
+        if (!result.Sent)
         {
-            sessionRegistry.Remove(session.Id);
+            if (result.ShouldRemoveSession)
+            {
+                sessionRegistry.Remove(session.Id);
+            }
+
             return false;
         }
 

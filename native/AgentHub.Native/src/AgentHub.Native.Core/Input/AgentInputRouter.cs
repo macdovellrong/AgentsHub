@@ -22,24 +22,37 @@ public sealed class AgentInputRouter
 
     public async Task<bool> TrySendLineAsync(string sessionId, string text, CancellationToken cancellationToken = default)
     {
+        var result = await TrySendLineDetailedAsync(sessionId, text, cancellationToken).ConfigureAwait(false);
+        return result.Sent;
+    }
+
+    public async Task<AgentInputSendResult> TrySendLineDetailedAsync(
+        string sessionId,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
         if (!sessions.TryGetValue(sessionId, out var session))
         {
-            return false;
+            return new AgentInputSendResult(AgentInputSendStatus.SessionMissing);
         }
 
         try
         {
             await WriteSubmittedLineAsync(session, text, cancellationToken).ConfigureAwait(false);
-            return true;
+            return new AgentInputSendResult(AgentInputSendStatus.Sent);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
+        catch (AgentTerminalNotReadyException)
+        {
+            return new AgentInputSendResult(AgentInputSendStatus.TerminalNotReady);
+        }
         catch
         {
             sessions.Remove(sessionId);
-            return false;
+            return new AgentInputSendResult(AgentInputSendStatus.TerminalFailed);
         }
     }
 

@@ -4,6 +4,7 @@
     <Project Path="src/AgentHub.Native.Core/AgentHub.Native.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AgentHub.Native.App.Tests/AgentHub.Native.App.Tests.csproj" />
     <Project Path="tests/AgentHub.Native.Core.Tests/AgentHub.Native.Core.Tests.csproj" />
   </Folder>
 </Solution>

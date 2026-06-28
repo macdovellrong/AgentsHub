@@ -74,6 +74,36 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Try_send_returns_false_and_keeps_session_when_terminal_is_not_ready()
+    {
+        var session = new NotReadyTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var sent = await router.TrySendLineAsync("codex-1", "hello");
+
+        Assert.False(sent);
+        Assert.True(session.WriteAttempted);
+        await Assert.ThrowsAsync<AgentTerminalNotReadyException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
+    public async Task Try_send_detailed_reports_not_ready_without_unregistering_session()
+    {
+        var session = new NotReadyTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var result = await router.TrySendLineDetailedAsync("codex-1", "hello");
+
+        Assert.Equal(AgentInputSendStatus.TerminalNotReady, result.Status);
+        Assert.False(result.Sent);
+        Assert.False(result.ShouldRemoveSession);
+        Assert.True(session.WriteAttempted);
+        await Assert.ThrowsAsync<AgentTerminalNotReadyException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
     public async Task Stops_and_unregisters_session()
     {
         var session = new RecordingTerminalSession("codex-1");
@@ -219,6 +249,23 @@ public sealed class AgentInputRouterTests
         {
             WriteAttempted = true;
             throw new InvalidOperationException("write failed");
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NotReadyTerminalSession(string id) : IAgentTerminalSession
+    {
+        public string Id { get; } = id;
+        public bool WriteAttempted { get; private set; }
+
+        public Task WriteAsync(string text, CancellationToken cancellationToken = default)
+        {
+            WriteAttempted = true;
+            throw new AgentTerminalNotReadyException("terminal is still starting");
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)

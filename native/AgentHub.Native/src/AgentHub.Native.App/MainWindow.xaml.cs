@@ -526,10 +526,20 @@ public partial class MainWindow : Window
             }
 
             var targetSessionId = selectedSessionId!;
-            var sent = await inputRouter.TrySendLineAsync(targetSessionId, text);
-            if (!sent)
+            var result = await inputRouter.TrySendLineDetailedAsync(targetSessionId, text);
+            if (!result.Sent)
             {
-                RemoveSessionView(targetSessionId);
+                if (result.Status == AgentInputSendStatus.TerminalNotReady)
+                {
+                    StatusTextBlock.Text = $"{targetSessionId} is still starting";
+                    return false;
+                }
+
+                if (result.ShouldRemoveSession)
+                {
+                    RemoveSessionView(targetSessionId);
+                }
+
                 StatusTextBlock.Text = $"Removed stale session {targetSessionId}";
                 return false;
             }
