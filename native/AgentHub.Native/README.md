@@ -31,6 +31,14 @@
 .\start-agenthub-native.bat -Workspace V:\OrderManager
 ```
 
+启动时直接打开某个 Agent；`-Resume` 仅对 Codex 生效：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent codex -Resume
+.\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent claude
+```
+
 只检查环境和路径、不启动 UI：
 
 ```powershell

@@ -1,7 +1,11 @@
 param(
     [switch]$Check,
     [Alias("w")]
-    [string]$Workspace
+    [string]$Workspace,
+    [Alias("a")]
+    [ValidateSet("codex", "claude", "gemini", "powershell", "shell")]
+    [string]$Agent,
+    [switch]$Resume
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +37,20 @@ Set-Location -LiteralPath $repoRoot
 $runArgs = @("run", "--project", $nativeProject)
 if (-not [string]::IsNullOrWhiteSpace($Workspace)) {
     $runArgs += @("--", "--workspace", $Workspace)
+}
+if (-not [string]::IsNullOrWhiteSpace($Agent)) {
+    if (-not ($runArgs -contains "--")) {
+        $runArgs += "--"
+    }
+
+    $runArgs += @("--agent", $Agent)
+}
+if ($Resume) {
+    if (-not ($runArgs -contains "--")) {
+        $runArgs += "--"
+    }
+
+    $runArgs += "--resume"
 }
 
 & dotnet @runArgs

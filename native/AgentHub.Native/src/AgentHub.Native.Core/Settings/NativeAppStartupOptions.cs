@@ -1,20 +1,32 @@
+using AgentHub.Native.Core.Profiles;
 using AgentHub.Native.Core.Workspaces;
 
 namespace AgentHub.Native.Core.Settings;
 
-public sealed record NativeAppStartupOptions(string? InitialWorkspacePath)
+public sealed record NativeAppStartupOptions(
+    string? InitialWorkspacePath,
+    AgentKind? StartupAgentKind,
+    AgentStartupMode? StartupMode)
 {
-    public static NativeAppStartupOptions Empty { get; } = new((string?)null);
+    public static NativeAppStartupOptions Empty { get; } = new(null, null, null);
 
     public static NativeAppStartupOptions Parse(IReadOnlyList<string> args)
     {
         string? workspacePath = null;
+        string? startupAgent = null;
+        var resume = false;
         for (var index = 0; index < args.Count; index += 1)
         {
             var arg = args[index];
             if (arg.StartsWith("--workspace=", StringComparison.OrdinalIgnoreCase))
             {
                 workspacePath = arg["--workspace=".Length..];
+                continue;
+            }
+
+            if (arg.StartsWith("--agent=", StringComparison.OrdinalIgnoreCase))
+            {
+                startupAgent = arg["--agent=".Length..];
                 continue;
             }
 
@@ -27,8 +39,42 @@ public sealed record NativeAppStartupOptions(string? InitialWorkspacePath)
                     index += 1;
                 }
             }
+
+            if (string.Equals(arg, "--agent", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "-a", StringComparison.OrdinalIgnoreCase))
+            {
+                if (index + 1 < args.Count)
+                {
+                    startupAgent = args[index + 1];
+                    index += 1;
+                }
+            }
+
+            if (string.Equals(arg, "--resume", StringComparison.OrdinalIgnoreCase))
+            {
+                resume = true;
+            }
         }
 
-        return new NativeAppStartupOptions(WorkspacePathSelection.NormalizeSelectedPath(workspacePath));
+        var agentKind = ParseAgentKind(startupAgent);
+        AgentStartupMode? startupMode = agentKind is null
+            ? null
+            : resume && agentKind == AgentKind.Codex ? AgentStartupMode.Resume : AgentStartupMode.Start;
+        return new NativeAppStartupOptions(
+            WorkspacePathSelection.NormalizeSelectedPath(workspacePath),
+            agentKind,
+            startupMode);
+    }
+
+    private static AgentKind? ParseAgentKind(string? raw)
+    {
+        return raw?.Trim().ToLowerInvariant() switch
+        {
+            "codex" => AgentKind.Codex,
+            "claude" => AgentKind.Claude,
+            "gemini" => AgentKind.Gemini,
+            "powershell" or "shell" => AgentKind.PowerShell,
+            _ => null
+        };
     }
 }

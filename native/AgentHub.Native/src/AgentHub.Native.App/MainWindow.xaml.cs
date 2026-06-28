@@ -50,6 +50,7 @@ public partial class MainWindow : Window
         hookInfo = await hookReceiver.StartAsync();
         StatusTextBlock.Text = $"Hook receiver: {hookInfo.Url}";
         await LoadStartupWorkspaceAsync();
+        await StartStartupAgentAsync();
     }
 
     private async Task LoadSettingsAsync()
@@ -316,6 +317,18 @@ public partial class MainWindow : Window
         var workspace = await workspaceStore.AddOrUpdateAsync(validation.Path!);
         await ReloadWorkspacesAsync(workspace.Path);
         StatusTextBlock.Text = $"Workspace selected: {workspace.Name}";
+    }
+
+    private async Task StartStartupAgentAsync()
+    {
+        if (startupOptions.StartupAgentKind is null || startupOptions.StartupMode is null)
+        {
+            return;
+        }
+
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(
+            startupOptions.StartupAgentKind.Value,
+            startupOptions.StartupMode.Value));
     }
 
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()

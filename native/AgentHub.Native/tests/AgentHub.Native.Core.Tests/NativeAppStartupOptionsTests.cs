@@ -1,4 +1,5 @@
 using AgentHub.Native.Core.Settings;
+using AgentHub.Native.Core.Profiles;
 
 namespace AgentHub.Native.Core.Tests;
 
@@ -33,5 +34,50 @@ public sealed class NativeAppStartupOptionsTests
     {
         Assert.Null(NativeAppStartupOptions.Parse(["--workspace"]).InitialWorkspacePath);
         Assert.Null(NativeAppStartupOptions.Parse(["--workspace", "   "]).InitialWorkspacePath);
+    }
+
+    [Fact]
+    public void Parses_agent_option_with_resume_flag()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "codex", "--resume"]);
+
+        Assert.Equal(AgentKind.Codex, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Resume, options.StartupMode);
+    }
+
+    [Fact]
+    public void Parses_agent_option_with_equals_value()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent=claude"]);
+
+        Assert.Equal(AgentKind.Claude, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+    }
+
+    [Fact]
+    public void Parses_shell_as_powershell_agent()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "powershell"]);
+
+        Assert.Equal(AgentKind.PowerShell, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+    }
+
+    [Fact]
+    public void Applies_resume_only_to_codex()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "claude", "--resume"]);
+
+        Assert.Equal(AgentKind.Claude, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+    }
+
+    [Fact]
+    public void Ignores_unknown_startup_agent()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "unknown", "--resume"]);
+
+        Assert.Null(options.StartupAgentKind);
+        Assert.Null(options.StartupMode);
     }
 }
