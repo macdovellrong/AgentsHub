@@ -39,6 +39,13 @@
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent claude
 ```
 
+也可以一次启动多个 Agent，按列表顺序启动；`-Resume` 仍只影响 Codex：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent codex,claude,gemini -Resume
+.\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex,claude,gemini -Resume
+```
+
 启动时指定 Host shell：
 
 ```powershell

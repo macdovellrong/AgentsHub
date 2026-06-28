@@ -102,6 +102,29 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_comma_separated_agent_list()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "codex,claude,gemini", "--resume"]);
+
+        Assert.Equal(
+            [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
+            options.StartupAgents.Select(item => item.AgentKind).ToArray());
+        Assert.Equal(
+            [AgentStartupMode.Resume, AgentStartupMode.Start, AgentStartupMode.Start],
+            options.StartupAgents.Select(item => item.Mode).ToArray());
+    }
+
+    [Fact]
+    public void Parses_repeated_agent_options_in_order()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "claude", "--agent", "codex"]);
+
+        Assert.Equal(
+            [AgentKind.Claude, AgentKind.Codex],
+            options.StartupAgents.Select(item => item.AgentKind).ToArray());
+    }
+
+    [Fact]
     public void Parses_shell_as_powershell_agent()
     {
         var options = NativeAppStartupOptions.Parse(["--agent", "powershell"]);

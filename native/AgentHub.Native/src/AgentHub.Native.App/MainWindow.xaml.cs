@@ -321,14 +321,17 @@ public partial class MainWindow : Window
 
     private async Task StartStartupAgentAsync()
     {
-        if (startupOptions.StartupAgentKind is null || startupOptions.StartupMode is null)
+        if (startupOptions.StartupAgents.Count == 0)
         {
             return;
         }
 
-        await StartAgentAsync(AgentStartupCommandCatalog.Build(
-            startupOptions.StartupAgentKind.Value,
-            startupOptions.StartupMode.Value));
+        foreach (var startupAgent in startupOptions.StartupAgents)
+        {
+            await StartAgentAsync(AgentStartupCommandCatalog.Build(
+                startupAgent.AgentKind,
+                startupAgent.Mode));
+        }
     }
 
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()

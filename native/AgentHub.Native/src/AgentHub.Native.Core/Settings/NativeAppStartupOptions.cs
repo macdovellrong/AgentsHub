@@ -7,17 +7,18 @@ public sealed record NativeAppStartupOptions(
     string? InitialWorkspacePath,
     ShellKind? HostShell,
     string? HookPythonCommand,
+    IReadOnlyList<NativeAppStartupAgent> StartupAgents,
     AgentKind? StartupAgentKind,
     AgentStartupMode? StartupMode)
 {
-    public static NativeAppStartupOptions Empty { get; } = new(null, null, null, null, null);
+    public static NativeAppStartupOptions Empty { get; } = new(null, null, null, [], null, null);
 
     public static NativeAppStartupOptions Parse(IReadOnlyList<string> args)
     {
         string? workspacePath = null;
         string? hostShell = null;
         string? hookPythonCommand = null;
-        string? startupAgent = null;
+        var startupAgents = new List<string>();
         var resume = false;
         for (var index = 0; index < args.Count; index += 1)
         {
@@ -42,7 +43,7 @@ public sealed record NativeAppStartupOptions(
 
             if (arg.StartsWith("--agent=", StringComparison.OrdinalIgnoreCase))
             {
-                startupAgent = arg["--agent=".Length..];
+                startupAgents.Add(arg["--agent=".Length..]);
                 continue;
             }
 
@@ -80,7 +81,7 @@ public sealed record NativeAppStartupOptions(
             {
                 if (index + 1 < args.Count)
                 {
-                    startupAgent = args[index + 1];
+                    startupAgents.Add(args[index + 1]);
                     index += 1;
                 }
             }
@@ -91,16 +92,15 @@ public sealed record NativeAppStartupOptions(
             }
         }
 
-        var agentKind = ParseAgentKind(startupAgent);
-        AgentStartupMode? startupMode = agentKind is null
-            ? null
-            : resume && agentKind == AgentKind.Codex ? AgentStartupMode.Resume : AgentStartupMode.Start;
+        var parsedAgents = ParseStartupAgents(startupAgents, resume);
+        var firstAgent = parsedAgents.FirstOrDefault();
         return new NativeAppStartupOptions(
             WorkspacePathSelection.NormalizeSelectedPath(workspacePath),
             ParseShellKind(hostShell),
             NormalizeOptional(hookPythonCommand),
-            agentKind,
-            startupMode);
+            parsedAgents,
+            firstAgent?.AgentKind,
+            firstAgent?.Mode);
     }
 
     private static string? NormalizeOptional(string? value)
@@ -129,5 +129,30 @@ public sealed record NativeAppStartupOptions(
             "powershell" or "shell" => AgentKind.PowerShell,
             _ => null
         };
+    }
+
+    private static IReadOnlyList<NativeAppStartupAgent> ParseStartupAgents(
+        IReadOnlyList<string> rawAgents,
+        bool resume)
+    {
+        var agents = new List<NativeAppStartupAgent>();
+        foreach (var rawAgent in rawAgents)
+        {
+            foreach (var token in rawAgent.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var agentKind = ParseAgentKind(token);
+                if (agentKind is null)
+                {
+                    continue;
+                }
+
+                var mode = resume && agentKind == AgentKind.Codex
+                    ? AgentStartupMode.Resume
+                    : AgentStartupMode.Start;
+                agents.Add(new NativeAppStartupAgent(agentKind.Value, mode));
+            }
+        }
+
+        return agents;
     }
 }

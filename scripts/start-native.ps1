@@ -7,8 +7,7 @@ param(
     [string]$Shell,
     [string]$Python,
     [Alias("a")]
-    [ValidateSet("codex", "claude", "gemini", "powershell", "shell")]
-    [string]$Agent,
+    [string[]]$Agent,
     [switch]$Resume
 )
 
@@ -56,12 +55,15 @@ if (-not [string]::IsNullOrWhiteSpace($Python)) {
 
     $runArgs += @("--python", $Python)
 }
-if (-not [string]::IsNullOrWhiteSpace($Agent)) {
+if ($null -ne $Agent -and $Agent.Count -gt 0) {
     if (-not ($runArgs -contains "--")) {
         $runArgs += "--"
     }
 
-    $runArgs += @("--agent", $Agent)
+    $agentList = ($Agent | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    if (-not [string]::IsNullOrWhiteSpace($agentList)) {
+        $runArgs += @("--agent", $agentList)
+    }
 }
 if ($Resume) {
     if (-not ($runArgs -contains "--")) {
