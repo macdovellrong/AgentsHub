@@ -284,13 +284,8 @@ public partial class MainWindow : Window
 
     private string? CurrentWorkspacePath()
     {
-        if (WorkspaceListBox.SelectedItem is WorkspaceEntry workspace)
-        {
-            return workspace.Path;
-        }
-
-        var typedPath = WorkspaceTextBox.Text.Trim();
-        return string.IsNullOrWhiteSpace(typedPath) ? null : typedPath;
+        var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
+        return WorkspacePathSelection.ResolveCurrentPath(WorkspaceTextBox.Text, selectedPath);
     }
 
     private async Task ReloadWorkspacesAsync(string? selectPath = null)

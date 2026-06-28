@@ -20,4 +20,24 @@ public sealed class WorkspacePathSelectionTests
     {
         Assert.Null(WorkspacePathSelection.NormalizeSelectedPath(raw));
     }
+
+    [Fact]
+    public void Prefers_typed_workspace_path_over_selected_workspace_path()
+    {
+        var path = WorkspacePathSelection.ResolveCurrentPath(
+            @"D:\GoldAgent",
+            @"V:\OrderManager");
+
+        Assert.Equal(@"D:\GoldAgent", path);
+    }
+
+    [Fact]
+    public void Falls_back_to_selected_workspace_path_when_typed_path_is_empty()
+    {
+        var path = WorkspacePathSelection.ResolveCurrentPath(
+            "   ",
+            @"V:\OrderManager\");
+
+        Assert.Equal(@"V:\OrderManager", path);
+    }
 }
