@@ -160,7 +160,7 @@ public sealed record NativeAppStartupOptions(
             {
                 var shellKind = token.ToLowerInvariant() switch
                 {
-                    "powershell" => ShellKind.PowerShell,
+                    "powershell" or "shell" => ShellKind.PowerShell,
                     "cmd" => ShellKind.Cmd,
                     _ => (ShellKind?)null
                 };

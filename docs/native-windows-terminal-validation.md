@@ -78,6 +78,8 @@ py -3.11 --version
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent cmd
 ```
 
+`-Agent shell` 也是普通 shell 启动别名，默认选择 PowerShell host；需要 cmd 时使用 `-Agent cmd`。
+
 ## 发布版验证
 
 在开发机或笔记本执行发布：
