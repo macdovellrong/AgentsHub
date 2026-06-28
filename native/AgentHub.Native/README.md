@@ -12,6 +12,26 @@
 
 ## 运行
 
+推荐从仓库根目录启动：
+
+```powershell
+.\start-agenthub-native.bat
+```
+
+或使用 PowerShell 脚本：
+
+```powershell
+.\scripts\start-native.ps1
+```
+
+只检查环境和路径、不启动 UI：
+
+```powershell
+.\scripts\start-native.ps1 -Check
+```
+
+也可以直接运行项目：
+
 ```powershell
 cd native/AgentHub.Native
 dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
