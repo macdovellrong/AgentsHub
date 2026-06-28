@@ -45,6 +45,31 @@ public sealed class AgentHubCommandDispatcherTests
         Assert.Equal(["Review this.", "\r"], target.Writes);
     }
 
+    [Theory]
+    [InlineData("assign_task", "Implement T001")]
+    [InlineData("reject_task", "Add tests")]
+    [InlineData("request_review", "Review risk")]
+    public async Task Dispatches_task_plan_routing_commands_to_latest_target_profile_session(
+        string action,
+        string expectedMessage)
+    {
+        var target = new RecordingTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+
+        var result = await dispatcher.DispatchAsync(
+            @"V:\OrderManager",
+            $"<agenthub>{{\"action\":\"{action}\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"to\":\"codex\",\"message\":\"{expectedMessage}\"}}</agenthub>");
+
+        Assert.Equal(1, result.SentCount);
+        Assert.Empty(result.ParseErrors);
+        Assert.Empty(result.DispatchErrors);
+        Assert.Equal([expectedMessage, "\r"], target.Writes);
+    }
+
     [Fact]
     public async Task Reports_dispatch_error_when_target_profile_is_offline()
     {

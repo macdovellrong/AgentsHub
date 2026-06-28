@@ -97,6 +97,11 @@ public static class AgentHubCommandParser
             return ValidateLegacySendCommand(root, index, block);
         }
 
+        if (IsTaskPlanRoutingAction(action))
+        {
+            return ValidateTaskPlanRoutingCommand(root, index, block, action);
+        }
+
         return new ValidationResult(
             null,
             new AgentHubCommandParseError(
@@ -124,6 +129,7 @@ public static class AgentHubCommandParser
                 message,
                 OptionalString(root, "team_id"),
                 OptionalString(root, "task_id"),
+                null,
                 OptionalString(root, "conversation_id")),
             null);
     }
@@ -151,8 +157,53 @@ public static class AgentHubCommandParser
                 message,
                 null,
                 taskId,
+                null,
                 null),
             null);
+    }
+
+    private static ValidationResult ValidateTaskPlanRoutingCommand(
+        JsonElement root,
+        int index,
+        string block,
+        string action)
+    {
+        if (!TryGetRequiredString(root, "plan_id", out var planId))
+        {
+            return ValidationResult.Invalid(index, block, $"{action} command requires string field \"plan_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "task_id", out var taskId))
+        {
+            return ValidationResult.Invalid(index, block, $"{action} command requires string field \"task_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "to", out var to))
+        {
+            return ValidationResult.Invalid(index, block, $"{action} command requires string field \"to\"");
+        }
+
+        if (!TryGetRequiredString(root, "message", out var message))
+        {
+            return ValidationResult.Invalid(index, block, $"{action} command requires string field \"message\"");
+        }
+
+        return new ValidationResult(
+            new AgentHubSendMessageCommand(
+                to,
+                message,
+                null,
+                taskId,
+                planId,
+                null),
+            null);
+    }
+
+    private static bool IsTaskPlanRoutingAction(string action)
+    {
+        return string.Equals(action, "assign_task", StringComparison.Ordinal) ||
+               string.Equals(action, "reject_task", StringComparison.Ordinal) ||
+               string.Equals(action, "request_review", StringComparison.Ordinal);
     }
 
     private static int FindCloseTagOutsideJsonString(string text, int start)

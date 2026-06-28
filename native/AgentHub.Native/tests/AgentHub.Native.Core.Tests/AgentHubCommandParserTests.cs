@@ -36,6 +36,25 @@ public sealed class AgentHubCommandParserTests
         Assert.Null(command.TeamId);
     }
 
+    [Theory]
+    [InlineData("assign_task", "codex", "Implement T001")]
+    [InlineData("reject_task", "codex", "Add tests")]
+    [InlineData("request_review", "gemini", "Review risk")]
+    public void Parses_task_plan_routing_commands_as_send_messages(string action, string expectedTarget, string expectedMessage)
+    {
+        var text =
+            $"<agenthub>{{\"action\":\"{action}\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"to\":\"{expectedTarget}\",\"message\":\"{expectedMessage}\"}}</agenthub>";
+
+        var result = AgentHubCommandParser.Parse(text);
+
+        Assert.Empty(result.Errors);
+        var command = Assert.Single(result.SendMessages);
+        Assert.Equal(expectedTarget, command.To);
+        Assert.Equal(expectedMessage, command.Message);
+        Assert.Equal("P001", command.PlanId);
+        Assert.Equal("T001", command.TaskId);
+    }
+
     [Fact]
     public void Allows_agenthub_close_tag_inside_json_strings()
     {
@@ -67,6 +86,9 @@ public sealed class AgentHubCommandParserTests
     [InlineData("<agenthub>{\"action\":\"send\",\"task_id\":\"T-001\",\"message\":\"Missing target\"}</agenthub>", "send command requires string field \"target\"")]
     [InlineData("<agenthub>{\"action\":\"send\",\"target\":\"codex\",\"message\":\"Missing task\"}</agenthub>", "send command requires string field \"task_id\"")]
     [InlineData("<agenthub>{\"action\":\"send\",\"target\":\"codex\",\"task_id\":\"T-001\"}</agenthub>", "send command requires string field \"message\"")]
+    [InlineData("<agenthub>{\"action\":\"assign_task\",\"task_id\":\"T001\",\"to\":\"codex\",\"message\":\"Missing plan\"}</agenthub>", "assign_task command requires string field \"plan_id\"")]
+    [InlineData("<agenthub>{\"action\":\"reject_task\",\"plan_id\":\"P001\",\"to\":\"codex\",\"message\":\"Missing task\"}</agenthub>", "reject_task command requires string field \"task_id\"")]
+    [InlineData("<agenthub>{\"action\":\"request_review\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"message\":\"Missing target\"}</agenthub>", "request_review command requires string field \"to\"")]
     public void Rejects_invalid_send_message_commands(string text, string expectedMessage)
     {
         var result = AgentHubCommandParser.Parse(text);
