@@ -46,11 +46,11 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 5. 启动 Codex、Claude、Gemini 或普通 shell session。
 6. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
 7. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
-8. 可以用底部输入栏向选中的 terminal session 发送一行文本。
+8. 可以用底部输入栏向选中的 terminal session 发送文本；Enter 发送，Shift+Enter 在输入框内换行。
 9. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini`、`powershell` 或 `cmd`，按当前 workspace/profile 路由到最新 session。
 10. 输入栏支持 `@codex message`、`@claude message`、`@gemini message`、`@powershell message`、`@cmd message` 直接定向发送。
 11. 用户发送的消息和 hook 回传会显示在 Collaboration timeline 列表中。
-12. 可以用 Stop selected 停止当前 session。
+12. 可以用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 
 workspace 列表保存位置：
 
@@ -79,7 +79,7 @@ Host shell 等本机设置保存位置：
 5. 等待 Codex 进入恢复后的 TUI。
 6. 验证终端滚动条是否出现。
 7. 验证鼠标滚轮 / 触摸板滚动。
-8. 从 AgentHub 输入栏发送一行文本。
+8. 从 AgentHub 输入栏发送文本，并验证 Enter 发送、Shift+Enter 换行。
 9. 验证 Codex 收到输入。
 10. 让 Codex 完成一次响应，确认 Collaboration timeline 列表出现回传。
 11. 切换 Host shell 为 cmd 后重复第 4-10 步。

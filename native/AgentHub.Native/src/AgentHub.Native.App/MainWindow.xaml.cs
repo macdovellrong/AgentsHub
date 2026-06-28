@@ -411,7 +411,15 @@ public partial class MainWindow : Window
 
     private async void InjectTextBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter)
+        var action = InputSubmissionGesture.Resolve(
+            e.Key == Key.Enter || e.Key == Key.Return,
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+        if (action == InputSubmissionAction.Ignore)
+        {
+            return;
+        }
+
+        if (action == InputSubmissionAction.InsertNewline)
         {
             return;
         }

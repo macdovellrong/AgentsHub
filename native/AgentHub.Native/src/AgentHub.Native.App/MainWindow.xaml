@@ -164,7 +164,11 @@
 
                 <TextBox Grid.Column="2"
                          x:Name="InjectTextBox"
-                         MinHeight="38"
+                         MinHeight="64"
+                         MaxHeight="140"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
                          Background="#0E151D"
                          Foreground="#F2F6FA"
                          BorderBrush="#40566E"
