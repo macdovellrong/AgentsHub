@@ -54,6 +54,25 @@ public sealed class CollaborationEventStoreTests : IDisposable
         Assert.Equal([sent.Id], events.Select(item => item.Id).ToArray());
     }
 
+    [Fact]
+    public async Task Appends_forwarded_agenthub_commands_as_agenthub_user_messages()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            1,
+            [new AgentHubSendMessageCommand("codex", "Please inspect.", null, null, null, null)],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var item = Assert.Single(await store.ListAsync(@"V:\OrderManager"));
+        Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+        Assert.Equal("agenthub", item.ProfileId);
+        Assert.Equal("codex", item.TargetProfileId);
+        Assert.Equal("Please inspect.", item.Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

@@ -48,6 +48,22 @@ public sealed class CollaborationEventStore(string rootDirectory)
         return AppendAsync(collaborationEvent, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CollaborationEvent>> AppendForwardedAgentHubCommandsAsync(
+        string workspacePath,
+        AgentHubCommandDispatchResult result,
+        CancellationToken cancellationToken = default)
+    {
+        var events = new List<CollaborationEvent>();
+        foreach (var message in result.SentMessages)
+        {
+            events.Add(await AppendUserMessageAsync(
+                new CollaborationUserMessage(workspacePath, "agenthub", message.To, message.Message),
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        return events;
+    }
+
     public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(
         string workspacePath,
         CancellationToken cancellationToken = default)

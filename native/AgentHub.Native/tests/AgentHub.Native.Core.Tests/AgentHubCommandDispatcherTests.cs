@@ -22,6 +22,9 @@ public sealed class AgentHubCommandDispatcherTests
         Assert.Equal(1, result.SentCount);
         Assert.Empty(result.ParseErrors);
         Assert.Empty(result.DispatchErrors);
+        var sent = Assert.Single(result.SentMessages);
+        Assert.Equal("codex", sent.To);
+        Assert.Equal("Please inspect.", sent.Message);
         Assert.Equal(["Please inspect.", "\r"], target.Writes);
     }
 

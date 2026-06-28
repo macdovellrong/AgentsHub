@@ -9,6 +9,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
     {
         var parsed = AgentHubCommandParser.Parse(text);
         var sentCount = 0;
+        var sentMessages = new List<AgentHubSendMessageCommand>();
         var dispatchErrors = new List<AgentHubCommandDispatchError>();
 
         foreach (var command in parsed.SendMessages)
@@ -21,6 +22,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             if (sent)
             {
                 sentCount += 1;
+                sentMessages.Add(command);
             }
             else
             {
@@ -30,6 +32,6 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             }
         }
 
-        return new AgentHubCommandDispatchResult(sentCount, parsed.Errors, dispatchErrors);
+        return new AgentHubCommandDispatchResult(sentCount, sentMessages, parsed.Errors, dispatchErrors);
     }
 }

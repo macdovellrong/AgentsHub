@@ -144,6 +144,7 @@ public partial class MainWindow : Window
         {
             await collaborationEventStore.AppendAgentOutputAsync(hookEvent);
             var dispatchResult = await DispatchAgentHubCommandsAsync(hookEvent.Workspace, hookEvent.Message);
+            await collaborationEventStore.AppendForwardedAgentHubCommandsAsync(hookEvent.Workspace, dispatchResult);
             await Dispatcher.InvokeAsync(() =>
             {
                 var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
