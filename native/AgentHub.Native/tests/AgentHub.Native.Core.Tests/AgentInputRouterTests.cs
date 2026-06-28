@@ -56,6 +56,24 @@ public sealed class AgentInputRouterTests
         Assert.Equal(0, await router.StopAllAsync());
     }
 
+    [Fact]
+    public async Task Stop_all_continues_when_a_session_stop_fails()
+    {
+        var failing = new ThrowingStopTerminalSession("codex-1");
+        var later = new RecordingTerminalSession("claude-1");
+        var router = new AgentInputRouter();
+        router.Register(failing);
+        router.Register(later);
+
+        var stoppedCount = await router.StopAllAsync();
+
+        Assert.Equal(2, stoppedCount);
+        Assert.True(failing.StopAttempted);
+        Assert.True(later.Stopped);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("codex-1", "hello"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => router.SendLineAsync("claude-1", "hello"));
+    }
+
     private sealed class RecordingTerminalSession(string id) : IAgentTerminalSession
     {
         public string Id { get; } = id;
@@ -72,6 +90,23 @@ public sealed class AgentInputRouterTests
         {
             Stopped = true;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingStopTerminalSession(string id) : IAgentTerminalSession
+    {
+        public string Id { get; } = id;
+        public bool StopAttempted { get; private set; }
+
+        public Task WriteAsync(string text, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            StopAttempted = true;
+            throw new InvalidOperationException("stop failed");
         }
     }
 }

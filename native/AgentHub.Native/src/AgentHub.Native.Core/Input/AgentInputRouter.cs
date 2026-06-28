@@ -37,7 +37,18 @@ public sealed class AgentInputRouter
         sessions.Clear();
         foreach (var session in currentSessions)
         {
-            await session.StopAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await session.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Shutdown is best-effort: one broken terminal must not leave later sessions running.
+            }
         }
 
         return currentSessions.Length;
