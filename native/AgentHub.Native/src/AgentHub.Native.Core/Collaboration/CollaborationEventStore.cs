@@ -1,0 +1,107 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using AgentHub.Native.Core.Hooks;
+
+namespace AgentHub.Native.Core.Collaboration;
+
+public sealed class CollaborationEventStore(string rootDirectory)
+{
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = false
+    };
+
+    public Task<CollaborationEvent> AppendUserMessageAsync(
+        CollaborationUserMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        var collaborationEvent = new CollaborationEvent(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            CollaborationEventKind.UserMessage,
+            NormalizePath(message.WorkspacePath),
+            message.Message,
+            message.ProfileId,
+            message.TargetProfileId,
+            null,
+            null,
+            "user");
+        return AppendAsync(collaborationEvent, cancellationToken);
+    }
+
+    public Task<CollaborationEvent> AppendAgentOutputAsync(
+        AgentHookEvent hookEvent,
+        CancellationToken cancellationToken = default)
+    {
+        var collaborationEvent = new CollaborationEvent(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            CollaborationEventKind.AgentOutput,
+            NormalizePath(hookEvent.Workspace),
+            hookEvent.Message,
+            hookEvent.ProfileId,
+            null,
+            hookEvent.SessionId,
+            hookEvent.RunId,
+            hookEvent.Source);
+        return AppendAsync(collaborationEvent, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(
+        string workspacePath,
+        CancellationToken cancellationToken = default)
+    {
+        var filePath = ResolveFilePath(workspacePath);
+        if (!File.Exists(filePath))
+        {
+            return [];
+        }
+
+        var events = new List<CollaborationEvent>();
+        var lines = await File.ReadAllLinesAsync(filePath, cancellationToken).ConfigureAwait(false);
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var item = JsonSerializer.Deserialize<CollaborationEvent>(line, SerializerOptions);
+            if (item is not null)
+            {
+                events.Add(item);
+            }
+        }
+
+        return events.OrderBy(item => item.Timestamp).ToList();
+    }
+
+    private async Task<CollaborationEvent> AppendAsync(
+        CollaborationEvent collaborationEvent,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(rootDirectory);
+        var filePath = ResolveFilePath(collaborationEvent.WorkspacePath);
+        var json = JsonSerializer.Serialize(collaborationEvent, SerializerOptions);
+        await File.AppendAllTextAsync(filePath, $"{json}\n", cancellationToken).ConfigureAwait(false);
+        return collaborationEvent;
+    }
+
+    private string ResolveFilePath(string workspacePath)
+    {
+        return Path.Combine(rootDirectory, $"{Hash(NormalizePath(workspacePath).ToLowerInvariant())}.jsonl");
+    }
+
+    private static string NormalizePath(string workspacePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
+        return workspacePath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static string Hash(string value)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+}

@@ -105,8 +105,8 @@
 
             <Border Grid.Row="2" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,12,0,0">
                 <DockPanel LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Top" Text="Hook messages" Foreground="#9FB0C2" Margin="0,0,0,6" />
-                    <ListBox x:Name="HookMessagesListBox"
+                    <TextBlock DockPanel.Dock="Top" Text="Collaboration timeline" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                    <ListBox x:Name="TimelineListBox"
                              Background="#0E151D"
                              Foreground="#F2F6FA"
                              BorderBrush="#40566E" />

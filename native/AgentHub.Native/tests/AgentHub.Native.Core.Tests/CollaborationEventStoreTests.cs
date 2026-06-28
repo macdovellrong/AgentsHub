@@ -1,0 +1,46 @@
+using AgentHub.Native.Core.Collaboration;
+using AgentHub.Native.Core.Hooks;
+
+namespace AgentHub.Native.Core.Tests;
+
+public sealed class CollaborationEventStoreTests : IDisposable
+{
+    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), "agenthub-native-events", Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public async Task Appends_and_lists_workspace_events_in_order()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+
+        var sent = await store.AppendUserMessageAsync(new CollaborationUserMessage(
+            @"V:\OrderManager",
+            "user",
+            "codex",
+            "please inspect"));
+        var output = await store.AppendAgentOutputAsync(new AgentHookEvent(
+            @"V:\OrderManager",
+            "done",
+            "codex",
+            "codex-1",
+            "run-1",
+            "codex"));
+
+        var events = await store.ListAsync(@"v:\OrderManager\");
+
+        Assert.Equal([sent.Id, output.Id], events.Select(item => item.Id).ToArray());
+        Assert.Equal(CollaborationEventKind.UserMessage, events[0].Kind);
+        Assert.Equal("codex", events[0].TargetProfileId);
+        Assert.Equal("please inspect", events[0].Message);
+        Assert.Equal(CollaborationEventKind.AgentOutput, events[1].Kind);
+        Assert.Equal("codex", events[1].ProfileId);
+        Assert.Equal("done", events[1].Message);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(tempRoot))
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+}

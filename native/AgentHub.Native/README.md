@@ -26,7 +26,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 5. app 会启动本地 hook receiver，并向 PowerShell-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
 6. 可以用底部输入栏向选中的 terminal session 发送一行文本。
 7. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini` 或 `powershell`，按当前 workspace/profile 路由到最新 session。
-8. hook 结果会显示在 Hook messages 列表中。
+8. hook 结果会显示在 Collaboration timeline 列表中。
 9. 可以用 Stop selected 停止当前 session。
 
 workspace 列表保存在：
@@ -46,7 +46,7 @@ workspace 列表保存在：
 6. 验证鼠标滚轮 / 触摸板滚动。
 7. 从 AgentHub 输入栏发送一行文本。
 8. 验证 Codex 收到输入。
-9. 让 Codex 完成一次响应，确认 Hook messages 列表出现回传。
+9. 让 Codex 完成一次响应，确认 Collaboration timeline 列表出现回传。
 ```
 
 ## 注意

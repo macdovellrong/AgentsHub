@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly AgentInputRouter inputRouter = new();
     private readonly AgentSessionRegistry sessionRegistry = new();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private int nextSessionNumber = 1;
     private string? selectedSessionId;
@@ -67,22 +68,39 @@ public partial class MainWindow : Window
         StatusTextBlock.Text = "Workspace removed";
     }
 
-    private void WorkspaceListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private async void WorkspaceListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         if (WorkspaceListBox.SelectedItem is WorkspaceEntry workspace)
         {
             WorkspaceTextBox.Text = workspace.Path;
+            await ReloadTimelineAsync(workspace.Path);
         }
     }
 
-    private void HookReceiver_EventReceived(object? sender, AgentHookEvent hookEvent)
+    private async void HookReceiver_EventReceived(object? sender, AgentHookEvent hookEvent)
     {
-        Dispatcher.Invoke(() =>
+        try
         {
-            var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
-            HookMessagesListBox.Items.Insert(0, $"{DateTime.Now:HH:mm:ss} {profile}: {hookEvent.Message}");
-            StatusTextBlock.Text = $"Hook received: {profile}";
-        });
+            await collaborationEventStore.AppendAgentOutputAsync(hookEvent);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                var profile = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
+                StatusTextBlock.Text = $"Hook received: {profile}";
+            });
+
+            var shouldReload = await Dispatcher.InvokeAsync(() => IsCurrentWorkspace(hookEvent.Workspace));
+            if (shouldReload)
+            {
+                await ReloadTimelineAsync(hookEvent.Workspace);
+            }
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.InvokeAsync(() =>
+            {
+                StatusTextBlock.Text = $"Hook record failed: {ex.Message}";
+            });
+        }
     }
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)
@@ -202,11 +220,20 @@ public partial class MainWindow : Window
 
     private static string ResolveWorkspaceStorePath()
     {
+        return Path.Combine(ResolveNativeDataDirectory(), "workspaces.json");
+    }
+
+    private static string ResolveCollaborationEventsDirectory()
+    {
+        return Path.Combine(ResolveNativeDataDirectory(), "events");
+    }
+
+    private static string ResolveNativeDataDirectory()
+    {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var root = string.IsNullOrWhiteSpace(appData)
+        return string.IsNullOrWhiteSpace(appData)
             ? Path.Combine(AppContext.BaseDirectory, ".agenthub-native")
             : Path.Combine(appData, "AgentHub", "Native");
-        return Path.Combine(root, "workspaces.json");
     }
 
     private static string ResolveHookScriptsDirectory()
@@ -306,6 +333,14 @@ public partial class MainWindow : Window
             }
 
             await inputRouter.SendLineAsync(selectedSessionId!, text);
+            var selectedWorkspacePath = sessions.TryGetValue(selectedSessionId, out var selectedSession)
+                ? selectedSession.Workspace.Path
+                : CurrentWorkspacePath();
+            if (selectedWorkspacePath is not null)
+            {
+                await RecordUserMessageAsync(selectedWorkspacePath, selectedSessionId, text);
+            }
+
             StatusTextBlock.Text = $"Sent input to {selectedSessionId}";
             return;
         }
@@ -319,7 +354,46 @@ public partial class MainWindow : Window
 
         var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
         await messageRouter.SendToProfileAsync(workspacePath, selectedTarget, text);
+        await RecordUserMessageAsync(workspacePath, selectedTarget, text);
         StatusTextBlock.Text = $"Sent input to latest {selectedTarget}";
+    }
+
+    private async Task ReloadTimelineAsync(string workspacePath)
+    {
+        var events = await collaborationEventStore.ListAsync(workspacePath);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            TimelineListBox.Items.Clear();
+            foreach (var item in events.OrderByDescending(item => item.Timestamp).Take(200))
+            {
+                TimelineListBox.Items.Add(CollaborationTimelineFormatter.Format(item, TimeZoneInfo.Local));
+            }
+        });
+    }
+
+    private bool IsCurrentWorkspace(string workspacePath)
+    {
+        var current = CurrentWorkspacePath();
+        return current is not null
+            && string.Equals(
+                NormalizeWorkspaceForCompare(current),
+                NormalizeWorkspaceForCompare(workspacePath),
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeWorkspaceForCompare(string workspacePath)
+    {
+        return workspacePath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private async Task RecordUserMessageAsync(string workspacePath, string targetProfileId, string text)
+    {
+        await collaborationEventStore.AppendUserMessageAsync(new CollaborationUserMessage(
+            workspacePath,
+            "user",
+            targetProfileId,
+            text));
+        await ReloadTimelineAsync(workspacePath);
     }
 
     private void SessionListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
