@@ -29,7 +29,15 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
             return false;
         }
 
-        await inputRouter.SendLineAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
-        return true;
+        try
+        {
+            await inputRouter.SendLineAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (KeyNotFoundException)
+        {
+            sessionRegistry.Remove(session.Id);
+            return false;
+        }
     }
 }

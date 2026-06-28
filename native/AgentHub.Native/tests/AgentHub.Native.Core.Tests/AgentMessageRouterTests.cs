@@ -56,6 +56,19 @@ public sealed class AgentMessageRouterTests
         Assert.Equal(["please review", "\r"], session.Writes);
     }
 
+    [Fact]
+    public async Task Try_send_returns_false_and_removes_stale_session_when_terminal_is_missing()
+    {
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var router = new AgentMessageRouter(new AgentInputRouter(), registry);
+
+        var sent = await router.TrySendToProfileAsync(@"V:\OrderManager", "codex", "please review");
+
+        Assert.False(sent);
+        Assert.Null(registry.FindLatest(@"V:\OrderManager", "codex"));
+    }
+
     private sealed class RecordingTerminalSession(string id) : IAgentTerminalSession
     {
         public string Id { get; } = id;
