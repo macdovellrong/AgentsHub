@@ -481,7 +481,7 @@ public partial class MainWindow : Window
             return true;
         }
 
-        var workspacePath = CurrentWorkspacePath();
+        var workspacePath = CurrentRoutingWorkspacePath();
         if (workspacePath is null)
         {
             StatusTextBlock.Text = "No workspace selected";
@@ -493,7 +493,7 @@ public partial class MainWindow : Window
 
     private async Task<bool> SendTextToProfileAsync(string targetProfileId, string text)
     {
-        var workspacePath = CurrentWorkspacePath();
+        var workspacePath = CurrentRoutingWorkspacePath();
         if (workspacePath is null)
         {
             StatusTextBlock.Text = "No workspace selected";
@@ -528,7 +528,7 @@ public partial class MainWindow : Window
 
     private bool IsCurrentWorkspace(string workspacePath)
     {
-        var current = CurrentWorkspacePath();
+        var current = CurrentRoutingWorkspacePath();
         return current is not null
             && string.Equals(
                 NormalizeWorkspaceForCompare(current),
@@ -539,6 +539,12 @@ public partial class MainWindow : Window
     private static string NormalizeWorkspaceForCompare(string workspacePath)
     {
         return workspacePath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private string? CurrentRoutingWorkspacePath()
+    {
+        var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
+        return WorkspacePathSelection.ResolveRoutingPath(WorkspaceTextBox.Text, selectedPath);
     }
 
     private async Task RecordUserMessageAsync(string workspacePath, string targetProfileId, string text)
