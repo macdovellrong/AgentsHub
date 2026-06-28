@@ -64,7 +64,10 @@
 
 ```powershell
 .\scripts\start-native.ps1 -Check
+.\scripts\start-native.ps1 -Check -Agent codex -Python "py -3.11"
 ```
+
+`-Check` 带 `-Agent` 时会检查默认 hook Python 命令 `py -3`；如果传入 `-Python`，则检查指定命令是否能启动 Python。
 
 ## 发布
 
