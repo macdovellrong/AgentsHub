@@ -36,6 +36,24 @@ public sealed class CollaborationEventStoreTests : IDisposable
         Assert.Equal("done", events[1].Message);
     }
 
+    [Fact]
+    public async Task List_skips_invalid_jsonl_lines()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var sent = await store.AppendUserMessageAsync(new CollaborationUserMessage(
+            @"V:\OrderManager",
+            "user",
+            "codex",
+            "please inspect"));
+        var eventsDirectory = Path.Combine(tempRoot, "events");
+        var eventFile = Assert.Single(Directory.GetFiles(eventsDirectory, "*.jsonl"));
+        await File.AppendAllTextAsync(eventFile, "{ broken json\n\n");
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+
+        Assert.Equal([sent.Id], events.Select(item => item.Id).ToArray());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

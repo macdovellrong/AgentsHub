@@ -67,10 +67,17 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 continue;
             }
 
-            var item = JsonSerializer.Deserialize<CollaborationEvent>(line, SerializerOptions);
-            if (item is not null)
+            try
             {
-                events.Add(item);
+                var item = JsonSerializer.Deserialize<CollaborationEvent>(line, SerializerOptions);
+                if (item is not null)
+                {
+                    events.Add(item);
+                }
+            }
+            catch (JsonException)
+            {
+                // Timeline files are append-only; a partial or damaged line must not break workspace loading.
             }
         }
 
