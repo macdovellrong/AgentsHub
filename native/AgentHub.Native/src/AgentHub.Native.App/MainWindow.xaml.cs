@@ -271,13 +271,14 @@ public partial class MainWindow : Window
 
     private async Task<WorkspaceEntry?> AddCurrentWorkspaceAsync()
     {
-        var workspacePath = CurrentWorkspacePath();
-        if (workspacePath is null)
+        var validation = WorkspaceDirectoryValidator.Validate(CurrentWorkspacePath());
+        if (!validation.IsValid)
         {
+            StatusTextBlock.Text = validation.ErrorMessage ?? "Invalid workspace directory";
             return null;
         }
 
-        var workspace = await workspaceStore.AddOrUpdateAsync(workspacePath);
+        var workspace = await workspaceStore.AddOrUpdateAsync(validation.Path!);
         await ReloadWorkspacesAsync(workspace.Path);
         return workspace;
     }
