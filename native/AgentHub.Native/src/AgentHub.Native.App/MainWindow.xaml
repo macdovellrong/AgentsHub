@@ -81,11 +81,17 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="8" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Button Content="Stop selected"
-                            Click="StopSession_Click"
+                    <Button Content="Interrupt"
+                            Click="InterruptSession_Click"
                             MinHeight="34" />
                     <Button Grid.Column="2"
+                            Content="Stop selected"
+                            Click="StopSession_Click"
+                            MinHeight="34" />
+                    <Button Grid.Column="4"
                             Content="Stop all"
                             Click="StopAllSessions_Click"
                             MinHeight="34" />

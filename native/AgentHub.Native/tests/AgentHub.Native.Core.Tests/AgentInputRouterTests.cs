@@ -29,6 +29,18 @@ public sealed class AgentInputRouterTests
     }
 
     [Fact]
+    public async Task Sends_control_sequence_without_enter_to_registered_session()
+    {
+        var session = new RecordingTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        await router.SendControlAsync("codex-1", "\x03");
+
+        Assert.Equal(["\x03"], session.Writes);
+    }
+
+    [Fact]
     public async Task Throws_when_session_is_unknown()
     {
         var router = new AgentInputRouter();
@@ -95,6 +107,22 @@ public sealed class AgentInputRouterTests
         router.Register(session);
 
         var result = await router.TrySendLineDetailedAsync("codex-1", "hello");
+
+        Assert.Equal(AgentInputSendStatus.TerminalNotReady, result.Status);
+        Assert.False(result.Sent);
+        Assert.False(result.ShouldRemoveSession);
+        Assert.True(session.WriteAttempted);
+        await Assert.ThrowsAsync<AgentTerminalNotReadyException>(() => router.SendLineAsync("codex-1", "hello"));
+    }
+
+    [Fact]
+    public async Task Try_send_control_reports_not_ready_without_unregistering_session()
+    {
+        var session = new NotReadyTerminalSession("codex-1");
+        var router = new AgentInputRouter();
+        router.Register(session);
+
+        var result = await router.TrySendControlDetailedAsync("codex-1", "\x03");
 
         Assert.Equal(AgentInputSendStatus.TerminalNotReady, result.Status);
         Assert.False(result.Sent);

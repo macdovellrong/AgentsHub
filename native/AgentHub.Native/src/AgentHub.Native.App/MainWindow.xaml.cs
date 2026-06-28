@@ -447,6 +447,35 @@ public partial class MainWindow : Window
         await SendCurrentInputAsync();
     }
 
+    private async void InterruptSession_Click(object sender, RoutedEventArgs e)
+    {
+        if (SessionListBox.SelectedItem is not SessionViewModel session)
+        {
+            StatusTextBlock.Text = "No selected session";
+            return;
+        }
+
+        var result = await inputRouter.TrySendControlDetailedAsync(session.Id, "\x03");
+        if (result.Sent)
+        {
+            StatusTextBlock.Text = $"Interrupted {session.Id}";
+            return;
+        }
+
+        if (result.Status == AgentInputSendStatus.TerminalNotReady)
+        {
+            StatusTextBlock.Text = $"{session.Id} is still starting";
+            return;
+        }
+
+        if (result.ShouldRemoveSession)
+        {
+            RemoveSessionView(session.Id);
+        }
+
+        StatusTextBlock.Text = $"Removed stale session {session.Id}";
+    }
+
     private async void StopSession_Click(object sender, RoutedEventArgs e)
     {
         if (SessionListBox.SelectedItem is not SessionViewModel session)

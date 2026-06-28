@@ -20,6 +20,19 @@ public sealed class AgentInputRouter
         await WriteSubmittedLineAsync(session, text, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task SendControlAsync(
+        string sessionId,
+        string controlSequence,
+        CancellationToken cancellationToken = default)
+    {
+        if (!sessions.TryGetValue(sessionId, out var session))
+        {
+            throw new KeyNotFoundException($"Agent terminal session '{sessionId}' was not found.");
+        }
+
+        await session.WriteAsync(controlSequence, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<bool> TrySendLineAsync(string sessionId, string text, CancellationToken cancellationToken = default)
     {
         var result = await TrySendLineDetailedAsync(sessionId, text, cancellationToken).ConfigureAwait(false);
@@ -31,6 +44,28 @@ public sealed class AgentInputRouter
         string text,
         CancellationToken cancellationToken = default)
     {
+        return await TryWriteDetailedAsync(
+            sessionId,
+            session => WriteSubmittedLineAsync(session, text, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<AgentInputSendResult> TrySendControlDetailedAsync(
+        string sessionId,
+        string controlSequence,
+        CancellationToken cancellationToken = default)
+    {
+        return TryWriteDetailedAsync(
+            sessionId,
+            session => session.WriteAsync(controlSequence, cancellationToken),
+            cancellationToken);
+    }
+
+    private async Task<AgentInputSendResult> TryWriteDetailedAsync(
+        string sessionId,
+        Func<IAgentTerminalSession, Task> writeAsync,
+        CancellationToken cancellationToken)
+    {
         if (!sessions.TryGetValue(sessionId, out var session))
         {
             return new AgentInputSendResult(AgentInputSendStatus.SessionMissing);
@@ -38,7 +73,7 @@ public sealed class AgentInputRouter
 
         try
         {
-            await WriteSubmittedLineAsync(session, text, cancellationToken).ConfigureAwait(false);
+            await writeAsync(session).ConfigureAwait(false);
             return new AgentInputSendResult(AgentInputSendStatus.Sent);
         }
         catch (OperationCanceledException)
