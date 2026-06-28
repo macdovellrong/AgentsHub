@@ -14,12 +14,12 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
 
         foreach (var command in parsed.SendMessages)
         {
-            var sent = await messageRouter.TrySendToProfileAsync(
+            var result = await messageRouter.TrySendToProfileDetailedAsync(
                 workspacePath,
                 command.To,
                 command.Message,
                 cancellationToken).ConfigureAwait(false);
-            if (sent)
+            if (result.Sent)
             {
                 sentCount += 1;
                 sentMessages.Add(command);
@@ -28,7 +28,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             {
                 dispatchErrors.Add(new AgentHubCommandDispatchError(
                     command.To,
-                    $"No active session for profile '{command.To}' in workspace '{workspacePath}'."));
+                    FormatSendFailure(workspacePath, command.To, result.Status)));
             }
         }
 
@@ -38,5 +38,20 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             parsed.PlanStatusCommands,
             parsed.Errors,
             dispatchErrors);
+    }
+
+    private static string FormatSendFailure(
+        string workspacePath,
+        string profileId,
+        AgentMessageSendStatus status)
+    {
+        return status switch
+        {
+            AgentMessageSendStatus.TerminalNotReady =>
+                $"Session for profile '{profileId}' in workspace '{workspacePath}' is still starting.",
+            AgentMessageSendStatus.TerminalUnavailable =>
+                $"Terminal session for profile '{profileId}' in workspace '{workspacePath}' is unavailable.",
+            _ => $"No active session for profile '{profileId}' in workspace '{workspacePath}'."
+        };
     }
 }

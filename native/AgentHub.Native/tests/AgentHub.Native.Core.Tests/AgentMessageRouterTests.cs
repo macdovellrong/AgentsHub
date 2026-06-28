@@ -41,6 +41,17 @@ public sealed class AgentMessageRouterTests
     }
 
     [Fact]
+    public async Task Try_send_detailed_reports_offline_when_target_profile_has_no_session()
+    {
+        var router = new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry());
+
+        var result = await router.TrySendToProfileDetailedAsync(@"V:\OrderManager", "codex", "hello");
+
+        Assert.Equal(AgentMessageSendStatus.ProfileOffline, result.Status);
+        Assert.False(result.Sent);
+    }
+
+    [Fact]
     public async Task Try_send_returns_true_after_sending_to_latest_session()
     {
         var session = new RecordingTerminalSession("codex-2");
@@ -82,6 +93,23 @@ public sealed class AgentMessageRouterTests
         var sent = await router.TrySendToProfileAsync(@"V:\OrderManager", "codex", "please review");
 
         Assert.False(sent);
+        Assert.NotNull(registry.FindLatest(@"V:\OrderManager", "codex"));
+    }
+
+    [Fact]
+    public async Task Try_send_detailed_reports_not_ready_and_keeps_session()
+    {
+        var session = new NotReadyTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(session);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var router = new AgentMessageRouter(inputRouter, registry);
+
+        var result = await router.TrySendToProfileDetailedAsync(@"V:\OrderManager", "codex", "please review");
+
+        Assert.Equal(AgentMessageSendStatus.TerminalNotReady, result.Status);
+        Assert.False(result.Sent);
         Assert.NotNull(registry.FindLatest(@"V:\OrderManager", "codex"));
     }
 

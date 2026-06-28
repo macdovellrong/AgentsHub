@@ -23,10 +23,24 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
         string message,
         CancellationToken cancellationToken = default)
     {
+        var result = await TrySendToProfileDetailedAsync(
+            workspacePath,
+            profileId,
+            message,
+            cancellationToken).ConfigureAwait(false);
+        return result.Sent;
+    }
+
+    public async Task<AgentMessageSendResult> TrySendToProfileDetailedAsync(
+        string workspacePath,
+        string profileId,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
         var session = sessionRegistry.FindLatest(workspacePath, profileId);
         if (session is null)
         {
-            return false;
+            return new AgentMessageSendResult(AgentMessageSendStatus.ProfileOffline);
         }
 
         var result = await inputRouter.TrySendLineDetailedAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
@@ -37,9 +51,9 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
                 sessionRegistry.Remove(session.Id);
             }
 
-            return false;
+            return AgentMessageSendResult.FromInputResult(result);
         }
 
-        return true;
+        return new AgentMessageSendResult(AgentMessageSendStatus.Sent);
     }
 }

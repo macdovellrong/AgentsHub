@@ -114,6 +114,28 @@ public sealed class AgentHubCommandDispatcherTests
         Assert.Equal("codex", error.TargetProfileId);
     }
 
+    [Fact]
+    public async Task Reports_dispatch_error_when_target_terminal_is_not_ready()
+    {
+        var target = new NotReadyTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+
+        var result = await dispatcher.DispatchAsync(
+            @"V:\OrderManager",
+            "<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\"}</agenthub>");
+
+        Assert.Equal(0, result.SentCount);
+        Assert.Empty(result.ParseErrors);
+        var error = Assert.Single(result.DispatchErrors);
+        Assert.Equal("codex", error.TargetProfileId);
+        Assert.Contains("still starting", error.Message);
+        Assert.NotNull(registry.FindLatest(@"V:\OrderManager", "codex"));
+    }
+
     private sealed class RecordingTerminalSession(string id) : IAgentTerminalSession
     {
         public string Id { get; } = id;
@@ -123,6 +145,21 @@ public sealed class AgentHubCommandDispatcherTests
         {
             Writes.Add(text);
             return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NotReadyTerminalSession(string id) : IAgentTerminalSession
+    {
+        public string Id { get; } = id;
+
+        public Task WriteAsync(string text, CancellationToken cancellationToken = default)
+        {
+            throw new AgentTerminalNotReadyException("terminal is still starting");
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)

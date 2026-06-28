@@ -605,10 +605,12 @@ public partial class MainWindow : Window
         }
 
         var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
-        var sent = await messageRouter.TrySendToProfileAsync(workspacePath, targetProfileId, text);
-        if (!sent)
+        var result = await messageRouter.TrySendToProfileDetailedAsync(workspacePath, targetProfileId, text);
+        if (!result.Sent)
         {
-            StatusTextBlock.Text = $"{targetProfileId} is not online";
+            StatusTextBlock.Text = result.Status == AgentMessageSendStatus.TerminalNotReady
+                ? $"{targetProfileId} is still starting"
+                : $"{targetProfileId} is not online";
             return false;
         }
 
