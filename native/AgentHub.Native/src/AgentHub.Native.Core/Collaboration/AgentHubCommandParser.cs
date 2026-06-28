@@ -87,17 +87,27 @@ public static class AgentHubCommandParser
                     block));
         }
 
-        if (!string.Equals(action, "send_message", StringComparison.Ordinal))
+        if (string.Equals(action, "send_message", StringComparison.Ordinal))
         {
-            return new ValidationResult(
-                null,
-                new AgentHubCommandParseError(
-                    index,
-                    "invalid_action",
-                    $"Unsupported agenthub action \"{action}\"",
-                    block));
+            return ValidateSendMessageCommand(root, index, block);
         }
 
+        if (string.Equals(action, "send", StringComparison.Ordinal))
+        {
+            return ValidateLegacySendCommand(root, index, block);
+        }
+
+        return new ValidationResult(
+            null,
+            new AgentHubCommandParseError(
+                index,
+                "invalid_action",
+                $"Unsupported agenthub action \"{action}\"",
+                block));
+    }
+
+    private static ValidationResult ValidateSendMessageCommand(JsonElement root, int index, string block)
+    {
         if (!TryGetRequiredString(root, "to", out var to))
         {
             return ValidationResult.Invalid(index, block, "send_message command requires string field \"to\"");
@@ -115,6 +125,33 @@ public static class AgentHubCommandParser
                 OptionalString(root, "team_id"),
                 OptionalString(root, "task_id"),
                 OptionalString(root, "conversation_id")),
+            null);
+    }
+
+    private static ValidationResult ValidateLegacySendCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "target", out var target))
+        {
+            return ValidationResult.Invalid(index, block, "send command requires string field \"target\"");
+        }
+
+        if (!TryGetRequiredString(root, "task_id", out var taskId))
+        {
+            return ValidationResult.Invalid(index, block, "send command requires string field \"task_id\"");
+        }
+
+        if (!TryGetRequiredString(root, "message", out var message))
+        {
+            return ValidationResult.Invalid(index, block, "send command requires string field \"message\"");
+        }
+
+        return new ValidationResult(
+            new AgentHubSendMessageCommand(
+                target,
+                message,
+                null,
+                taskId,
+                null),
             null);
     }
 

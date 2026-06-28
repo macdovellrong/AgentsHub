@@ -21,6 +21,22 @@ public sealed class AgentHubCommandParserTests
     }
 
     [Fact]
+    public void Parses_legacy_send_command_block_as_send_message()
+    {
+        const string text =
+            "<agenthub>{\"action\":\"send\",\"target\":\"gemini\",\"task_id\":\"T-002\",\"message\":\"Review this.\"}</agenthub>";
+
+        var result = AgentHubCommandParser.Parse(text);
+
+        Assert.Empty(result.Errors);
+        var command = Assert.Single(result.SendMessages);
+        Assert.Equal("gemini", command.To);
+        Assert.Equal("Review this.", command.Message);
+        Assert.Equal("T-002", command.TaskId);
+        Assert.Null(command.TeamId);
+    }
+
+    [Fact]
     public void Allows_agenthub_close_tag_inside_json_strings()
     {
         const string text =
@@ -48,6 +64,9 @@ public sealed class AgentHubCommandParserTests
     [InlineData("<agenthub>{\"action\":\"send_message\",\"message\":\"Missing target\"}</agenthub>", "send_message command requires string field \"to\"")]
     [InlineData("<agenthub>{\"action\":\"send_message\",\"to\":\"codex\"}</agenthub>", "send_message command requires string field \"message\"")]
     [InlineData("<agenthub>{\"action\":\"send_message\",\"to\":\"   \",\"message\":\"Run\"}</agenthub>", "send_message command requires string field \"to\"")]
+    [InlineData("<agenthub>{\"action\":\"send\",\"task_id\":\"T-001\",\"message\":\"Missing target\"}</agenthub>", "send command requires string field \"target\"")]
+    [InlineData("<agenthub>{\"action\":\"send\",\"target\":\"codex\",\"message\":\"Missing task\"}</agenthub>", "send command requires string field \"task_id\"")]
+    [InlineData("<agenthub>{\"action\":\"send\",\"target\":\"codex\",\"task_id\":\"T-001\"}</agenthub>", "send command requires string field \"message\"")]
     public void Rejects_invalid_send_message_commands(string text, string expectedMessage)
     {
         var result = AgentHubCommandParser.Parse(text);
