@@ -5,14 +5,16 @@ namespace AgentHub.Native.Core.Settings;
 
 public sealed record NativeAppStartupOptions(
     string? InitialWorkspacePath,
+    ShellKind? HostShell,
     AgentKind? StartupAgentKind,
     AgentStartupMode? StartupMode)
 {
-    public static NativeAppStartupOptions Empty { get; } = new(null, null, null);
+    public static NativeAppStartupOptions Empty { get; } = new(null, null, null, null);
 
     public static NativeAppStartupOptions Parse(IReadOnlyList<string> args)
     {
         string? workspacePath = null;
+        string? hostShell = null;
         string? startupAgent = null;
         var resume = false;
         for (var index = 0; index < args.Count; index += 1)
@@ -21,6 +23,12 @@ public sealed record NativeAppStartupOptions(
             if (arg.StartsWith("--workspace=", StringComparison.OrdinalIgnoreCase))
             {
                 workspacePath = arg["--workspace=".Length..];
+                continue;
+            }
+
+            if (arg.StartsWith("--shell=", StringComparison.OrdinalIgnoreCase))
+            {
+                hostShell = arg["--shell=".Length..];
                 continue;
             }
 
@@ -36,6 +44,16 @@ public sealed record NativeAppStartupOptions(
                 if (index + 1 < args.Count)
                 {
                     workspacePath = args[index + 1];
+                    index += 1;
+                }
+            }
+
+            if (string.Equals(arg, "--shell", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "-s", StringComparison.OrdinalIgnoreCase))
+            {
+                if (index + 1 < args.Count)
+                {
+                    hostShell = args[index + 1];
                     index += 1;
                 }
             }
@@ -62,8 +80,19 @@ public sealed record NativeAppStartupOptions(
             : resume && agentKind == AgentKind.Codex ? AgentStartupMode.Resume : AgentStartupMode.Start;
         return new NativeAppStartupOptions(
             WorkspacePathSelection.NormalizeSelectedPath(workspacePath),
+            ParseShellKind(hostShell),
             agentKind,
             startupMode);
+    }
+
+    private static ShellKind? ParseShellKind(string? raw)
+    {
+        return raw?.Trim().ToLowerInvariant() switch
+        {
+            "powershell" or "pwsh" => ShellKind.PowerShell,
+            "cmd" => ShellKind.Cmd,
+            _ => null
+        };
     }
 
     private static AgentKind? ParseAgentKind(string? raw)

@@ -39,6 +39,13 @@
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent claude
 ```
 
+启动时指定 Host shell：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Shell powershell -Agent codex -Resume
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Shell cmd -Agent codex
+```
+
 只检查环境和路径、不启动 UI：
 
 ```powershell

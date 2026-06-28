@@ -30,6 +30,30 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_shell_option_with_separate_value()
+    {
+        var options = NativeAppStartupOptions.Parse(["--shell", "cmd"]);
+
+        Assert.Equal(ShellKind.Cmd, options.HostShell);
+    }
+
+    [Fact]
+    public void Parses_shell_option_with_equals_value()
+    {
+        var options = NativeAppStartupOptions.Parse(["--shell=powershell"]);
+
+        Assert.Equal(ShellKind.PowerShell, options.HostShell);
+    }
+
+    [Fact]
+    public void Ignores_unknown_shell_option()
+    {
+        var options = NativeAppStartupOptions.Parse(["--shell", "unknown"]);
+
+        Assert.Null(options.HostShell);
+    }
+
+    [Fact]
     public void Ignores_empty_or_missing_workspace_value()
     {
         Assert.Null(NativeAppStartupOptions.Parse(["--workspace"]).InitialWorkspacePath);

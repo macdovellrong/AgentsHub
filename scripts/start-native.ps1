@@ -2,6 +2,9 @@ param(
     [switch]$Check,
     [Alias("w")]
     [string]$Workspace,
+    [Alias("s")]
+    [ValidateSet("powershell", "cmd")]
+    [string]$Shell,
     [Alias("a")]
     [ValidateSet("codex", "claude", "gemini", "powershell", "shell")]
     [string]$Agent,
@@ -37,6 +40,13 @@ Set-Location -LiteralPath $repoRoot
 $runArgs = @("run", "--project", $nativeProject)
 if (-not [string]::IsNullOrWhiteSpace($Workspace)) {
     $runArgs += @("--", "--workspace", $Workspace)
+}
+if (-not [string]::IsNullOrWhiteSpace($Shell)) {
+    if (-not ($runArgs -contains "--")) {
+        $runArgs += "--"
+    }
+
+    $runArgs += @("--shell", $Shell)
 }
 if (-not [string]::IsNullOrWhiteSpace($Agent)) {
     if (-not ($runArgs -contains "--")) {

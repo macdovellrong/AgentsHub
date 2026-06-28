@@ -56,7 +56,7 @@ public partial class MainWindow : Window
     private async Task LoadSettingsAsync()
     {
         var settings = await settingsStore.LoadAsync();
-        SelectHostShell(settings.HostShell);
+        SelectHostShell(startupOptions.HostShell ?? settings.HostShell);
     }
 
     private async void HostShellComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
