@@ -190,58 +190,65 @@ public partial class MainWindow : Window
 
     private async Task StartAgentAsync(AgentStartupCommand startupCommand)
     {
-        var workspace = await AddCurrentWorkspaceAsync();
-        if (workspace is null)
+        try
         {
-            StatusTextBlock.Text = "Select or add a workspace first";
-            return;
-        }
+            var workspace = await AddCurrentWorkspaceAsync();
+            if (workspace is null)
+            {
+                StatusTextBlock.Text = "Select or add a workspace first";
+                return;
+            }
 
-        if (startupCommand.AgentKind != AgentKind.PowerShell)
-        {
-            StatusTextBlock.Text = "Installing project hooks...";
-            await ProjectAgentHookInstaller.InstallAsync(
+            if (startupCommand.AgentKind != AgentKind.PowerShell)
+            {
+                StatusTextBlock.Text = "Installing project hooks...";
+                await ProjectAgentHookInstaller.InstallAsync(
+                    workspace.Path,
+                    new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), "py -3"));
+            }
+
+            var shellKind = SelectedShellKind();
+            var profileId = AgentProfileIdResolver.Resolve(startupCommand.AgentKind, shellKind);
+            var sessionId = $"{profileId}-{nextSessionNumber++}";
+            var runId = $"{sessionId}-{DateTimeOffset.Now:yyyyMMddHHmmss}";
+            var env = hookInfo is null
+                ? null
+                : HookEnvironmentBuilder.Build(new HookEnvironmentRequest(
+                    hookInfo.Url,
+                    hookInfo.Token,
+                    sessionId,
+                    runId,
+                    profileId,
+                    workspace.Path));
+            var request = new AgentLaunchRequest(
+                startupCommand.AgentKind,
+                shellKind,
                 workspace.Path,
-                new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), "py -3"));
+                startupCommand.Command,
+                startupCommand.Arguments,
+                env);
+            var plan = AgentLaunchPlanBuilder.Build(request);
+            var startupCommandLine = WindowsCommandLineBuilder.Build(plan.Executable, plan.Arguments);
+
+            var terminal = new EasyTerminalControl
+            {
+                StartupCommandLine = startupCommandLine,
+                LogConPTYOutput = false,
+                FontSizeWhenSettingTheme = 14
+            };
+
+            var session = new SessionViewModel(sessionId, startupCommand.AgentKind, shellKind, workspace, terminal);
+            sessions[sessionId] = session;
+            inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
+            sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
+            SessionListBox.Items.Add(session);
+            SessionListBox.SelectedItem = session;
+            StatusTextBlock.Text = $"Started {session.DisplayName}";
         }
-
-        var shellKind = SelectedShellKind();
-        var profileId = AgentProfileIdResolver.Resolve(startupCommand.AgentKind, shellKind);
-        var sessionId = $"{profileId}-{nextSessionNumber++}";
-        var runId = $"{sessionId}-{DateTimeOffset.Now:yyyyMMddHHmmss}";
-        var env = hookInfo is null
-            ? null
-            : HookEnvironmentBuilder.Build(new HookEnvironmentRequest(
-                hookInfo.Url,
-                hookInfo.Token,
-                sessionId,
-                runId,
-                profileId,
-                workspace.Path));
-        var request = new AgentLaunchRequest(
-            startupCommand.AgentKind,
-            shellKind,
-            workspace.Path,
-            startupCommand.Command,
-            startupCommand.Arguments,
-            env);
-        var plan = AgentLaunchPlanBuilder.Build(request);
-        var startupCommandLine = WindowsCommandLineBuilder.Build(plan.Executable, plan.Arguments);
-
-        var terminal = new EasyTerminalControl
+        catch (Exception ex)
         {
-            StartupCommandLine = startupCommandLine,
-            LogConPTYOutput = false,
-            FontSizeWhenSettingTheme = 14
-        };
-
-        var session = new SessionViewModel(sessionId, startupCommand.AgentKind, shellKind, workspace, terminal);
-        sessions[sessionId] = session;
-        inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
-        sessionRegistry.Register(new AgentSessionDescriptor(sessionId, profileId, workspace.Path, DateTimeOffset.UtcNow));
-        SessionListBox.Items.Add(session);
-        SessionListBox.SelectedItem = session;
-        StatusTextBlock.Text = $"Started {session.DisplayName}";
+            StatusTextBlock.Text = AgentStartupStatusFormatter.FormatFailure(startupCommand.AgentKind, ex);
+        }
     }
 
     private ShellKind SelectedShellKind()
