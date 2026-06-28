@@ -130,9 +130,10 @@ function Resolve-AgentCommandName {
         "claude" { return "claude" }
         "gemini" { return "gemini" }
         "powershell" { return $null }
+        "cmd" { return $null }
         "shell" { return $null }
         default {
-            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, powershell, shell."
+            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, powershell, cmd, shell."
         }
     }
 }

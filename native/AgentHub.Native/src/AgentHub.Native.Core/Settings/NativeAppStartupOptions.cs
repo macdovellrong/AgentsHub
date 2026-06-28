@@ -93,10 +93,11 @@ public sealed record NativeAppStartupOptions(
         }
 
         var parsedAgents = ParseStartupAgents(startupAgents, resume);
+        var parsedHostShell = ParseShellKind(hostShell) ?? ParseHostShellFromStartupAgents(startupAgents);
         var firstAgent = parsedAgents.FirstOrDefault();
         return new NativeAppStartupOptions(
             WorkspacePathSelection.NormalizeSelectedPath(workspacePath),
-            ParseShellKind(hostShell),
+            parsedHostShell,
             NormalizeOptional(hookPythonCommand),
             parsedAgents,
             firstAgent?.AgentKind,
@@ -126,9 +127,31 @@ public sealed record NativeAppStartupOptions(
             "codex" => AgentKind.Codex,
             "claude" => AgentKind.Claude,
             "gemini" => AgentKind.Gemini,
-            "powershell" or "shell" => AgentKind.PowerShell,
+            "powershell" or "cmd" or "shell" => AgentKind.PowerShell,
             _ => null
         };
+    }
+
+    private static ShellKind? ParseHostShellFromStartupAgents(IReadOnlyList<string> rawAgents)
+    {
+        foreach (var rawAgent in rawAgents)
+        {
+            foreach (var token in rawAgent.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var shellKind = token.ToLowerInvariant() switch
+                {
+                    "powershell" => ShellKind.PowerShell,
+                    "cmd" => ShellKind.Cmd,
+                    _ => (ShellKind?)null
+                };
+                if (shellKind is not null)
+                {
+                    return shellKind;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<NativeAppStartupAgent> ParseStartupAgents(

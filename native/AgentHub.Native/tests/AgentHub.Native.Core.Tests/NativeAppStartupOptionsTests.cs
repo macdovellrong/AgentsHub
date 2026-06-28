@@ -131,6 +131,17 @@ public sealed class NativeAppStartupOptionsTests
 
         Assert.Equal(AgentKind.PowerShell, options.StartupAgentKind);
         Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+        Assert.Equal(ShellKind.PowerShell, options.HostShell);
+    }
+
+    [Fact]
+    public void Parses_cmd_as_plain_shell_agent_and_selects_cmd_host()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "cmd"]);
+
+        Assert.Equal(AgentKind.PowerShell, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+        Assert.Equal(ShellKind.Cmd, options.HostShell);
     }
 
     [Fact]

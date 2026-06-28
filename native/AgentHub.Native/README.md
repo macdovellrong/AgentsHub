@@ -53,6 +53,13 @@
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Shell cmd -Agent codex
 ```
 
+启动普通 shell 时也可以直接指定 `powershell` 或 `cmd`：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent cmd
+```
+
 启动时指定 Agent hook 使用的 Python 命令；未指定时默认使用 `py -3`：
 
 ```powershell
@@ -68,7 +75,7 @@
 .\scripts\start-native.ps1 -Check -Agent codex,claude,gemini -Python "py -3.11"
 ```
 
-`-Check` 带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查默认 hook Python 命令 `py -3`；如果传入 `-Python`，则始终检查指定命令是否能启动 Python。
+`-Check` 带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中。`powershell`、`cmd`、`shell` 只使用选中的 Host shell，不检查额外 Agent CLI。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查默认 hook Python 命令 `py -3`；如果传入 `-Python`，则始终检查指定命令是否能启动 Python。
 
 ## 发布
 
