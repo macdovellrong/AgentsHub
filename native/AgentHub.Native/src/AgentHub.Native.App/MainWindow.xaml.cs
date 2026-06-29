@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly AgentTaskPlanEventStore taskPlanEventStore = new();
     private readonly AgentTaskPlanStore taskPlanStore = new();
     private readonly AgentConversationStore conversationStore = new();
+    private readonly AgentConversationControlService conversationControlService;
     private readonly AgentTaskPlanService taskPlanService;
     private readonly AgentConversationOrchestrator conversationOrchestrator;
     private readonly AgentHookProcessingPipeline hookProcessingPipeline;
@@ -50,6 +51,9 @@ public partial class MainWindow : Window
             collaborationEventStore,
             inputRouter,
             sessionRegistry);
+        conversationControlService = new AgentConversationControlService(
+            conversationStore,
+            collaborationEventStore);
         conversationOrchestrator = new AgentConversationOrchestrator(
             conversationStore,
             collaborationEventStore,
@@ -373,6 +377,67 @@ public partial class MainWindow : Window
             UseShellExecute = true
         });
         StatusTextBlock.Text = $"Opened conversation folder: {selected.Conversation.Id}";
+    }
+
+    private async void PauseConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedConversationStatusAsync(
+            "pause",
+            (workspacePath, conversationId) => conversationControlService.PauseAsync(
+                workspacePath,
+                conversationId,
+                "Paused from AgentHub Native"));
+    }
+
+    private async void ResumeConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedConversationStatusAsync(
+            "resume",
+            (workspacePath, conversationId) => conversationControlService.ResumeAsync(
+                workspacePath,
+                conversationId,
+                "Resumed from AgentHub Native"));
+    }
+
+    private async void StopConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedConversationStatusAsync(
+            "stop",
+            (workspacePath, conversationId) => conversationControlService.StopAsync(
+                workspacePath,
+                conversationId,
+                "Stopped from AgentHub Native"));
+    }
+
+    private async Task ChangeSelectedConversationStatusAsync(
+        string action,
+        Func<string, string, Task<AgentConversation>> updateAsync)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        if (ConversationListBox.SelectedItem is not ConversationViewModel selected)
+        {
+            StatusTextBlock.Text = "No conversation selected";
+            return;
+        }
+
+        try
+        {
+            var updated = await updateAsync(workspacePath, selected.Conversation.Id);
+            await ReloadConversationsAsync(workspacePath, updated.Id);
+            await ReloadSelectedConversationDetailsAsync(workspacePath);
+            await ReloadTimelineAsync(workspacePath);
+            StatusTextBlock.Text = $"Conversation {action}: {updated.Id}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Conversation {action} failed: {ex.Message}";
+        }
     }
 
     private void TaskPlanSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

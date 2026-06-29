@@ -54,6 +54,7 @@
 - [x] native Core 支持两人 pair negotiation conversation：启动时创建 `.agenthub/conversations/<id>/brief.md`、`memory.md`、`state.json` 和 `turns/`，投递带 `artifact_path` 的文件型 prompt；`continue` 会校验或补写当前 turn artifact 后投递给另一位参与者，双方 `accept` 同一 `proposal_version` 后完成；达到 `maxSteps` 后暂停。
 - [x] native App 提供 Conversations 基础 UI 入口：输入 topic 和 participants 后，可直接启动 manager、roundtable 或 pair negotiation conversation。
 - [x] native App 提供 conversation 列表、详情和打开目录入口；切换 workspace、启动 conversation 或当前 workspace 收到 hook 回传后会刷新状态。
+- [x] native Core 和 App 支持用户手动 Pause/Resume/Stop conversation 编排状态，并把状态变化写入 Collaboration timeline。
 
 ## 后续任务
 

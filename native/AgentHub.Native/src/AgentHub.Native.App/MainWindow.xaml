@@ -241,20 +241,39 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <DockPanel Margin="0,0,0,6">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock Text="Conversations" Foreground="#9FB0C2" VerticalAlignment="Center" />
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
                                 <Button Content="Refresh"
                                         Click="RefreshConversations_Click"
                                         MinHeight="26"
-                                        MinWidth="70"
+                                        MinWidth="62"
                                         Margin="0,0,6,0" />
                                 <Button Content="Open"
                                         Click="OpenConversationFolder_Click"
                                         MinHeight="26"
-                                        MinWidth="60" />
-                            </StackPanel>
-                        </DockPanel>
+                                        MinWidth="54"
+                                        Margin="0,0,6,0" />
+                                <Button Content="Pause"
+                                        Click="PauseConversation_Click"
+                                        MinHeight="26"
+                                        MinWidth="56"
+                                        Margin="0,0,6,0" />
+                                <Button Content="Resume"
+                                        Click="ResumeConversation_Click"
+                                        MinHeight="26"
+                                        MinWidth="64"
+                                        Margin="0,0,6,0" />
+                                <Button Content="Stop"
+                                        Click="StopConversation_Click"
+                                        MinHeight="26"
+                                        MinWidth="52" />
+                            </WrapPanel>
+                        </Grid>
                         <ListBox Grid.Row="1"
                                  x:Name="ConversationListBox"
                                  Background="#0E151D"

@@ -72,6 +72,9 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Click=\"StartPairNegotiationConversation_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"RefreshConversations_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OpenConversationFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"PauseConversation_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ResumeConversation_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StopConversation_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionChanged=\"ConversationListBox_SelectionChanged\"", xaml, StringComparison.Ordinal);
     }
 
@@ -102,6 +105,22 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("OpenConversationFolder_Click", code, StringComparison.Ordinal);
         Assert.Contains("ProcessStartInfo", code, StringComparison.Ordinal);
         Assert.Contains("AgentConversationDisplayFormatter.Format", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_window_wires_conversation_control_buttons_to_service()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("AgentConversationControlService", code, StringComparison.Ordinal);
+        Assert.Contains("PauseConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("ResumeConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("StopConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("conversationControlService.PauseAsync", code, StringComparison.Ordinal);
+        Assert.Contains("conversationControlService.ResumeAsync", code, StringComparison.Ordinal);
+        Assert.Contains("conversationControlService.StopAsync", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadConversationsAsync(workspacePath, updated.Id)", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadTimelineAsync(workspacePath)", code, StringComparison.Ordinal);
     }
 
     private static string FindSourceFile(params string[] relativeParts)
