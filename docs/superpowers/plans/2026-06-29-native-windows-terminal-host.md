@@ -27,6 +27,7 @@
 - [x] hook 控制命令的解析错误和转发失败会进入 Collaboration timeline。
 - [x] provider-neutral `claim_task` / `complete_task` 团队状态命令会进入 Collaboration timeline。
 - [x] provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`。
+- [x] native `send_message` mailbox 记录会继承 hook 事件上的 `teamId` / `conversationId` 上下文，避免命令漏写时掉回 default mailbox 或丢 conversation。
 - [x] 任务计划路由命令转发后的 mailbox 记录会保留 `planId`，方便后续 task-plan 状态机迁移。
 - [x] `assign_task` / `request_review` / `reject_task` / `approve_task` / `pause_plan` 任务计划命令会写入 `<workspace>/.agenthub/task-plans/native/<planId>/events.jsonl`。
 - [x] native Core 支持扫描 `<workspace>/tasks/*/task-plan.md`，并从选中的任务目录创建 `.agenthub/task-plans/YYYY-MM-DD/HHmmss-slug/` 执行快照。

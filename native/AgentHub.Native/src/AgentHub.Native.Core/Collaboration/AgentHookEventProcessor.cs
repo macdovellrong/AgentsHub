@@ -42,13 +42,13 @@ public sealed class AgentHookEventProcessor(
             await store.AppendMailboxAsync(
                 hookEvent.Workspace,
                 new AgentTeamMailboxRequest(
-                    TeamIdOrDefault(message.TeamId),
+                    TeamIdOrDefault(message.TeamId ?? hookEvent.TeamId),
                     "send_message",
                     fromProfileId,
                     message.To,
                     message.Message,
                     message.TaskId,
-                    message.ConversationId,
+                    message.ConversationId ?? hookEvent.ConversationId,
                     "sent",
                     message.SessionId,
                     null,
@@ -66,13 +66,13 @@ public sealed class AgentHookEventProcessor(
             await store.AppendMailboxAsync(
                 hookEvent.Workspace,
                 new AgentTeamMailboxRequest(
-                    TeamIdOrDefault(error.Command.TeamId),
+                    TeamIdOrDefault(error.Command.TeamId ?? hookEvent.TeamId),
                     "send_message",
                     fromProfileId,
                     error.Command.To,
                     error.Command.Message,
                     error.Command.TaskId,
-                    error.Command.ConversationId,
+                    error.Command.ConversationId ?? hookEvent.ConversationId,
                     "failed",
                     null,
                     error.Message,
