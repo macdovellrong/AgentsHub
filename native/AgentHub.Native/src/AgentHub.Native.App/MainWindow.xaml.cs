@@ -198,6 +198,13 @@ public partial class MainWindow : Window
             hookEvent.Workspace,
             hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
             result);
+        await taskPlanService.RecordHookCompletionAsync(
+            hookEvent.Workspace,
+            new AgentTaskPlanHookCompletionInput(
+                hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
+                hookEvent.Message,
+                hookEvent.SessionId,
+                hookEvent.RunId));
         return result;
     }
 

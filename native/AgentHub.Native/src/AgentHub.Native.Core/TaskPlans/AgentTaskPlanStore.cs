@@ -208,6 +208,7 @@ public sealed class AgentTaskPlanStore
             input.FromProfileId,
             input.ToProfileId,
             input.Message,
+            input.ArtifactPath,
             input.SessionId,
             input.RunId,
             input.SourceEventId);

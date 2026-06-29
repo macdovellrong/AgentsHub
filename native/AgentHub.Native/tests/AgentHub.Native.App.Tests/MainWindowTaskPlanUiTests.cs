@@ -35,6 +35,7 @@ public sealed class MainWindowTaskPlanUiTests
         var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
 
         Assert.Contains("RecordManagerDispatchResultAsync", code, StringComparison.Ordinal);
+        Assert.Contains("RecordHookCompletionAsync", code, StringComparison.Ordinal);
         Assert.Contains("hookEvent.ProfileId ?? hookEvent.Source ?? \"agent\"", code, StringComparison.Ordinal);
     }
 

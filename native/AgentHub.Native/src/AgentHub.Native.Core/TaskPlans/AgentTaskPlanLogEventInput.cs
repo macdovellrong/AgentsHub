@@ -6,6 +6,7 @@ public sealed record AgentTaskPlanLogEventInput(
     string? FromProfileId = null,
     string? ToProfileId = null,
     string? Message = null,
+    string? ArtifactPath = null,
     string? SessionId = null,
     string? RunId = null,
     string? SourceEventId = null);

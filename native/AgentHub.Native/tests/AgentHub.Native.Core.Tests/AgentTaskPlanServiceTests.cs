@@ -226,6 +226,128 @@ public sealed class AgentTaskPlanServiceTests : IDisposable
             item.Message.Contains("No active session for profile 'codex'", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Records_hook_completion_artifact_and_observes_manager()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out var inputRouter, out var registry);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        await service.RecordManagerDispatchResultAsync(
+            workspacePath,
+            "claude",
+            new AgentHubCommandDispatchResult(
+                1,
+                [
+                    new AgentHubSendMessageCommand(
+                        "codex",
+                        "Implement parser.",
+                        null,
+                        "T-001",
+                        plan.Id,
+                        null,
+                        "codex-1",
+                        "assign_task")
+                ],
+                [],
+                [],
+                [],
+                [],
+                [],
+                []),
+            "event-assign");
+        var managerSession = new RecordingTerminalSession("claude-1");
+        inputRouter.Register(managerSession);
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", workspacePath, DateTimeOffset.UtcNow));
+
+        await service.RecordHookCompletionAsync(
+            workspacePath,
+            new AgentTaskPlanHookCompletionInput(
+                "codex",
+                "Implementation done.",
+                "codex-1",
+                "run-2",
+                null,
+                null,
+                "event-complete"));
+
+        var latest = Assert.Single(await store.ListTasksAsync(workspacePath, plan.Id));
+        Assert.Equal("review", latest.Status);
+        Assert.Equal("codex", latest.AssigneeProfileId);
+        Assert.Equal("run-2", latest.RunId);
+        Assert.Equal("Implementation done.", latest.Description);
+        Assert.Equal("artifacts/T-001-codex-run-2.md", latest.ArtifactPath);
+        Assert.NotNull(latest.ArtifactPath);
+        Assert.Equal("Implementation done.", await File.ReadAllTextAsync(Path.Combine(plan.PlanPath, latest.ArtifactPath!)));
+        var events = await store.ListEventsAsync(workspacePath, plan.Id);
+        Assert.Contains(events, item =>
+            item.Type == "hook_completed" &&
+            item.TaskId == "T-001" &&
+            item.FromProfileId == "codex" &&
+            item.ToProfileId == "claude" &&
+            item.ArtifactPath == "artifacts/T-001-codex-run-2.md" &&
+            item.SourceEventId == "event-complete");
+        Assert.Equal("\x1b[200~", managerSession.Writes[0]);
+        Assert.Contains("AgentHub delegated task completed observation.", managerSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains($"Plan ID: {plan.Id}", managerSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Task: T-001", managerSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Artifact: artifacts/T-001-codex-run-2.md", managerSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("\"action\":\"approve_task\"", managerSession.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", managerSession.Writes[2]);
+        Assert.Equal("\r", managerSession.Writes[3]);
+    }
+
+    [Fact]
+    public async Task Records_hook_completion_delivery_failure_when_manager_session_is_missing()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        await service.RecordManagerDispatchResultAsync(
+            workspacePath,
+            "claude",
+            new AgentHubCommandDispatchResult(
+                1,
+                [
+                    new AgentHubSendMessageCommand(
+                        "codex",
+                        "Implement parser.",
+                        null,
+                        "T-001",
+                        plan.Id,
+                        null,
+                        "codex-1",
+                        "assign_task")
+                ],
+                [],
+                [],
+                [],
+                [],
+                [],
+                []));
+
+        await service.RecordHookCompletionAsync(
+            workspacePath,
+            new AgentTaskPlanHookCompletionInput("codex", "Implementation done.", "codex-1", "run-2"));
+
+        var events = await store.ListEventsAsync(workspacePath, plan.Id);
+        Assert.Contains(events, item =>
+            item.Type == "delivery_failed" &&
+            item.TaskId == "T-001" &&
+            item.FromProfileId == "codex" &&
+            item.ToProfileId == "claude" &&
+            item.ArtifactPath == "artifacts/T-001-codex-run-2.md" &&
+            item.Message is not null &&
+            item.Message.Contains("No active session for profile 'claude'", StringComparison.Ordinal));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

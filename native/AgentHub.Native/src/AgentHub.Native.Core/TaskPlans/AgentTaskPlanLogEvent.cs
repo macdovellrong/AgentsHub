@@ -8,6 +8,7 @@ public sealed record AgentTaskPlanLogEvent(
     string? FromProfileId,
     string? ToProfileId,
     string? Message,
+    string? ArtifactPath,
     string? SessionId,
     string? RunId,
     string? SourceEventId);

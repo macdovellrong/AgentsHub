@@ -166,6 +166,53 @@ public sealed class AgentTaskPlanService(
         }
     }
 
+    public async Task RecordHookCompletionAsync(
+        string workspacePath,
+        AgentTaskPlanHookCompletionInput input,
+        CancellationToken cancellationToken = default)
+    {
+        var target = await ResolveCompletionTargetAsync(workspacePath, input, cancellationToken).ConfigureAwait(false);
+        if (target is null)
+        {
+            return;
+        }
+
+        var (plan, taskId) = target.Value;
+        var artifactPath = await WriteUniqueArtifactAsync(plan, taskId, input.ProfileId, input.RunId, input.Message, cancellationToken)
+            .ConfigureAwait(false);
+        await store.AppendTaskAsync(
+            workspacePath,
+            plan.Id,
+            new AgentTaskPlanTask(
+                taskId,
+                taskId,
+                "review",
+                input.ProfileId,
+                await CurrentAttemptAsync(workspacePath, plan.Id, taskId, cancellationToken).ConfigureAwait(false),
+                input.Message,
+                input.RunId,
+                artifactPath,
+                DateTimeOffset.UtcNow),
+            cancellationToken).ConfigureAwait(false);
+        await store.AppendEventAsync(
+            workspacePath,
+            plan.Id,
+            new AgentTaskPlanLogEventInput(
+                "hook_completed",
+                TaskId: taskId,
+                FromProfileId: input.ProfileId,
+                ToProfileId: plan.ManagerProfileId,
+                Message: input.Message,
+                ArtifactPath: artifactPath,
+                SessionId: input.SessionId,
+                RunId: input.RunId,
+                SourceEventId: input.SourceEventId),
+            cancellationToken).ConfigureAwait(false);
+
+        await ObserveManagerAsync(workspacePath, plan, taskId, input, artifactPath, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task RecordDeliveryFailureAsync(
         string workspacePath,
         AgentTaskPlan plan,
@@ -183,6 +230,210 @@ public sealed class AgentTaskPlanService(
             cancellationToken).ConfigureAwait(false);
         await timelineStore.AppendCommandErrorAsync(workspacePath, message, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task ObserveManagerAsync(
+        string workspacePath,
+        AgentTaskPlan plan,
+        string taskId,
+        AgentTaskPlanHookCompletionInput input,
+        string artifactPath,
+        CancellationToken cancellationToken)
+    {
+        var managerSession = sessionRegistry.FindLatest(workspacePath, plan.ManagerProfileId);
+        if (managerSession is null)
+        {
+            await RecordHookObservationFailureAsync(
+                workspacePath,
+                plan,
+                taskId,
+                input.ProfileId,
+                artifactPath,
+                $"No active session for profile '{plan.ManagerProfileId}'",
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var prompt = BuildHookObservationPrompt(plan, taskId, input, artifactPath);
+        var sendResult = await inputRouter.TrySendLineDetailedAsync(managerSession.Id, prompt, cancellationToken)
+            .ConfigureAwait(false);
+        if (!sendResult.Sent)
+        {
+            if (sendResult.ShouldRemoveSession)
+            {
+                sessionRegistry.Remove(managerSession.Id);
+            }
+
+            await RecordHookObservationFailureAsync(
+                workspacePath,
+                plan,
+                taskId,
+                input.ProfileId,
+                artifactPath,
+                $"Unable to send task-plan hook observation to session '{managerSession.Id}': {sendResult.Status}",
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await timelineStore.AppendUserMessageAsync(
+            new CollaborationUserMessage(
+                workspacePath,
+                "agenthub",
+                plan.ManagerProfileId,
+                $"Task plan hook observed: {taskId}"),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RecordHookObservationFailureAsync(
+        string workspacePath,
+        AgentTaskPlan plan,
+        string taskId,
+        string fromProfileId,
+        string artifactPath,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        await store.AppendEventAsync(
+            workspacePath,
+            plan.Id,
+            new AgentTaskPlanLogEventInput(
+                "delivery_failed",
+                TaskId: taskId,
+                FromProfileId: fromProfileId,
+                ToProfileId: plan.ManagerProfileId,
+                Message: message,
+                ArtifactPath: artifactPath),
+            cancellationToken).ConfigureAwait(false);
+        await timelineStore.AppendCommandErrorAsync(workspacePath, message, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<(AgentTaskPlan Plan, string TaskId)?> ResolveCompletionTargetAsync(
+        string workspacePath,
+        AgentTaskPlanHookCompletionInput input,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(input.PlanId) && !string.IsNullOrWhiteSpace(input.TaskId))
+        {
+            var explicitPlan = await TryGetPlanAsync(workspacePath, input.PlanId, cancellationToken).ConfigureAwait(false);
+            return explicitPlan is null ? null : (explicitPlan, input.TaskId);
+        }
+
+        var plans = string.IsNullOrWhiteSpace(input.PlanId)
+            ? await store.ListPlansAsync(workspacePath, cancellationToken).ConfigureAwait(false)
+            : await ListSinglePlanAsync(workspacePath, input.PlanId, cancellationToken).ConfigureAwait(false);
+        foreach (var plan in plans)
+        {
+            var events = await store.ListEventsAsync(workspacePath, plan.Id, cancellationToken).ConfigureAwait(false);
+            for (var index = events.Count - 1; index >= 0; index--)
+            {
+                var item = events[index];
+                if (!IsRoutingEventForCompletion(item, input) ||
+                    HasLaterCompletion(events, index, item, input))
+                {
+                    continue;
+                }
+
+                return (plan, item.TaskId!);
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<IReadOnlyList<AgentTaskPlan>> ListSinglePlanAsync(
+        string workspacePath,
+        string planId,
+        CancellationToken cancellationToken)
+    {
+        var plan = await TryGetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        return plan is null ? [] : [plan];
+    }
+
+    private static bool IsRoutingEventForCompletion(
+        AgentTaskPlanLogEvent item,
+        AgentTaskPlanHookCompletionInput input)
+    {
+        return item.Type is "assigned" or "rejected" or "review_requested" &&
+               !string.IsNullOrWhiteSpace(item.TaskId) &&
+               string.Equals(item.ToProfileId, input.ProfileId, StringComparison.OrdinalIgnoreCase) &&
+               SessionMatches(item.SessionId, input.SessionId);
+    }
+
+    private static bool HasLaterCompletion(
+        IReadOnlyList<AgentTaskPlanLogEvent> events,
+        int routeEventIndex,
+        AgentTaskPlanLogEvent routeEvent,
+        AgentTaskPlanHookCompletionInput input)
+    {
+        for (var index = routeEventIndex + 1; index < events.Count; index++)
+        {
+            var item = events[index];
+            if (item.Type == "hook_completed" &&
+                string.Equals(item.TaskId, routeEvent.TaskId, StringComparison.Ordinal) &&
+                string.Equals(item.FromProfileId, input.ProfileId, StringComparison.OrdinalIgnoreCase) &&
+                SessionMatches(routeEvent.SessionId, item.SessionId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SessionMatches(string? routeSessionId, string? completionSessionId)
+    {
+        return string.IsNullOrWhiteSpace(routeSessionId) ||
+               string.IsNullOrWhiteSpace(completionSessionId) ||
+               string.Equals(routeSessionId, completionSessionId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<string> WriteUniqueArtifactAsync(
+        AgentTaskPlan plan,
+        string taskId,
+        string profileId,
+        string? runId,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var artifactsPath = Path.Combine(plan.PlanPath, "artifacts");
+        Directory.CreateDirectory(artifactsPath);
+        var baseName = $"{SafeFileToken(taskId)}-{SafeFileToken(profileId)}";
+        if (!string.IsNullOrWhiteSpace(runId))
+        {
+            baseName += $"-{SafeFileToken(runId)}";
+        }
+
+        for (var index = 1; index < 1000; index++)
+        {
+            var fileName = index == 1 ? $"{baseName}.md" : $"{baseName}-{index}.md";
+            var fullPath = Path.Combine(artifactsPath, fileName);
+            try
+            {
+                await using var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                await using var writer = new StreamWriter(stream);
+                await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
+                return $"artifacts/{fileName}";
+            }
+            catch (IOException) when (File.Exists(fullPath))
+            {
+            }
+        }
+
+        throw new IOException($"Unable to create unique artifact for task '{taskId}'");
+    }
+
+    private static string SafeFileToken(string value)
+    {
+        var chars = value
+            .Trim()
+            .Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' ? character : '-')
+            .ToArray();
+        var token = string.Join(
+            "-",
+            new string(chars)
+                .Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(token) || token is "." or ".." ? "value" : token;
     }
 
     private async Task RecordSentRoutingCommandAsync(
@@ -391,6 +642,29 @@ public sealed class AgentTaskPlanService(
                 "Pause with:",
                 "<agenthub>{\"action\":\"pause_plan\",\"plan_id\":\"" + plan.Id + "\",\"reason\":\"Need user decision\"}</agenthub>",
                 "Wait for hook observations before assigning the next step."
+            ]);
+    }
+
+    private static string BuildHookObservationPrompt(
+        AgentTaskPlan plan,
+        string taskId,
+        AgentTaskPlanHookCompletionInput input,
+        string artifactPath)
+    {
+        return string.Join(
+            "\r\n",
+            [
+                "AgentHub delegated task completed observation.",
+                $"Plan ID: {plan.Id}",
+                $"Task: {taskId}",
+                $"From: {input.ProfileId}",
+                $"Artifact: {artifactPath}",
+                "",
+                input.Message,
+                "",
+                "Review the artifact. Approve or reject with one exact command:",
+                "<agenthub>{\"action\":\"approve_task\",\"plan_id\":\"" + plan.Id + "\",\"task_id\":\"" + taskId + "\",\"summary\":\"Accepted\"}</agenthub>",
+                "<agenthub>{\"action\":\"reject_task\",\"plan_id\":\"" + plan.Id + "\",\"task_id\":\"" + taskId + "\",\"to\":\"" + input.ProfileId + "\",\"message\":\"Required fixes\"}</agenthub>"
             ]);
     }
 }
