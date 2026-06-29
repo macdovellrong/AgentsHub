@@ -169,7 +169,7 @@ native conversation 状态保存位置：
 <workspace>/.agenthub/conversations/conversations.jsonl
 ```
 
-native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。该能力尚未接入 WPF UI，也尚未实现完整 `handleAgentOutput` 状态流。
+native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。Core 也提供了 manager `handleAgentOutput` 的第一段状态流：supervisor 的 `send` / `send_message` 会转成带 conversation/task 上下文的 delegated prompt 并投递到目标 profile 最新 session，`done` 会完成 conversation，`ask_user` 会暂停 conversation。该能力尚未接入 WPF UI，也尚未实现 participant 回填 observation、roundtable 或 pair negotiation 的完整状态机。
 
 Host shell 等本机设置保存位置：
 
