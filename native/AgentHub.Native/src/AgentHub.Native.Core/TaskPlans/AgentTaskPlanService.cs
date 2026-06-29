@@ -178,6 +178,13 @@ public sealed class AgentTaskPlanService(
         }
 
         var (plan, taskId) = target.Value;
+        if (!string.IsNullOrWhiteSpace(input.SourceEventId) &&
+            await HasCompletedSourceEventAsync(workspacePath, plan.Id, input.SourceEventId, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return;
+        }
+
         var artifactPath = await WriteUniqueArtifactAsync(plan, taskId, input.ProfileId, input.RunId, input.Message, cancellationToken)
             .ConfigureAwait(false);
         await store.AppendTaskAsync(
@@ -379,6 +386,18 @@ public sealed class AgentTaskPlanService(
         }
 
         return false;
+    }
+
+    private async Task<bool> HasCompletedSourceEventAsync(
+        string workspacePath,
+        string planId,
+        string sourceEventId,
+        CancellationToken cancellationToken)
+    {
+        var events = await store.ListEventsAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        return events.Any(item =>
+            item.Type == "hook_completed" &&
+            string.Equals(item.SourceEventId, sourceEventId, StringComparison.Ordinal));
     }
 
     private static bool SessionMatches(string? routeSessionId, string? completionSessionId)

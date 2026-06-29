@@ -301,6 +301,37 @@ public sealed class AgentTaskPlanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Ignores_duplicate_hook_completion_source_event()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out var inputRouter, out var registry);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        var managerSession = new RecordingTerminalSession("claude-1");
+        inputRouter.Register(managerSession);
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", workspacePath, DateTimeOffset.UtcNow));
+        var input = new AgentTaskPlanHookCompletionInput(
+            "codex",
+            "Implementation done.",
+            "codex-1",
+            "run-2",
+            plan.Id,
+            "T-001",
+            "event-complete");
+
+        await service.RecordHookCompletionAsync(workspacePath, input);
+        await service.RecordHookCompletionAsync(workspacePath, input);
+
+        var events = await store.ListEventsAsync(workspacePath, plan.Id);
+        Assert.Single(events, item => item.Type == "hook_completed");
+        Assert.Single(Directory.GetFiles(Path.Combine(plan.PlanPath, "artifacts"), "*.md"));
+        Assert.Equal(4, managerSession.Writes.Count);
+    }
+
+    [Fact]
     public async Task Records_hook_completion_delivery_failure_when_manager_session_is_missing()
     {
         var workspacePath = CreateWorkspaceWithSourcePlan();
