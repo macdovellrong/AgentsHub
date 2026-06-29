@@ -117,6 +117,35 @@ public sealed class AgentStartupPreflightCheckerTests
         Assert.Contains("Hook Python check failed: exit code 1: Python 3.14 cannot run AgentHub hooks", result.Errors);
     }
 
+    [Fact]
+    public void Probes_with_resolved_python_executable_path()
+    {
+        (string Launcher, IReadOnlyList<string> Arguments)? probedCommand = null;
+        var checker = new AgentStartupPreflightChecker(
+            command => command switch
+            {
+                "codex" => "codex.cmd",
+                "py" => @"C:\Windows\py.exe",
+                _ => null
+            },
+            path => RequiredHookFiles().Contains(Path.GetFileName(path), StringComparer.Ordinal),
+            _ => true,
+            (launcher, arguments) =>
+            {
+                probedCommand = (launcher, arguments);
+                return AgentStartupPythonProbeResult.Success();
+            });
+
+        var result = checker.Check(new AgentStartupPreflightRequest(
+            AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Start),
+            @"V:\AgentHub\scripts\hooks",
+            "py -3.11"));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(@"C:\Windows\py.exe", probedCommand?.Launcher);
+        Assert.Equal(["-3.11"], probedCommand?.Arguments);
+    }
+
     private static IReadOnlySet<string> RequiredHookFiles()
     {
         return new HashSet<string>(StringComparer.Ordinal)

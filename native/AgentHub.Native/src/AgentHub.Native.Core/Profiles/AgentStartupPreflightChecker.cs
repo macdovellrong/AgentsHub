@@ -35,7 +35,7 @@ public sealed class AgentStartupPreflightChecker(
         }
 
         if (!string.IsNullOrWhiteSpace(startupCommand.Command) &&
-            ResolveExecutable(startupCommand.Command) is null)
+            ResolveExecutablePath(startupCommand.Command) is null)
         {
             errors.Add(IsPathLike(startupCommand.Command)
                 ? $"Agent CLI was not found: {startupCommand.Command}"
@@ -80,7 +80,8 @@ public sealed class AgentStartupPreflightChecker(
             return;
         }
 
-        if (ResolveExecutable(launcher) is null)
+        var resolvedLauncher = ResolveExecutablePath(launcher);
+        if (resolvedLauncher is null)
         {
             errors.Add(IsPathLike(launcher)
                 ? $"Hook Python launcher was not found: {launcher}"
@@ -88,14 +89,14 @@ public sealed class AgentStartupPreflightChecker(
             return;
         }
 
-        var probeResult = pythonProbe(launcher, arguments);
+        var probeResult = pythonProbe(resolvedLauncher, arguments);
         if (!probeResult.Succeeded)
         {
             errors.Add($"Hook Python check failed: {probeResult.Error ?? "unknown error"}");
         }
     }
 
-    private string? ResolveExecutable(string command)
+    private string? ResolveExecutablePath(string command)
     {
         var trimmed = command.Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(trimmed))
