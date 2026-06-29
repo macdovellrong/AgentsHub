@@ -97,6 +97,30 @@ exit /b %AGENTHUB_NATIVE_EXIT_CODE%
 "@
 Set-Content -LiteralPath $starterPath -Value $starter -Encoding ASCII
 
+$powershellStarterPath = Join-Path $outputPath "start-agenthub-native.ps1"
+$powershellStarter = @'
+$ErrorActionPreference = "Stop"
+$packageRoot = $PSScriptRoot
+$env:AGENTHUB_HOOKS_SOURCE_DIR = Join-Path $packageRoot "scripts/hooks"
+Push-Location -LiteralPath $packageRoot
+try {
+    & (Join-Path $packageRoot "AgentHub.Native.App.exe") @args
+    $exitCode = $LASTEXITCODE
+    if ($null -eq $exitCode) {
+        $exitCode = 0
+    }
+}
+finally {
+    Pop-Location
+}
+
+if ($exitCode -ne 0) {
+    Write-Host "AgentHub Native exited with code $exitCode."
+}
+exit $exitCode
+'@
+Set-Content -LiteralPath $powershellStarterPath -Value $powershellStarter -Encoding UTF8
+
 $diagnosticsStarterPath = Join-Path $outputPath "collect-native-diagnostics.bat"
 $diagnosticsStarter = @"
 @echo off
@@ -114,6 +138,32 @@ exit /b %AGENTHUB_NATIVE_DIAGNOSTICS_EXIT_CODE%
 "@
 Set-Content -LiteralPath $diagnosticsStarterPath -Value $diagnosticsStarter -Encoding ASCII
 
+$powershellDiagnosticsStarterPath = Join-Path $outputPath "collect-native-diagnostics.ps1"
+$powershellDiagnosticsStarter = @'
+$ErrorActionPreference = "Stop"
+$packageRoot = $PSScriptRoot
+$env:AGENTHUB_HOOKS_SOURCE_DIR = Join-Path $packageRoot "scripts/hooks"
+Push-Location -LiteralPath $packageRoot
+try {
+    & (Join-Path $packageRoot "scripts/collect-native-diagnostics.ps1") @args
+    $exitCode = $LASTEXITCODE
+    if ($null -eq $exitCode) {
+        $exitCode = 0
+    }
+}
+finally {
+    Pop-Location
+}
+
+if ($exitCode -ne 0) {
+    Write-Host "AgentHub Native diagnostics exited with code $exitCode."
+}
+exit $exitCode
+'@
+Set-Content -LiteralPath $powershellDiagnosticsStarterPath -Value $powershellDiagnosticsStarter -Encoding UTF8
+
 Write-Host "AgentHub Native published to: $outputPath"
 Write-Host "Run: $starterPath -Workspace V:\OrderManager -Agent codex -Resume"
+Write-Host "Run without cmd: $powershellStarterPath -Workspace V:\OrderManager -Agent codex -Resume"
 Write-Host "Diagnostics: $diagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
+Write-Host "Diagnostics without cmd: $powershellDiagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""

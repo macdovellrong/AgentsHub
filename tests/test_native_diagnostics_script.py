@@ -67,7 +67,9 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     copyfile(REPO_ROOT / "scripts" / "collect-native-diagnostics.ps1", scripts_dir / "collect-native-diagnostics.ps1")
     (published_root / "AgentHub.Native.App.exe").write_bytes(b"")
     (published_root / "start-agenthub-native.bat").write_text("@echo off\n", encoding="ascii")
+    (published_root / "start-agenthub-native.ps1").write_text("Write-Output start\n", encoding="utf-8")
     (published_root / "collect-native-diagnostics.bat").write_text("@echo off\n", encoding="ascii")
+    (published_root / "collect-native-diagnostics.ps1").write_text("Write-Output diagnostics\n", encoding="utf-8")
     for script_name in [
         "agenthub_hook_common.py",
         "agenthub_codex_stop.py",
@@ -104,11 +106,42 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "## Published Package" in report
     assert "AgentHub.Native.App.exe" in report
     assert "start-agenthub-native.bat" in report
+    assert "start-agenthub-native.ps1" in report
     assert "collect-native-diagnostics.bat" in report
+    assert "collect-native-diagnostics.ps1" in report
     assert "scripts\\collect-native-diagnostics.ps1" in report
     assert "agenthub_hook_common.py" in report
     assert "### Codex Native Launcher" in report
     assert "### Codex No Alt Screen Probe" in report
+
+
+def test_collect_native_diagnostics_resolves_relative_output_from_current_location(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "collect-native-diagnostics.ps1"
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    output = cwd / "relative-diagnostics.md"
+
+    command = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            f"Set-Location -LiteralPath {ps_quote(str(cwd))}",
+            f"& {ps_quote(str(script_path))} -Python {ps_quote(sys.executable)} -Output 'relative-diagnostics.md'",
+            "exit $LASTEXITCODE",
+        ]
+    )
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output.exists()
+    assert "# AgentHub Native Diagnostics" in output.read_text(encoding="utf-8")
 
 
 def test_publish_native_script_includes_diagnostics_entrypoints() -> None:
