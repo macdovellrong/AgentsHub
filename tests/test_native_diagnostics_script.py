@@ -45,6 +45,10 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "# AgentHub Native Diagnostics" in report
     assert "## Repository" in report
     assert "git status --short --branch" in report
+    assert "## Windows" in report
+    assert "Win32_OperatingSystem" in report
+    assert "## Input Devices" in report
+    assert "Get-PnpDevice" in report
     assert "## Native Launch Checks" in report
     assert "start-native.ps1 -Check -Workspace" in report
     assert "## Hook Diagnostics" in report

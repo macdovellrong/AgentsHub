@@ -108,6 +108,15 @@ Add-Line
 Invoke-DiagnosticCommand "PowerShell" "`$PSVersionTable.PSVersion.ToString(); where.exe powershell; where.exe cmd"
 Invoke-DiagnosticCommand ".NET" "where.exe dotnet; dotnet --info"
 
+Add-Line "## Windows"
+Add-Line
+Invoke-DiagnosticCommand "OS Version" "[Environment]::OSVersion.VersionString; Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture | Format-List"
+Invoke-DiagnosticCommand "Display Scaling" "Get-CimInstance Win32_DesktopMonitor | Select-Object Name,ScreenWidth,ScreenHeight | Format-Table -AutoSize; Get-ItemProperty 'HKCU:\Control Panel\Desktop' | Select-Object LogPixels,Win8DpiScaling | Format-List"
+
+Add-Line "## Input Devices"
+Add-Line
+Invoke-DiagnosticCommand "Pointer and HID Devices" "Get-PnpDevice -Class Mouse,Keyboard,HIDClass | Select-Object Status,Class,FriendlyName,InstanceId | Format-Table -AutoSize"
+
 Add-Line "## Agent CLIs"
 Add-Line
 Invoke-DiagnosticCommand "Codex CLI" "where.exe codex; codex --version"

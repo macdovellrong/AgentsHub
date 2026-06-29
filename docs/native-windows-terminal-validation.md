@@ -63,7 +63,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。这份报告只读收集 git、.NET、Agent CLI、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。这份报告只读收集 git、.NET、Windows 版本、显示缩放、输入设备、Agent CLI、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
 
 ## 直接运行开发版
 
