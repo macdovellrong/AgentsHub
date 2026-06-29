@@ -39,6 +39,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             parsed.PlanStatusCommands,
             parsed.TeamStatusCommands,
             parsed.WorkflowCommands,
+            parsed.PairNegotiationCommands,
             parsed.Errors,
             dispatchErrors);
     }

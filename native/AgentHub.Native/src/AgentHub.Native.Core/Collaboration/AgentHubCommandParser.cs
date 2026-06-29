@@ -11,13 +11,14 @@ public static class AgentHubCommandParser
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new AgentHubCommandParseResult([], [], [], [], []);
+            return new AgentHubCommandParseResult([], [], [], [], [], []);
         }
 
         var commands = new List<AgentHubSendMessageCommand>();
         var planStatusCommands = new List<AgentHubPlanStatusCommand>();
         var teamStatusCommands = new List<AgentHubTeamStatusCommand>();
         var workflowCommands = new List<AgentHubWorkflowCommand>();
+        var pairNegotiationCommands = new List<AgentHubPairNegotiationCommand>();
         var errors = new List<AgentHubCommandParseError>();
         var cursor = 0;
         var index = 0;
@@ -64,6 +65,10 @@ public static class AgentHubCommandParser
                 {
                     workflowCommands.Add(result.WorkflowCommand);
                 }
+                else if (result.PairNegotiationCommand is not null)
+                {
+                    pairNegotiationCommands.Add(result.PairNegotiationCommand);
+                }
                 else if (result.Error is not null)
                 {
                     errors.Add(result.Error);
@@ -81,7 +86,13 @@ public static class AgentHubCommandParser
             index += 1;
         }
 
-        return new AgentHubCommandParseResult(commands, planStatusCommands, teamStatusCommands, workflowCommands, errors);
+        return new AgentHubCommandParseResult(
+            commands,
+            planStatusCommands,
+            teamStatusCommands,
+            workflowCommands,
+            pairNegotiationCommands,
+            errors);
     }
 
     private static ValidationResult ValidateCommand(JsonElement root, int index, string block)
@@ -150,14 +161,24 @@ public static class AgentHubCommandParser
             return ValidatePausePlanCommand(root, index, block);
         }
 
+        if (string.Equals(action, "continue", StringComparison.Ordinal))
+        {
+            return ValidateContinueCommand(root, index, block);
+        }
+
+        if (string.Equals(action, "accept", StringComparison.Ordinal))
+        {
+            return ValidateAcceptCommand(root, index, block);
+        }
+
         return new ValidationResult(
             null,
-                null,
-                null,
-                null,
-                new AgentHubCommandParseError(
-                    index,
-                    "invalid_action",
+            null,
+            null,
+            null,
+            new AgentHubCommandParseError(
+                index,
+                "invalid_action",
                 $"Unsupported agenthub action \"{action}\"",
                 block));
     }
@@ -379,6 +400,102 @@ public static class AgentHubCommandParser
             null);
     }
 
+    private static ValidationResult ValidateContinueCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredFiniteNumber(root, "proposal_version", out var proposalVersion))
+        {
+            return ValidationResult.Invalid(index, block, "continue command requires numeric field \"proposal_version\"");
+        }
+
+        if (!HasStringProperty(root, "message") && !HasStringProperty(root, "artifact_path"))
+        {
+            return ValidationResult.Invalid(index, block, "continue command requires string field \"message\" or \"artifact_path\"");
+        }
+
+        if (!TryGetOptionalString(root, "message", out var message))
+        {
+            return ValidationResult.Invalid(index, block, "continue command optional field \"message\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "artifact_path", out var artifactPath))
+        {
+            return ValidationResult.Invalid(index, block, "continue command optional field \"artifact_path\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "message_to", out var messageTo))
+        {
+            return ValidationResult.Invalid(index, block, "continue command optional field \"message_to\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "summary", out var summary))
+        {
+            return ValidationResult.Invalid(index, block, "continue command optional field \"summary\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "stance", out var stance))
+        {
+            return ValidationResult.Invalid(index, block, "continue command optional field \"stance\" must be a string");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            null,
+            null,
+            new AgentHubPairNegotiationCommand(
+                "continue",
+                proposalVersion,
+                message,
+                artifactPath,
+                messageTo,
+                summary,
+                stance),
+            null);
+    }
+
+    private static ValidationResult ValidateAcceptCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredFiniteNumber(root, "proposal_version", out var proposalVersion))
+        {
+            return ValidationResult.Invalid(index, block, "accept command requires numeric field \"proposal_version\"");
+        }
+
+        if (!TryGetRequiredString(root, "summary", out var summary))
+        {
+            return ValidationResult.Invalid(index, block, "accept command requires string field \"summary\"");
+        }
+
+        if (!TryGetOptionalString(root, "artifact_path", out var artifactPath))
+        {
+            return ValidationResult.Invalid(index, block, "accept command optional field \"artifact_path\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "message_to", out var messageTo))
+        {
+            return ValidationResult.Invalid(index, block, "accept command optional field \"message_to\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "stance", out var stance))
+        {
+            return ValidationResult.Invalid(index, block, "accept command optional field \"stance\" must be a string");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            null,
+            null,
+            new AgentHubPairNegotiationCommand(
+                "accept",
+                proposalVersion,
+                null,
+                artifactPath,
+                messageTo,
+                summary,
+                stance),
+            null);
+    }
+
     private static bool IsTaskPlanRoutingAction(string action)
     {
         return string.Equals(action, "assign_task", StringComparison.Ordinal) ||
@@ -459,6 +576,21 @@ public static class AgentHubCommandParser
         return false;
     }
 
+    private static bool TryGetRequiredFiniteNumber(JsonElement root, string propertyName, out double value)
+    {
+        if (root.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDouble(out value) &&
+            !double.IsNaN(value) &&
+            !double.IsInfinity(value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
     private static bool TryGetString(JsonElement root, string propertyName, out string value)
     {
         if (root.TryGetProperty(propertyName, out var property) &&
@@ -472,13 +604,57 @@ public static class AgentHubCommandParser
         return false;
     }
 
-    private sealed record ValidationResult(
-        AgentHubSendMessageCommand? SendMessageCommand,
-        AgentHubPlanStatusCommand? PlanStatusCommand,
-        AgentHubTeamStatusCommand? TeamStatusCommand,
-        AgentHubWorkflowCommand? WorkflowCommand,
-        AgentHubCommandParseError? Error)
+    private static bool HasStringProperty(JsonElement root, string propertyName)
     {
+        return root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String;
+    }
+
+    private sealed class ValidationResult
+    {
+        public ValidationResult(
+            AgentHubSendMessageCommand? sendMessageCommand,
+            AgentHubPlanStatusCommand? planStatusCommand,
+            AgentHubTeamStatusCommand? teamStatusCommand,
+            AgentHubWorkflowCommand? workflowCommand,
+            AgentHubCommandParseError? error)
+            : this(
+                sendMessageCommand,
+                planStatusCommand,
+                teamStatusCommand,
+                workflowCommand,
+                null,
+                error)
+        {
+        }
+
+        public ValidationResult(
+            AgentHubSendMessageCommand? sendMessageCommand,
+            AgentHubPlanStatusCommand? planStatusCommand,
+            AgentHubTeamStatusCommand? teamStatusCommand,
+            AgentHubWorkflowCommand? workflowCommand,
+            AgentHubPairNegotiationCommand? pairNegotiationCommand,
+            AgentHubCommandParseError? error)
+        {
+            SendMessageCommand = sendMessageCommand;
+            PlanStatusCommand = planStatusCommand;
+            TeamStatusCommand = teamStatusCommand;
+            WorkflowCommand = workflowCommand;
+            PairNegotiationCommand = pairNegotiationCommand;
+            Error = error;
+        }
+
+        public AgentHubSendMessageCommand? SendMessageCommand { get; }
+
+        public AgentHubPlanStatusCommand? PlanStatusCommand { get; }
+
+        public AgentHubTeamStatusCommand? TeamStatusCommand { get; }
+
+        public AgentHubWorkflowCommand? WorkflowCommand { get; }
+
+        public AgentHubPairNegotiationCommand? PairNegotiationCommand { get; }
+
+        public AgentHubCommandParseError? Error { get; }
+
         public static ValidationResult Invalid(int index, string block, string message)
         {
             return new ValidationResult(

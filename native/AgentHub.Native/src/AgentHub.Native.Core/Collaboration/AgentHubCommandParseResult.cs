@@ -5,4 +5,5 @@ public sealed record AgentHubCommandParseResult(
     IReadOnlyList<AgentHubPlanStatusCommand> PlanStatusCommands,
     IReadOnlyList<AgentHubTeamStatusCommand> TeamStatusCommands,
     IReadOnlyList<AgentHubWorkflowCommand> WorkflowCommands,
+    IReadOnlyList<AgentHubPairNegotiationCommand> PairNegotiationCommands,
     IReadOnlyList<AgentHubCommandParseError> Errors);

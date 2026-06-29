@@ -29,6 +29,7 @@
 - [x] provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
+- [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；当前只记录命令可见性，不执行完整 pair negotiation 状态机。
 
 ## 后续任务
 

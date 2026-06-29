@@ -65,6 +65,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
             [],
             [],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -87,6 +88,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
                 new AgentHubPlanStatusCommand("approve_task", "P001", "T001", "Looks good"),
                 new AgentHubPlanStatusCommand("pause_plan", "P001", null, "Need user decision")
             ],
+            [],
             [],
             [],
             [],
@@ -120,6 +122,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
             ],
             [],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -150,6 +153,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
                 new AgentHubWorkflowCommand("done", null)
             ],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -167,11 +171,57 @@ public sealed class CollaborationEventStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Appends_pair_negotiation_commands_as_agenthub_timeline_messages()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [],
+            [],
+            [],
+            [
+                new AgentHubPairNegotiationCommand(
+                    "continue",
+                    2,
+                    "Please review version 2.",
+                    null,
+                    "codex",
+                    "Version 2 adds tests.",
+                    "revise"),
+                new AgentHubPairNegotiationCommand(
+                    "accept",
+                    2,
+                    null,
+                    "negotiation/proposal-v2.md",
+                    null,
+                    "Version 2 is ready.",
+                    "accepted")
+            ],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.All(events, item =>
+        {
+            Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+            Assert.Equal("agenthub", item.ProfileId);
+            Assert.Equal("pair-negotiation", item.TargetProfileId);
+        });
+        Assert.Equal("[continue v2] Please review version 2.", events[0].Message);
+        Assert.Equal("[accept v2] Version 2 is ready.", events[1].Message);
+    }
+
+    [Fact]
     public async Task Appends_parse_and_dispatch_errors_as_agenthub_command_error_events()
     {
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
         var result = new AgentHubCommandDispatchResult(
             0,
+            [],
             [],
             [],
             [],

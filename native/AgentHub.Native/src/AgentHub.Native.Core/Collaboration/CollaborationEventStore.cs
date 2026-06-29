@@ -94,6 +94,17 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 cancellationToken).ConfigureAwait(false));
         }
 
+        foreach (var command in result.PairNegotiationCommands)
+        {
+            events.Add(await AppendUserMessageAsync(
+                new CollaborationUserMessage(
+                    workspacePath,
+                    "agenthub",
+                    "pair-negotiation",
+                    FormatPairNegotiationCommand(command)),
+                cancellationToken).ConfigureAwait(false));
+        }
+
         foreach (var error in result.ParseErrors)
         {
             events.Add(await AppendCommandErrorAsync(
@@ -152,6 +163,21 @@ public sealed class CollaborationEventStore(string rootDirectory)
     {
         var message = string.IsNullOrWhiteSpace(command.Message) ? "completed" : command.Message;
         return $"[{command.Action}] {message}";
+    }
+
+    private static string FormatPairNegotiationCommand(AgentHubPairNegotiationCommand command)
+    {
+        var version = command.ProposalVersion.ToString("0.##");
+        var message = command.Action switch
+        {
+            "continue" when !string.IsNullOrWhiteSpace(command.Message) => command.Message,
+            "continue" when !string.IsNullOrWhiteSpace(command.Summary) => command.Summary,
+            "continue" when !string.IsNullOrWhiteSpace(command.ArtifactPath) => command.ArtifactPath,
+            "accept" when !string.IsNullOrWhiteSpace(command.Summary) => command.Summary,
+            "accept" when !string.IsNullOrWhiteSpace(command.ArtifactPath) => command.ArtifactPath,
+            _ => "updated"
+        };
+        return $"[{command.Action} v{version}] {message}";
     }
 
     public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(

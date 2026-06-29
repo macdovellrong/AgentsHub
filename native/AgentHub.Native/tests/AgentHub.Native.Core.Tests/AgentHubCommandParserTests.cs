@@ -145,6 +145,52 @@ public sealed class AgentHubCommandParserTests
     }
 
     [Fact]
+    public void Parses_pair_negotiation_commands_without_routing_them()
+    {
+        const string text =
+            "<agenthub>{\"action\":\"continue\",\"proposal_version\":2,\"message\":\"Please review version 2.\",\"message_to\":\"codex\",\"summary\":\"Version 2 adds tests.\",\"stance\":\"revise\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"accept\",\"proposal_version\":2,\"summary\":\"Version 2 is ready.\",\"artifact_path\":\"negotiation/proposal-v2.md\",\"stance\":\"accepted\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"continue\",\"proposal_version\":3,\"artifact_path\":\"negotiation/proposal-v3.md\",\"message_to\":\"claude\",\"summary\":\"Version 3 is attached.\"}</agenthub>";
+
+        var result = AgentHubCommandParser.Parse(text);
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.SendMessages);
+        Assert.Collection(
+            result.PairNegotiationCommands,
+            command =>
+            {
+                Assert.Equal("continue", command.Action);
+                Assert.Equal(2, command.ProposalVersion);
+                Assert.Equal("Please review version 2.", command.Message);
+                Assert.Null(command.ArtifactPath);
+                Assert.Equal("codex", command.MessageTo);
+                Assert.Equal("Version 2 adds tests.", command.Summary);
+                Assert.Equal("revise", command.Stance);
+            },
+            command =>
+            {
+                Assert.Equal("accept", command.Action);
+                Assert.Equal(2, command.ProposalVersion);
+                Assert.Null(command.Message);
+                Assert.Equal("negotiation/proposal-v2.md", command.ArtifactPath);
+                Assert.Null(command.MessageTo);
+                Assert.Equal("Version 2 is ready.", command.Summary);
+                Assert.Equal("accepted", command.Stance);
+            },
+            command =>
+            {
+                Assert.Equal("continue", command.Action);
+                Assert.Equal(3, command.ProposalVersion);
+                Assert.Null(command.Message);
+                Assert.Equal("negotiation/proposal-v3.md", command.ArtifactPath);
+                Assert.Equal("claude", command.MessageTo);
+                Assert.Equal("Version 3 is attached.", command.Summary);
+                Assert.Null(command.Stance);
+            });
+    }
+
+    [Fact]
     public void Allows_agenthub_close_tag_inside_json_strings()
     {
         const string text =
@@ -182,6 +228,13 @@ public sealed class AgentHubCommandParserTests
     [InlineData("<agenthub>{\"action\":\"complete_task\",\"task_id\":\"T-001\",\"summary\":12}</agenthub>", "complete_task command optional field \"summary\" must be a string")]
     [InlineData("<agenthub>{\"action\":\"ask_user\"}</agenthub>", "ask_user command requires string field \"message\"")]
     [InlineData("<agenthub>{\"action\":\"done\",\"message\":true}</agenthub>", "done command optional field \"message\" must be a string")]
+    [InlineData("<agenthub>{\"action\":\"continue\",\"message\":\"Missing proposal version\"}</agenthub>", "continue command requires numeric field \"proposal_version\"")]
+    [InlineData("<agenthub>{\"action\":\"continue\",\"proposal_version\":1}</agenthub>", "continue command requires string field \"message\" or \"artifact_path\"")]
+    [InlineData("<agenthub>{\"action\":\"continue\",\"proposal_version\":1,\"message\":12}</agenthub>", "continue command requires string field \"message\" or \"artifact_path\"")]
+    [InlineData("<agenthub>{\"action\":\"continue\",\"proposal_version\":1,\"message\":\"Review\",\"stance\":true}</agenthub>", "continue command optional field \"stance\" must be a string")]
+    [InlineData("<agenthub>{\"action\":\"accept\",\"proposal_version\":1}</agenthub>", "accept command requires string field \"summary\"")]
+    [InlineData("<agenthub>{\"action\":\"accept\",\"proposal_version\":\"1\",\"summary\":\"Wrong type\"}</agenthub>", "accept command requires numeric field \"proposal_version\"")]
+    [InlineData("<agenthub>{\"action\":\"accept\",\"proposal_version\":1,\"summary\":\"Accepted\",\"artifact_path\":false}</agenthub>", "accept command optional field \"artifact_path\" must be a string")]
     public void Rejects_invalid_send_message_commands(string text, string expectedMessage)
     {
         var result = AgentHubCommandParser.Parse(text);
