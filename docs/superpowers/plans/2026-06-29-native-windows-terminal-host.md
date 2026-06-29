@@ -45,6 +45,7 @@
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。
+- [x] native Core 提供 append-only `AgentConversationStore`，状态保存到 `<workspace>/.agenthub/conversations/conversations.jsonl`，支持 create/update/list、坏 JSONL 行容错和最新状态去重。
 
 ## 后续任务
 

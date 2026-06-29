@@ -164,6 +164,11 @@ native task-plan 事件保存位置：
 <workspace>/.agenthub/task-plans/native/<planId>/events.jsonl
 ```
 
+native conversation 状态保存位置：
+```text
+<workspace>/.agenthub/conversations/conversations.jsonl
+```
+
 Host shell 等本机设置保存位置：
 
 ```text
