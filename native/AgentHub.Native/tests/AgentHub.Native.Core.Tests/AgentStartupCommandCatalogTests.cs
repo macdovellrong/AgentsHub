@@ -25,6 +25,17 @@ public sealed class AgentStartupCommandCatalogTests
     }
 
     [Fact]
+    public void Builds_managed_agent_start_commands_in_default_ui_order()
+    {
+        var commands = AgentStartupCommandCatalog.BuildManagedAgentStartCommands();
+
+        Assert.Equal(
+            [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
+            commands.Select(command => command.AgentKind));
+        Assert.All(commands, command => Assert.Empty(command.Arguments));
+    }
+
+    [Fact]
     public void Rejects_resume_for_agents_without_a_resume_preset()
     {
         var ex = Assert.Throws<NotSupportedException>(() =>

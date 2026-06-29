@@ -268,6 +268,16 @@ public partial class MainWindow : Window
         await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.Gemini, AgentStartupMode.Start));
     }
 
+    private async void StartManagedAgents_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var command in AgentStartupCommandCatalog.BuildManagedAgentStartCommands())
+        {
+            await StartAgentAsync(command);
+        }
+
+        StatusTextBlock.Text = "Started managed agents";
+    }
+
     private async void StartPowerShell_Click(object sender, RoutedEventArgs e)
     {
         await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.PowerShell, AgentStartupMode.Start));

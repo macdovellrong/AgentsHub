@@ -2,6 +2,16 @@ namespace AgentHub.Native.Core.Profiles;
 
 public static class AgentStartupCommandCatalog
 {
+    public static IReadOnlyList<AgentStartupCommand> BuildManagedAgentStartCommands()
+    {
+        return
+        [
+            Build(AgentKind.Codex, AgentStartupMode.Start),
+            Build(AgentKind.Claude, AgentStartupMode.Start),
+            Build(AgentKind.Gemini, AgentStartupMode.Start)
+        ];
+    }
+
     public static AgentStartupCommand Build(AgentKind agentKind, AgentStartupMode mode)
     {
         return (agentKind, mode) switch

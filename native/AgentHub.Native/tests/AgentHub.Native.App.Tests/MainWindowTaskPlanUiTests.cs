@@ -189,6 +189,19 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("ReloadSessionList(sessionId)", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_can_start_all_managed_agents_for_current_workspace()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Content=\"Start Agents\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StartManagedAgents_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("StartManagedAgents_Click", code, StringComparison.Ordinal);
+        Assert.Contains("AgentStartupCommandCatalog.BuildManagedAgentStartCommands()", code, StringComparison.Ordinal);
+        Assert.Contains("Started managed agents", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
