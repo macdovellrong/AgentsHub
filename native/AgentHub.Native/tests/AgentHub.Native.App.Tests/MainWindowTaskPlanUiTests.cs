@@ -190,6 +190,17 @@ public sealed class MainWindowTaskPlanUiTests
     }
 
     [Fact]
+    public async Task Main_window_focuses_terminal_when_session_is_selected()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("TerminalHostGrid.Children.Add(session.Terminal)", code, StringComparison.Ordinal);
+        Assert.Contains("FocusTerminal(session)", code, StringComparison.Ordinal);
+        Assert.Contains("session.Terminal.Focus()", code, StringComparison.Ordinal);
+        Assert.Contains("Keyboard.Focus(session.Terminal)", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Main_window_can_start_all_managed_agents_for_current_workspace()
     {
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));

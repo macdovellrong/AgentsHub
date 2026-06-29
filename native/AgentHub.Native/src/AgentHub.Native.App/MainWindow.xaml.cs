@@ -1408,6 +1408,13 @@ public partial class MainWindow : Window
         CurrentSessionTextBlock.Text = session.DisplayName;
         TerminalHostGrid.Children.Clear();
         TerminalHostGrid.Children.Add(session.Terminal);
+        FocusTerminal(session);
+    }
+
+    private static void FocusTerminal(SessionViewModel session)
+    {
+        session.Terminal.Focus();
+        Keyboard.Focus(session.Terminal);
     }
 
     private void ReloadSessionList(string? selectSessionId = null)
