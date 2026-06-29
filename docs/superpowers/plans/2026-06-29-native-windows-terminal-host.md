@@ -57,6 +57,7 @@
 - [x] native App 提供 Conversations 基础 UI 入口：输入 topic 和 participants 后，可直接启动 manager、roundtable 或 pair negotiation conversation。
 - [x] native App 提供 conversation 列表、详情和打开目录入口；切换 workspace、启动 conversation 或当前 workspace 收到 hook 回传后会刷新状态。
 - [x] native Core 和 App 支持用户手动 Pause/Resume/Stop conversation 编排状态，并把状态变化写入 Collaboration timeline。
+- [x] 协作层迁移已落到 native Core/App：conversation/task-plan 编排逻辑在 native Core 中执行，输入仍走 `AgentInputRouter`，hook 结果仍走 `AgentHookReceiver` 和 native hook pipeline。
 
 ## 后续任务
 
@@ -77,12 +78,6 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 - 检查鼠标滚轮和触摸板滚动。
 - 使用 AgentHub 输入栏发送一行文本。
 - 等待 Codex 产生最终消息，确认 Hook 消息列表收到回传。
-
-### Task 2: 协作层迁移
-
-- 把现有 Electron 版 conversation/task-plan 编排逻辑迁入 native Core，或先通过 IPC/HTTP 复用现有服务。
-- 输入仍走 `AgentInputRouter`。
-- 结果仍走 `AgentHookReceiver`。
 
 ## 验证命令
 
