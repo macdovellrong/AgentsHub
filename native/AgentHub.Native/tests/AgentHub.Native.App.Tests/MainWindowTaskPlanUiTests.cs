@@ -159,6 +159,19 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Opened native data folder", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_exposes_current_workspace_folder_open_action()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Content=\"Open\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OpenWorkspaceFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("OpenWorkspaceFolder_Click", code, StringComparison.Ordinal);
+        Assert.Contains("WorkspaceDirectoryValidator.Validate(CurrentWorkspacePath())", code, StringComparison.Ordinal);
+        Assert.Contains("Opened workspace folder", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

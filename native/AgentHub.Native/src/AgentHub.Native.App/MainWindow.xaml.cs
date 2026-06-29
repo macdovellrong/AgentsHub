@@ -155,6 +155,23 @@ public partial class MainWindow : Window
             : $"Workspace selected: {workspace.Name}";
     }
 
+    private void OpenWorkspaceFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var validation = WorkspaceDirectoryValidator.Validate(CurrentWorkspacePath());
+        if (!validation.IsValid)
+        {
+            StatusTextBlock.Text = validation.ErrorMessage ?? "No workspace selected";
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = validation.Path!,
+            UseShellExecute = true
+        });
+        StatusTextBlock.Text = $"Opened workspace folder: {validation.Path}";
+    }
+
     private async void RemoveWorkspace_Click(object sender, RoutedEventArgs e)
     {
         var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
