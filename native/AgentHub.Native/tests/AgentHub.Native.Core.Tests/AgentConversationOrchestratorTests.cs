@@ -425,6 +425,155 @@ public sealed class AgentConversationOrchestratorTests : IDisposable
         Assert.Equal("[roundtable_completed] Final summary.", item.Message);
     }
 
+    [Fact]
+    public async Task Starts_pair_negotiation_conversation_by_sending_prompt_to_first_participant()
+    {
+        var workspacePath = CreateWorkspace();
+        var conversationStore = new AgentConversationStore();
+        var timelineStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var inputRouter = new AgentInputRouter();
+        var registry = new AgentSessionRegistry();
+        var claudeSession = new RecordingTerminalSession("claude-1");
+        var codexSession = new RecordingTerminalSession("codex-1");
+        inputRouter.Register(claudeSession);
+        inputRouter.Register(codexSession);
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", workspacePath, DateTimeOffset.Parse("2026-06-29T10:01:00Z")));
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.Parse("2026-06-29T10:02:00Z")));
+        var orchestrator = new AgentConversationOrchestrator(conversationStore, timelineStore, inputRouter, registry);
+
+        var conversation = await orchestrator.StartPairNegotiationAsync(new StartPairNegotiationConversationRequest(
+            workspacePath,
+            "Agree on native terminal architecture",
+            ["claude", "codex"],
+            ConversationId: "pair-1",
+            MaxRounds: 2));
+
+        Assert.Equal("pair-1", conversation.Id);
+        Assert.Equal("pair_negotiation", conversation.Mode);
+        Assert.Equal("running", conversation.Status);
+        Assert.Equal(["claude", "codex"], conversation.ParticipantProfileIds);
+        Assert.Equal(1, conversation.CurrentStep);
+        Assert.Equal(4, conversation.MaxSteps);
+        Assert.Equal("\x1b[200~", claudeSession.Writes[0]);
+        Assert.Contains("AgentHub pair negotiation conversation.", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Conversation: pair-1", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Topic: Agree on native terminal architecture", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Participants: claude <-> codex", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("\"action\":\"continue\"", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("\"action\":\"accept\"", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", claudeSession.Writes[2]);
+        Assert.Equal("\r", claudeSession.Writes[3]);
+        Assert.Empty(codexSession.Writes);
+        var item = Assert.Single(await timelineStore.ListAsync(workspacePath));
+        Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+        Assert.Equal("agenthub", item.ProfileId);
+        Assert.Equal("claude", item.TargetProfileId);
+        Assert.Equal("pair-1", item.ConversationId);
+        Assert.Contains("Pair negotiation started", item.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Continues_pair_negotiation_to_the_other_participant()
+    {
+        var workspacePath = CreateWorkspace();
+        var conversationStore = new AgentConversationStore();
+        var timelineStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var inputRouter = new AgentInputRouter();
+        var registry = new AgentSessionRegistry();
+        var codexSession = new RecordingTerminalSession("codex-1");
+        inputRouter.Register(codexSession);
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.Parse("2026-06-29T10:02:00Z")));
+        await conversationStore.CreateAsync(
+            workspacePath,
+            new CreateAgentConversationRequest(
+                "pair-1",
+                "pair_negotiation",
+                null,
+                ["claude", "codex"],
+                "Agree on native terminal architecture",
+                CurrentStep: 1,
+                MaxSteps: 4));
+        var orchestrator = new AgentConversationOrchestrator(conversationStore, timelineStore, inputRouter, registry);
+
+        var handled = await orchestrator.HandleAgentOutputAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"continue\",\"proposal_version\":1,\"summary\":\"Use native host.\",\"message\":\"Please review the native host plan.\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude",
+            ConversationId: "pair-1"));
+
+        Assert.True(handled);
+        Assert.Equal("\x1b[200~", codexSession.Writes[0]);
+        Assert.Contains("AgentHub pair negotiation conversation.", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Conversation: pair-1", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Previous speaker: claude", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Proposal version: 1", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Use native host.", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Please review the native host plan.", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", codexSession.Writes[2]);
+        Assert.Equal("\r", codexSession.Writes[3]);
+        var latest = Assert.Single(await conversationStore.ListAsync(workspacePath));
+        Assert.Equal(2, latest.CurrentStep);
+        var item = Assert.Single(await timelineStore.ListAsync(workspacePath));
+        Assert.Equal("agenthub", item.ProfileId);
+        Assert.Equal("codex", item.TargetProfileId);
+        Assert.Equal("pair-1", item.ConversationId);
+        Assert.Equal("[continue v1] Use native host.", item.Message);
+    }
+
+    [Fact]
+    public async Task Completes_pair_negotiation_when_both_participants_accept_same_version()
+    {
+        var workspacePath = CreateWorkspace();
+        var conversationStore = new AgentConversationStore();
+        var timelineStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        await conversationStore.CreateAsync(
+            workspacePath,
+            new CreateAgentConversationRequest(
+                "pair-1",
+                "pair_negotiation",
+                null,
+                ["claude", "codex"],
+                "Agree on native terminal architecture",
+                CurrentStep: 2,
+                MaxSteps: 4));
+        await timelineStore.AppendUserMessageAsync(new CollaborationUserMessage(
+            workspacePath,
+            "claude",
+            "pair-negotiation",
+            "[accept v2] Claude accepts.",
+            ConversationId: "pair-1"));
+        var orchestrator = new AgentConversationOrchestrator(
+            conversationStore,
+            timelineStore,
+            new AgentInputRouter(),
+            new AgentSessionRegistry());
+
+        var handled = await orchestrator.HandleAgentOutputAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"accept\",\"proposal_version\":2,\"summary\":\"Codex also accepts.\"}</agenthub>",
+            "codex",
+            "codex-1",
+            "run-2",
+            "codex",
+            ConversationId: "pair-1"));
+
+        Assert.True(handled);
+        var latest = Assert.Single(await conversationStore.ListAsync(workspacePath));
+        Assert.Equal("completed", latest.Status);
+        Assert.Equal(2, latest.CurrentStep);
+        var events = await timelineStore.ListAsync(workspacePath);
+        Assert.Equal(3, events.Count);
+        Assert.Equal("codex", events[1].ProfileId);
+        Assert.Equal("pair-negotiation", events[1].TargetProfileId);
+        Assert.Equal("[accept v2] Codex also accepts.", events[1].Message);
+        Assert.Equal("agenthub", events[2].ProfileId);
+        Assert.Equal("workflow", events[2].TargetProfileId);
+        Assert.Equal("[pair_negotiation_completed v2] Codex also accepts.", events[2].Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
