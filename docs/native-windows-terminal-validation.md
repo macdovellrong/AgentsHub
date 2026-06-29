@@ -64,7 +64,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`。
 
 ## 直接运行开发版
 
@@ -141,20 +141,22 @@ artifacts/native/win-x64/scripts/hooks/agenthub_gemini_after_agent.py
 
 1. workspace 可以添加、选中和移除。
 2. Host shell 默认是 PowerShell，并且可以切换到 cmd。
-3. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
-4. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
-5. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
-6. Codex TUI 刚进入时是否有终端滚动条。
-7. 鼠标滚轮是否能向上翻历史。
-8. 触摸板双指滚动是否能向上翻历史。
-9. 底部输入框按 Enter 会发送。
-10. 底部输入框按 Shift+Enter 会换行，不会发送。
-11. 多行输入能被 Codex 收到。
-12. `@codex message` 可以路由到最新 Codex session。
-13. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
-14. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
-15. `Stop selected` 可以停止当前 session。
-16. `Stop all` 可以停止全部 session。
+3. `Run diagnostics` 能生成报告，状态栏显示 `Diagnostics written: ...`。
+4. `Open data` 能打开 native 数据目录，并能在 `diagnostics/` 里找到刚生成的报告。
+5. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
+6. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
+7. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
+8. Codex TUI 刚进入时是否有终端滚动条。
+9. 鼠标滚轮是否能向上翻历史。
+10. 触摸板双指滚动是否能向上翻历史。
+11. 底部输入框按 Enter 会发送。
+12. 底部输入框按 Shift+Enter 会换行，不会发送。
+13. 多行输入能被 Codex 收到。
+14. `@codex message` 可以路由到最新 Codex session。
+15. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
+16. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
+17. `Stop selected` 可以停止当前 session。
+18. `Stop all` 可以停止全部 session。
 
 ## 需要回传的信息
 
@@ -176,6 +178,8 @@ py -3.11 --version
 ```powershell
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
+
+也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/` 目录回传最新报告。
 
 同时说明：
 

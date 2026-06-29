@@ -67,6 +67,7 @@
 - [x] native 诊断报告会采集 Windows Terminal 包信息、settings 文件存在性和 Console Host 注册表关键项，方便对比不同电脑的滚动/终端环境差异。
 - [x] native 诊断报告会采集 `Win32_PointingDevice` 和 Precision Touchpad 设置，方便对比笔记本触摸板/指针设备对滚动行为的影响。
 - [x] native App 和启动脚本提供 `Scroll Test` / `-Agent scrolltest`，用普通 PowerShell 输出 240 行文本作为 Codex 以外的终端滚动对照组。
+- [x] native UI 提供 `Run diagnostics`，可用当前 workspace 直接生成诊断报告到 native data 的 `diagnostics/` 目录。
 
 ## 后续任务
 
@@ -83,6 +84,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 
 - 启动 Codex。
 - 启动 Scroll Test，确认普通 scrollback 是否能滚动。
+- 点击 Run diagnostics，确认能生成报告。
 - 执行或进入 resume。
 - 检查滚动条是否出现。
 - 检查鼠标滚轮和触摸板滚动。

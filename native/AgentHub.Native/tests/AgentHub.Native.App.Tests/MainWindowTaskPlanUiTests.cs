@@ -154,9 +154,14 @@ public sealed class MainWindowTaskPlanUiTests
 
         Assert.Contains("Content=\"Open data\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OpenNativeDataFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Run diagnostics\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"RunNativeDiagnostics_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("OpenNativeDataFolder_Click", code, StringComparison.Ordinal);
+        Assert.Contains("RunNativeDiagnostics_Click", code, StringComparison.Ordinal);
+        Assert.Contains("NativeDiagnosticsLauncher.RunAsync", code, StringComparison.Ordinal);
         Assert.Contains("NativeDiagnosticsPaths.ResolveDataDirectory()", code, StringComparison.Ordinal);
         Assert.Contains("Opened native data folder", code, StringComparison.Ordinal);
+        Assert.Contains("Diagnostics written:", code, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -734,6 +734,43 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void RunNativeDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            StatusTextBlock.Text = "Running diagnostics...";
+            var workspaceValidation = WorkspaceDirectoryValidator.Validate(CurrentWorkspacePath());
+            var workspacePath = workspaceValidation.IsValid ? workspaceValidation.Path : null;
+            var result = await NativeDiagnosticsLauncher.RunAsync(
+                ResolveNativeDataDirectory(),
+                workspacePath,
+                ResolveHookPythonCommand());
+            StatusTextBlock.Text = result.ExitCode == 0
+                ? $"Diagnostics written: {result.OutputPath}"
+                : $"Diagnostics failed ({result.ExitCode}): {FirstNonEmptyLine(result.StandardError, result.StandardOutput)}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Run diagnostics failed: {ex.Message}";
+        }
+    }
+
+    private static string FirstNonEmptyLine(params string[] values)
+    {
+        foreach (var value in values)
+        {
+            var line = value
+                .Split(["\r\n", "\n"], StringSplitOptions.None)
+                .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                return line.Trim();
+            }
+        }
+
+        return "no details";
+    }
+
     private async void TaskPlanListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         await ReloadSelectedTaskPlanDetailsAsync();
