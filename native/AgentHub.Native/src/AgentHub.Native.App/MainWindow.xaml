@@ -242,6 +242,12 @@
                             MinHeight="28"
                             MinWidth="118"
                             Margin="10,0,0,0" />
+                    <Button DockPanel.Dock="Right"
+                            Content="Write validation"
+                            Click="WriteNativeValidationReport_Click"
+                            MinHeight="28"
+                            MinWidth="118"
+                            Margin="10,0,0,0" />
                     <TextBlock x:Name="CurrentSessionTextBlock"
                                Text="No session"
                                Foreground="#F2F6FA"

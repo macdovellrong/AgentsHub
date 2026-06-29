@@ -755,6 +755,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void WriteNativeValidationReport_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dataDirectory = ResolveNativeDataDirectory();
+            var workspaceValidation = WorkspaceDirectoryValidator.Validate(CurrentWorkspacePath());
+            var workspacePath = workspaceValidation.IsValid
+                ? workspaceValidation.Path
+                : CurrentWorkspacePath();
+            var outputPath = NativeManualValidationReportWriter.WriteTemplate(
+                dataDirectory,
+                new NativeManualValidationReportRequest(
+                    workspacePath,
+                    NativeDiagnosticsLauncher.ResolveLatestReportPointerPath(dataDirectory),
+                    Path.Combine(dataDirectory, "diagnostics", "latest-laptop-validation.txt"),
+                    ResolveHookLogPath(),
+                    sessions.Values
+                        .OrderBy(session => session.Descriptor.StartedAt)
+                        .Select(session => AgentSessionDisplayFormatter.Format(session.Descriptor))
+                        .ToArray()));
+            StatusTextBlock.Text = $"Validation checklist written: {outputPath}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Write validation checklist failed: {ex.Message}";
+        }
+    }
+
     private static string FirstNonEmptyLine(params string[] values)
     {
         foreach (var value in values)

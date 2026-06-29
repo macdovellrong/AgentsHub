@@ -156,20 +156,21 @@ artifacts/native/win-x64/scripts/hooks/agenthub_gemini_after_agent.py
 2. Host shell 默认是 PowerShell，并且可以切换到 cmd。
 3. `Run diagnostics` 能生成报告，状态栏显示 `Diagnostics written: ...`。
 4. `Open data` 能打开 native 数据目录，并能在 `diagnostics/` 里找到刚生成的报告和 `latest-diagnostics.txt`。
-5. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
-6. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
-7. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
-8. Codex TUI 刚进入时是否有终端滚动条。
-9. 鼠标滚轮是否能向上翻历史。
-10. 触摸板双指滚动是否能向上翻历史。
-11. 底部输入框按 Enter 会发送。
-12. 底部输入框按 Shift+Enter 会换行，不会发送。
-13. 多行输入能被 Codex 收到。
-14. `@codex message` 可以路由到最新 Codex session。
-15. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
-16. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
-17. `Stop selected` 可以停止当前 session。
-18. `Stop all` 可以停止全部 session。
+5. `Write validation` 能生成 `native-manual-validation-*.md`，状态栏显示 `Validation checklist written: ...`。
+6. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
+7. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
+8. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
+9. Codex TUI 刚进入时是否有终端滚动条。
+10. 鼠标滚轮是否能向上翻历史。
+11. 触摸板双指滚动是否能向上翻历史。
+12. 底部输入框按 Enter 会发送。
+13. 底部输入框按 Shift+Enter 会换行，不会发送。
+14. 多行输入能被 Codex 收到。
+15. `@codex message` 可以路由到最新 Codex session。
+16. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
+17. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
+18. `Stop selected` 可以停止当前 session。
+19. `Stop all` 可以停止全部 session。
 
 ## 需要回传的信息
 
@@ -193,7 +194,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
-也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/latest-diagnostics.txt` 读取最新报告路径并回传对应报告。
+也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/latest-diagnostics.txt` 读取最新报告路径并回传对应报告。跑完手工验证后，点击 `Write validation`，在 `diagnostics/` 目录找到最新的 `native-manual-validation-*.md`，勾选结果并一起回传。
 
 如果使用一键验证脚本，则回传：
 

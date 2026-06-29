@@ -167,6 +167,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 19. Sessions 默认勾选 `Current`，只显示当前 workspace 的 session，切换 workspace 时会自动刷新；取消勾选后可以查看所有 workspace 的 session。可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 20. 顶部 `Open data` 会打开本机 native 数据目录，方便查看 `workspaces.json`、`settings.json`、`events/` 和 `hooks.jsonl` 等诊断文件。
 21. 顶部 `Run diagnostics` 会用当前 workspace、hook Python 命令和 `agents` Agent 选择生成诊断报告，默认保存到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`，并更新 `latest-diagnostics.txt`。
+22. 顶部 `Write validation` 会在同一个 `diagnostics/` 目录生成 `native-manual-validation-*.md`，写入当前 workspace、最新诊断指针、hook log 路径、当前 session 列表和需要人工勾选的滚动/输入/hook 验证项。
 
 workspace 列表保存位置：
 
@@ -239,6 +240,8 @@ Agent hook 诊断日志位置：
 若 `Scroll Test` 可以滚而 Codex 不能滚，优先排查 Codex TUI；若 `Scroll Test` 也不能滚，优先排查 native 终端控件、Windows 输入设备或系统滚动设置。
 
 如果需要回传环境信息，点击 `Run diagnostics`，状态栏会显示生成的报告路径；也可以点击 `Open data` 后进入 `diagnostics` 目录，查看 `latest-diagnostics.txt` 找到最新报告。
+
+如果需要回传手工验证结果，跑完 Scroll Test、Resume Codex、输入和 hook 检查后点击 `Write validation`，然后在 `Open data` 的 `diagnostics/` 目录中找到最新的 `native-manual-validation-*.md`，勾选结果并回传。
 
 如果是从命令行跑 `validate-native-laptop.ps1`，回传 `artifacts/native-diagnostics/latest-laptop-validation.txt` 以及其中 `report:` 指向的诊断报告。
 
