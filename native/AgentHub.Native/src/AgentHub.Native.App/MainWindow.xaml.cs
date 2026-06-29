@@ -24,7 +24,9 @@ public partial class MainWindow : Window
     private readonly AgentTaskStore taskStore = new();
     private readonly AgentTaskPlanEventStore taskPlanEventStore = new();
     private readonly AgentTaskPlanStore taskPlanStore = new();
+    private readonly AgentConversationStore conversationStore = new();
     private readonly AgentTaskPlanService taskPlanService;
+    private readonly AgentHookProcessingPipeline hookProcessingPipeline;
     private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private readonly NativeAppStartupOptions startupOptions;
@@ -46,6 +48,20 @@ public partial class MainWindow : Window
             collaborationEventStore,
             inputRouter,
             sessionRegistry);
+        hookProcessingPipeline = new AgentHookProcessingPipeline(
+            collaborationEventStore,
+            new AgentHookEventProcessor(
+                collaborationEventStore,
+                new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry)),
+                new AgentTeamStore(),
+                taskStore,
+                taskPlanEventStore),
+            taskPlanService,
+            new AgentConversationOrchestrator(
+                conversationStore,
+                collaborationEventStore,
+                inputRouter,
+                sessionRegistry));
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -190,29 +206,7 @@ public partial class MainWindow : Window
 
     private async Task<AgentHubCommandDispatchResult> ProcessHookEventAsync(AgentHookEvent hookEvent)
     {
-        var processor = new AgentHookEventProcessor(
-            collaborationEventStore,
-            new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry)),
-            new AgentTeamStore(),
-            taskStore,
-            taskPlanEventStore);
-        var result = await processor.ProcessAsync(hookEvent);
-        await taskPlanService.RecordManagerDispatchResultAsync(
-            hookEvent.Workspace,
-            hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
-            result,
-            result.SourceEventId);
-        await taskPlanService.RecordHookCompletionAsync(
-            hookEvent.Workspace,
-            new AgentTaskPlanHookCompletionInput(
-                hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
-                hookEvent.Message,
-                hookEvent.SessionId,
-                hookEvent.RunId,
-                hookEvent.PlanId,
-                hookEvent.TaskId,
-                SourceEventId: result.SourceEventId));
-        return result;
+        return await hookProcessingPipeline.ProcessAsync(hookEvent);
     }
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)

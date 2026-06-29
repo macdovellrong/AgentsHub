@@ -85,25 +85,23 @@ public sealed class AgentConversationOrchestrator(
         return updated;
     }
 
-    public async Task HandleAgentOutputAsync(
+    public async Task<bool> CanHandleAgentOutputAsync(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(hookEvent.ConversationId) ||
-            string.IsNullOrWhiteSpace(hookEvent.ProfileId))
-        {
-            return;
-        }
+        return await FindManagedSupervisorConversationAsync(hookEvent, cancellationToken)
+            .ConfigureAwait(false) is not null;
+    }
 
-        var conversation = (await conversationStore.ListAsync(hookEvent.Workspace, cancellationToken)
-                .ConfigureAwait(false))
-            .FirstOrDefault(item => string.Equals(item.Id, hookEvent.ConversationId, StringComparison.Ordinal));
-        if (conversation is null ||
-            conversation.Mode != "manager" ||
-            conversation.Status != "running" ||
-            !string.Equals(conversation.SupervisorProfileId, hookEvent.ProfileId, StringComparison.OrdinalIgnoreCase))
+    public async Task<bool> HandleAgentOutputAsync(
+        AgentHookEvent hookEvent,
+        CancellationToken cancellationToken = default)
+    {
+        var conversation = await FindManagedSupervisorConversationAsync(hookEvent, cancellationToken)
+            .ConfigureAwait(false);
+        if (conversation is null)
         {
-            return;
+            return false;
         }
 
         var parsed = AgentHubCommandParser.Parse(hookEvent.Message);
@@ -133,6 +131,27 @@ public sealed class AgentConversationOrchestrator(
                 command,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        return true;
+    }
+
+    private async Task<AgentConversation?> FindManagedSupervisorConversationAsync(
+        AgentHookEvent hookEvent,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(hookEvent.ConversationId) ||
+            string.IsNullOrWhiteSpace(hookEvent.ProfileId))
+        {
+            return null;
+        }
+
+        return (await conversationStore.ListAsync(hookEvent.Workspace, cancellationToken)
+                .ConfigureAwait(false))
+            .FirstOrDefault(item =>
+                string.Equals(item.Id, hookEvent.ConversationId, StringComparison.Ordinal) &&
+                item.Mode == "manager" &&
+                item.Status == "running" &&
+                string.Equals(item.SupervisorProfileId, hookEvent.ProfileId, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<AgentConversation> RouteManagerSendCommandAsync(

@@ -42,12 +42,11 @@ public sealed class MainWindowTaskPlanUiTests
     {
         var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("RecordManagerDispatchResultAsync", code, StringComparison.Ordinal);
-        Assert.Contains("RecordHookCompletionAsync", code, StringComparison.Ordinal);
-        Assert.Contains("hookEvent.ProfileId ?? hookEvent.Source ?? \"agent\"", code, StringComparison.Ordinal);
-        Assert.Matches(@"RecordManagerDispatchResultAsync\([\s\S]*?result,\s*result\.SourceEventId", code);
-        Assert.Matches(@"AgentTaskPlanHookCompletionInput\([\s\S]*?SourceEventId:\s*result\.SourceEventId", code);
-        Assert.Matches(@"AgentTaskPlanHookCompletionInput\([\s\S]*?hookEvent\.PlanId,\s*hookEvent\.TaskId", code);
+        Assert.Contains("AgentHookProcessingPipeline", code, StringComparison.Ordinal);
+        Assert.Contains("hookProcessingPipeline.ProcessAsync(hookEvent)", code, StringComparison.Ordinal);
+        Assert.Contains("new AgentHookEventProcessor", code, StringComparison.Ordinal);
+        Assert.Contains("new AgentConversationOrchestrator", code, StringComparison.Ordinal);
+        Assert.Contains("taskPlanService", code, StringComparison.Ordinal);
     }
 
     [Fact]

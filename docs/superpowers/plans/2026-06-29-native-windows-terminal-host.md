@@ -47,7 +47,8 @@
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。
 - [x] native Core 提供 append-only `AgentConversationStore`，状态保存到 `<workspace>/.agenthub/conversations/conversations.jsonl`，支持 create/update/list、坏 JSONL 行容错和最新状态去重。
 - [x] native Core 提供 manager conversation 启动切片：创建 conversation、投递初始 manager prompt、推进 `currentStep`，并在 supervisor session 缺失或投递失败时标记 `failed`。
-- [x] native Core 提供 manager `handleAgentOutput` 的 supervisor 命令切片：`send` / `send_message` 投递 delegated prompt 并推进 `currentStep`，`done` 完成 conversation，`ask_user` 暂停 conversation。尚未接入 WPF UI，也尚未实现 participant 回填 observation、roundtable 或 pair negotiation 的完整状态机。
+- [x] native Core 提供 manager `handleAgentOutput` 的 supervisor 命令切片：`send` / `send_message` 投递 delegated prompt 并推进 `currentStep`，`done` 完成 conversation，`ask_user` 暂停 conversation。
+- [x] native WPF hook pipeline 已接入 conversation 分流：带 `conversationId` 的 running manager supervisor hook 会绕过通用 dispatcher 并交给 `AgentConversationOrchestrator`，避免同一条 `send` 命令重复发送。当前仍未提供 WPF UI 创建/启动 native conversation，也尚未实现 participant 回填 observation、roundtable 或 pair negotiation 的完整状态机。
 
 ## 后续任务
 
