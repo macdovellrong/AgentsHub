@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly AgentSessionRegistry sessionRegistry = new();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
+    private readonly AgentTaskStore taskStore = new();
     private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private readonly NativeAppStartupOptions startupOptions;
@@ -178,7 +179,9 @@ public partial class MainWindow : Window
     {
         var processor = new AgentHookEventProcessor(
             collaborationEventStore,
-            new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry)));
+            new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, sessionRegistry)),
+            new AgentTeamStore(),
+            taskStore);
         return await processor.ProcessAsync(hookEvent);
     }
 

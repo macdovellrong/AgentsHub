@@ -119,6 +119,39 @@ public sealed class AgentHookEventProcessorTests : IDisposable
             });
     }
 
+    [Fact]
+    public async Task Updates_task_log_from_team_status_commands()
+    {
+        var workspacePath = CreateWorkspace();
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
+        var taskStore = new AgentTaskStore();
+        var task = await taskStore.CreateAsync(workspacePath, new AgentTaskCreateRequest(
+            "Implement feature",
+            "Add mailbox",
+            "pending",
+            null,
+            null));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore, taskStore);
+
+        await processor.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            $"<agenthub>{{\"action\":\"claim_task\",\"task_id\":\"{task.Id}\",\"team_id\":\"default\"}}</agenthub>\n" +
+            $"<agenthub>{{\"action\":\"complete_task\",\"task_id\":\"{task.Id}\",\"summary\":\"Done with tests.\",\"team_id\":\"default\"}}</agenthub>",
+            "codex",
+            "codex-1",
+            "run-1",
+            "codex"));
+
+        var tasks = await taskStore.ListAsync(workspacePath);
+        var updated = Assert.Single(tasks);
+        Assert.Equal(task.Id, updated.Id);
+        Assert.Equal("done", updated.Status);
+        Assert.Equal("codex", updated.ProfileId);
+        Assert.Equal("run-1", updated.RunId);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

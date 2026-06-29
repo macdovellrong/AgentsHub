@@ -5,7 +5,8 @@ namespace AgentHub.Native.Core.Collaboration;
 public sealed class AgentHookEventProcessor(
     CollaborationEventStore eventStore,
     AgentHubCommandDispatcher commandDispatcher,
-    AgentTeamStore? teamStore = null)
+    AgentTeamStore? teamStore = null,
+    AgentTaskStore? taskStore = null)
 {
     public async Task<AgentHubCommandDispatchResult> ProcessAsync(
         AgentHookEvent hookEvent,
@@ -21,6 +22,7 @@ public sealed class AgentHookEventProcessor(
             dispatchResult,
             cancellationToken).ConfigureAwait(false);
         await RecordTeamMailboxAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
+        await RecordTaskStatusAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
         return dispatchResult;
     }
 
@@ -94,5 +96,47 @@ public sealed class AgentHookEventProcessor(
     private static string TeamIdOrDefault(string? teamId)
     {
         return string.IsNullOrWhiteSpace(teamId) ? "default" : teamId;
+    }
+
+    private async Task RecordTaskStatusAsync(
+        AgentHookEvent hookEvent,
+        AgentHubCommandDispatchResult dispatchResult,
+        CancellationToken cancellationToken)
+    {
+        if (taskStore is null)
+        {
+            return;
+        }
+
+        var profileId = hookEvent.ProfileId ?? hookEvent.Source;
+        foreach (var command in dispatchResult.TeamStatusCommands)
+        {
+            var status = command.Action switch
+            {
+                "claim_task" => "running",
+                "complete_task" => "done",
+                _ => null
+            };
+            if (status is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await taskStore.UpdateAsync(
+                    hookEvent.Workspace,
+                    command.TaskId,
+                    new AgentTaskUpdateRequest(
+                        Status: status,
+                        ProfileId: profileId,
+                        RunId: hookEvent.RunId),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Team status commands may refer to task-plan ids rather than legacy task-board ids.
+            }
+        }
     }
 }

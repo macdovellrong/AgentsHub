@@ -124,7 +124,8 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 11. Agent hook 回传如果包含 `<agenthub>{"action":"send_message","to":"codex","message":"..."}</agenthub>`、旧格式 `<agenthub>{"action":"send","target":"codex","task_id":"T-001","message":"..."}</agenthub>`，或任务计划路由命令 `assign_task` / `reject_task` / `request_review`，native app 会按当前 workspace 路由到目标 profile 的最新 session；`approve_task` / `pause_plan` 会被识别为任务计划状态命令并显示在 timeline 中；`claim_task` / `complete_task` 会被识别为团队状态命令并显示在 timeline 中。当前 native 原型暂不执行完整任务计划状态机。
 12. 用户发送的消息、hook 回传，以及 AgentHub 从 hook 命令自动转发给目标 Agent 的消息都会显示在 Collaboration timeline 列表中。
 13. provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`；`send_message` 记录 sent/failed，`claim_task` / `complete_task` 记录 observed。
-14. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
+14. `claim_task` / `complete_task` 也会尝试更新 `<workspace>/.agenthub/tasks/tasks.jsonl` 中已有 legacy task 的状态；缺少对应 task 时不会阻断 hook 处理。
+15. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 
 workspace 列表保存位置：
 
@@ -142,6 +143,12 @@ workspace 列表保存位置：
 
 ```text
 <workspace>/.agenthub/teams/<teamId>/mailbox.jsonl
+```
+
+legacy task log 保存位置：
+
+```text
+<workspace>/.agenthub/tasks/tasks.jsonl
 ```
 
 Host shell 等本机设置保存位置：
