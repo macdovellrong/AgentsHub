@@ -75,6 +75,42 @@
                     <Button Content="Start Shell" Click="StartPowerShell_Click" Margin="0,6,6,0" MinHeight="36" />
                 </UniformGrid>
 
+                <TextBlock DockPanel.Dock="Top" Text="Conversations" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                    <TextBox x:Name="ConversationTopicTextBox"
+                             Text="Discuss current workspace"
+                             MinHeight="32"
+                             Background="#0E151D"
+                             Foreground="#F2F6FA"
+                             BorderBrush="#40566E"
+                             Margin="0,0,0,6" />
+                    <TextBox x:Name="ConversationParticipantsTextBox"
+                             Text="claude,codex"
+                             MinHeight="32"
+                             Background="#0E151D"
+                             Foreground="#F2F6FA"
+                             BorderBrush="#40566E"
+                             Margin="0,0,0,6" />
+                    <Button Content="Start manager"
+                            Click="StartManagerConversation_Click"
+                            MinHeight="32"
+                            Margin="0,0,0,6" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Roundtable"
+                                Click="StartRoundtableConversation_Click"
+                                MinHeight="32" />
+                        <Button Grid.Column="2"
+                                Content="Pair"
+                                Click="StartPairNegotiationConversation_Click"
+                                MinHeight="32" />
+                    </Grid>
+                </StackPanel>
+
                 <TextBlock DockPanel.Dock="Top" Text="Task Plans" Foreground="#9FB0C2" Margin="0,0,0,6" />
                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
                     <ComboBox x:Name="TaskPlanSourceComboBox"

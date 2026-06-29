@@ -58,6 +58,32 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("await ReloadSelectedTaskPlanDetailsAsync(hookEvent.Workspace)", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_exposes_conversation_controls()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+
+        Assert.Contains("x:Name=\"ConversationTopicTextBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ConversationParticipantsTextBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StartManagerConversation_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StartRoundtableConversation_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StartPairNegotiationConversation_Click\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_window_wires_conversation_controls_to_orchestrator()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("conversationOrchestrator", code, StringComparison.Ordinal);
+        Assert.Contains("StartManagerConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("StartRoundtableConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("StartPairNegotiationConversation_Click", code, StringComparison.Ordinal);
+        Assert.Contains("StartManagerAsync(new StartAgentManagerConversationRequest", code, StringComparison.Ordinal);
+        Assert.Contains("StartRoundtableAsync(new StartRoundtableConversationRequest", code, StringComparison.Ordinal);
+        Assert.Contains("StartPairNegotiationAsync(new StartPairNegotiationConversationRequest", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

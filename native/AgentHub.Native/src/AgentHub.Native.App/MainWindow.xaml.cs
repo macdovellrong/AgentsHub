@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly AgentTaskPlanStore taskPlanStore = new();
     private readonly AgentConversationStore conversationStore = new();
     private readonly AgentTaskPlanService taskPlanService;
+    private readonly AgentConversationOrchestrator conversationOrchestrator;
     private readonly AgentHookProcessingPipeline hookProcessingPipeline;
     private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
@@ -48,6 +49,11 @@ public partial class MainWindow : Window
             collaborationEventStore,
             inputRouter,
             sessionRegistry);
+        conversationOrchestrator = new AgentConversationOrchestrator(
+            conversationStore,
+            collaborationEventStore,
+            inputRouter,
+            sessionRegistry);
         hookProcessingPipeline = new AgentHookProcessingPipeline(
             collaborationEventStore,
             new AgentHookEventProcessor(
@@ -57,11 +63,7 @@ public partial class MainWindow : Window
                 taskStore,
                 taskPlanEventStore),
             taskPlanService,
-            new AgentConversationOrchestrator(
-                conversationStore,
-                collaborationEventStore,
-                inputRouter,
-                sessionRegistry));
+            conversationOrchestrator);
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -245,6 +247,76 @@ public partial class MainWindow : Window
 
         await ReloadTaskPlansAsync(workspacePath);
         StatusTextBlock.Text = "Task plans refreshed";
+    }
+
+    private async void StartManagerConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await StartConversationAsync("manager");
+    }
+
+    private async void StartRoundtableConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await StartConversationAsync("roundtable");
+    }
+
+    private async void StartPairNegotiationConversation_Click(object sender, RoutedEventArgs e)
+    {
+        await StartConversationAsync("pair");
+    }
+
+    private async Task StartConversationAsync(string mode)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        var topic = ConversationTopicTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(topic))
+        {
+            StatusTextBlock.Text = "Conversation topic required";
+            return;
+        }
+
+        var participants = ParseConversationParticipants(ConversationParticipantsTextBox.Text);
+        if (participants.Count == 0)
+        {
+            StatusTextBlock.Text = "Conversation participants required";
+            return;
+        }
+
+        try
+        {
+            var conversation = mode switch
+            {
+                "manager" => await conversationOrchestrator.StartManagerAsync(new StartAgentManagerConversationRequest(
+                    workspacePath,
+                    topic,
+                    ResolveManagerParticipants(participants),
+                    SupervisorProfileId: "claude")),
+                "roundtable" => await conversationOrchestrator.StartRoundtableAsync(new StartRoundtableConversationRequest(
+                    workspacePath,
+                    topic,
+                    participants)),
+                "pair" => participants.Count == 2
+                    ? await conversationOrchestrator.StartPairNegotiationAsync(new StartPairNegotiationConversationRequest(
+                        workspacePath,
+                        topic,
+                        participants))
+                    : throw new InvalidOperationException("Pair negotiation requires exactly two participants."),
+                _ => throw new InvalidOperationException($"Unknown conversation mode: {mode}")
+            };
+            await ReloadTimelineAsync(workspacePath);
+            StatusTextBlock.Text = conversation.Status == "running"
+                ? $"Started {conversation.Mode}: {conversation.Id}"
+                : $"{conversation.Mode} not started: {conversation.Status}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Start conversation failed: {ex.Message}";
+        }
     }
 
     private void TaskPlanSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -866,6 +938,21 @@ public partial class MainWindow : Window
     {
         var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
         return WorkspacePathSelection.ResolveRoutingPath(WorkspaceTextBox.Text, selectedPath);
+    }
+
+    private static IReadOnlyList<string> ParseConversationParticipants(string text)
+    {
+        return text.Split([',', ';', '\r', '\n', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> ResolveManagerParticipants(IReadOnlyList<string> participants)
+    {
+        var workers = participants
+            .Where(profileId => !string.Equals(profileId, "claude", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return workers.Length == 0 ? ["codex"] : workers;
     }
 
     private string? CurrentTaskPlanId()

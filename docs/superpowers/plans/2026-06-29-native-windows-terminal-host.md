@@ -48,10 +48,11 @@
 - [x] native Core 提供 append-only `AgentConversationStore`，状态保存到 `<workspace>/.agenthub/conversations/conversations.jsonl`，支持 create/update/list、坏 JSONL 行容错和最新状态去重。
 - [x] native Core 提供 manager conversation 启动切片：创建 conversation、投递初始 manager prompt、推进 `currentStep`，并在 supervisor session 缺失或投递失败时标记 `failed`。
 - [x] native Core 提供 manager `handleAgentOutput` 的 supervisor 命令切片：`send` / `send_message` 投递 delegated prompt 并推进 `currentStep`，`done` 完成 conversation，`ask_user` 暂停 conversation。
-- [x] native WPF hook pipeline 已接入 conversation 分流：running conversation hook 会绕过通用 dispatcher 并交给 `AgentConversationOrchestrator`，避免同一条 `send` 命令重复发送。当前仍未提供 WPF UI 创建/启动 native conversation。
+- [x] native WPF hook pipeline 已接入 conversation 分流：running conversation hook 会绕过通用 dispatcher 并交给 `AgentConversationOrchestrator`，避免同一条 `send` 命令重复发送。
 - [x] native Core 支持 manager participant observation：participant hook 显式带 `conversationId/taskId` 时会投回 supervisor；真实 hook 不带 metadata 时，会从最近一次 delegated event 的 `conversationId/taskId/sessionId` 推断上下文并生成 observation prompt。
 - [x] native Core 支持 roundtable conversation：启动时按 `claude -> codex -> gemini` 优先顺序规范参与者并投递第一轮 prompt；hook 回传时按顺序转发给下一位；达到 `maxSteps` 后完成 conversation。
 - [x] native Core 支持两人 pair negotiation conversation：启动时投递第一轮协商 prompt，`continue` 会投递给另一位参与者，双方 `accept` 同一 `proposal_version` 后完成；达到 `maxSteps` 后暂停。当前尚未迁移 artifact-backed 的 pair negotiation 文件协商流程。
+- [x] native App 提供 Conversations 基础 UI 入口：输入 topic 和 participants 后，可直接启动 manager、roundtable 或 pair negotiation conversation。
 
 ## 后续任务
 
