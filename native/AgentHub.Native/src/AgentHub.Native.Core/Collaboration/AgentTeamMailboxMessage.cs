@@ -13,4 +13,5 @@ public sealed record AgentTeamMailboxMessage(
     string? SessionId,
     string? Error,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? PlanId = null);

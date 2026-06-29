@@ -47,7 +47,8 @@ public sealed class AgentHookEventProcessor(
                     message.ConversationId,
                     "sent",
                     message.SessionId,
-                    null),
+                    null,
+                    message.PlanId),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -70,7 +71,8 @@ public sealed class AgentHookEventProcessor(
                     error.Command.ConversationId,
                     "failed",
                     null,
-                    error.Message),
+                    error.Message,
+                    error.Command.PlanId),
                 cancellationToken).ConfigureAwait(false);
         }
 

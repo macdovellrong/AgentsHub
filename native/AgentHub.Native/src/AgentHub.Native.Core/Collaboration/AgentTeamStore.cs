@@ -84,7 +84,8 @@ public sealed class AgentTeamStore
             request.SessionId,
             request.Error,
             now,
-            now);
+            now,
+            request.PlanId);
         Directory.CreateDirectory(TeamPath(workspacePath, request.TeamId));
         var json = JsonSerializer.Serialize(message, SerializerOptions);
         await File.AppendAllTextAsync(MailboxPath(workspacePath, request.TeamId), $"{json}\n", cancellationToken).ConfigureAwait(false);

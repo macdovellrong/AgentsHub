@@ -83,6 +83,35 @@ public sealed class AgentHookEventProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Records_task_plan_routing_plan_id_to_mailbox()
+    {
+        var workspacePath = CreateWorkspace();
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
+        var target = new RecordingTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore);
+
+        await processor.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"assign_task\",\"plan_id\":\"P-001\",\"task_id\":\"T-001\",\"to\":\"codex\",\"message\":\"Implement task A.\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude"));
+
+        var mailbox = await teamStore.ListMailboxAsync(workspacePath, "default");
+        var mailboxMessage = Assert.Single(mailbox);
+        Assert.Equal("send_message", mailboxMessage.Action);
+        Assert.Equal("T-001", mailboxMessage.TaskId);
+        Assert.Equal("P-001", mailboxMessage.PlanId);
+    }
+
+    [Fact]
     public async Task Records_team_status_commands_to_mailbox()
     {
         var workspacePath = CreateWorkspace();

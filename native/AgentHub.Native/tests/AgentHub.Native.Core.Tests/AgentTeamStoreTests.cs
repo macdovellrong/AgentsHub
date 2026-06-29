@@ -45,6 +45,32 @@ public sealed class AgentTeamStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Persists_plan_id_on_mailbox_records()
+    {
+        var store = new AgentTeamStore();
+
+        await store.AppendMailboxAsync(workspacePath, new AgentTeamMailboxRequest(
+            "default",
+            "assign_task",
+            "claude",
+            "codex",
+            "Implement task A.",
+            "T-001",
+            null,
+            "sent",
+            "codex-1",
+            null,
+            PlanId: "P-001"));
+
+        var mailbox = await store.ListMailboxAsync(workspacePath, "default");
+        var rawMailbox = await File.ReadAllTextAsync(Path.Combine(workspacePath, ".agenthub", "teams", "default", "mailbox.jsonl"));
+
+        var message = Assert.Single(mailbox);
+        Assert.Equal("P-001", message.PlanId);
+        Assert.Contains("\"planId\":\"P-001\"", rawMailbox);
+    }
+
+    [Fact]
     public async Task Sanitizes_team_id_paths_and_skips_invalid_mailbox_lines()
     {
         var store = new AgentTeamStore();

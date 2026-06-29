@@ -10,4 +10,5 @@ public sealed record AgentTeamMailboxRequest(
     string? ConversationId,
     string Status,
     string? SessionId,
-    string? Error);
+    string? Error,
+    string? PlanId = null);
