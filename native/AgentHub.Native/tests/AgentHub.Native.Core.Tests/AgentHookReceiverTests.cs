@@ -76,6 +76,36 @@ public sealed class AgentHookReceiverTests
     }
 
     [Fact]
+    public async Task Accepts_task_plan_metadata_from_headers()
+    {
+        await using var receiver = new AgentHookReceiver(new AgentHookReceiverOptions(0, "token-1"));
+        var received = new List<AgentHookEvent>();
+        receiver.EventReceived += (_, hookEvent) => received.Add(hookEvent);
+        var info = await receiver.StartAsync();
+
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, info.Url)
+        {
+            Content = JsonContent.Create(new
+            {
+                workspace = @"V:\OrderManager",
+                message = "done",
+                profileId = "codex"
+            })
+        };
+        request.Headers.Add("X-AgentHub-Token", "token-1");
+        request.Headers.Add("X-AgentHub-Plan-Id", "P-003");
+        request.Headers.Add("X-AgentHub-Task-Id", "T-003");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var hookEvent = Assert.Single(received);
+        Assert.Equal("P-003", hookEvent.PlanId);
+        Assert.Equal("T-003", hookEvent.TaskId);
+    }
+
+    [Fact]
     public async Task Rejects_invalid_token()
     {
         await using var receiver = new AgentHookReceiver(new AgentHookReceiverOptions(0, "token-1"));

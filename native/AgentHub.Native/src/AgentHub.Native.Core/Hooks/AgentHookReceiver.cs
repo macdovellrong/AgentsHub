@@ -121,7 +121,7 @@ public sealed class AgentHookReceiver : IAsyncDisposable
                 return;
             }
 
-            var hookEvent = ParseHookEvent(body);
+            var hookEvent = ParseHookEvent(body, request.Headers);
             EventReceived?.Invoke(this, hookEvent);
             await WriteJsonAsync(stream, 200, """{"ok":true}""", cancellationToken).ConfigureAwait(false);
         }
@@ -274,7 +274,7 @@ public sealed class AgentHookReceiver : IAsyncDisposable
         throw new InvalidOperationException("HTTP line is too long.");
     }
 
-    private static AgentHookEvent ParseHookEvent(string body)
+    private static AgentHookEvent ParseHookEvent(string body, IReadOnlyDictionary<string, string> headers)
     {
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
@@ -287,8 +287,8 @@ public sealed class AgentHookReceiver : IAsyncDisposable
             OptionalString(root, "agenthubSessionId"),
             OptionalString(root, "runId"),
             OptionalString(root, "source"),
-            OptionalString(root, "planId") ?? OptionalString(root, "plan_id"),
-            OptionalString(root, "taskId") ?? OptionalString(root, "task_id"));
+            OptionalString(root, "planId") ?? OptionalString(root, "plan_id") ?? HeaderString(headers, "X-AgentHub-Plan-Id"),
+            OptionalString(root, "taskId") ?? OptionalString(root, "task_id") ?? HeaderString(headers, "X-AgentHub-Task-Id"));
     }
 
     private static string RequiredString(JsonElement root, string propertyName)
@@ -306,6 +306,13 @@ public sealed class AgentHookReceiver : IAsyncDisposable
     {
         return root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
+            : null;
+    }
+
+    private static string? HeaderString(IReadOnlyDictionary<string, string> headers, string headerName)
+    {
+        return headers.TryGetValue(headerName, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
             : null;
     }
 
