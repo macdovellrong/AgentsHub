@@ -74,7 +74,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode` 和 `Agent selection`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本，以及 native 启动预检查的是 Codex 还是三类托管 Agent。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、所选 Agent 的 native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，默认按 `-Agent agents` 采集 Codex、Claude、Gemini 预检信息，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode` 和 `Agent selection`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本，以及 native 启动预检查的是 Codex 还是三类托管 Agent。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、发布包 manifest、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、所选 Agent 的 native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，默认按 `-Agent agents` 采集 Codex、Claude、Gemini 预检信息，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
 
 ## 直接运行开发版
 
@@ -123,6 +123,8 @@ py -3.11 --version
 
 发布版 `start-agenthub-native.bat` 和 `start-agenthub-native.ps1` 都会直接调用 native exe，并会把 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`。native exe 同时兼容 `-Workspace/-Agent/-Resume/-Python` 和 `--workspace/--agent/--resume/--python` 两种参数风格。发布包位于 NAS/UNC 路径时，优先使用 `.ps1` 入口可以避开 `cmd.exe` 的 UNC 当前目录提示。
 
+发布目录根部的 `agenthub-native-package.json` 会记录 `GitCommit`、`GitBranch`、`Runtime` 和 `SelfContained`。回传诊断报告时，先看报告里的 `Package Manifest` 小节，确认笔记本运行的是预期提交。
+
 发布目录也提供 `write-native-validation-report.bat/.ps1`。如果 UI 没有打开，也可以直接生成手工验证清单：
 
 ```powershell
@@ -144,6 +146,7 @@ py -3.11 --version
 
 ```text
 artifacts/native/win-x64/AgentHub.Native.App.exe
+artifacts/native/win-x64/agenthub-native-package.json
 artifacts/native/win-x64/start-agenthub-native.bat
 artifacts/native/win-x64/start-agenthub-native.ps1
 artifacts/native/win-x64/collect-native-diagnostics.bat

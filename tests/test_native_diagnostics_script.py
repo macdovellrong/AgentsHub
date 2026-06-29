@@ -81,6 +81,10 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     (published_root / "collect-native-diagnostics.ps1").write_text("Write-Output diagnostics\n", encoding="utf-8")
     (published_root / "write-native-validation-report.bat").write_text("@echo off\n", encoding="ascii")
     (published_root / "write-native-validation-report.ps1").write_text("Write-Output manual\n", encoding="utf-8")
+    (published_root / "agenthub-native-package.json").write_text(
+        '{"GitCommit":"abc123","GitBranch":"experiment/native-windows-terminal-host","Runtime":"win-x64"}',
+        encoding="utf-8",
+    )
     (scripts_dir / "write-native-validation-report.ps1").write_text("Write-Output manual\n", encoding="utf-8")
     for script_name in [
         "agenthub_hook_common.py",
@@ -131,6 +135,9 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "## Native Terminal Backend" in report
     assert "Published Dependency Manifest" in report
     assert "AgentHub.Native.App.deps.json" in report
+    assert "Package Manifest" in report
+    assert "agenthub-native-package.json" in report
+    assert "abc123" in report
     assert "### Codex Native Launcher" in report
     assert "### Codex No Alt Screen Probe" in report
 

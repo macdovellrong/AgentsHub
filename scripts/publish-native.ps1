@@ -44,6 +44,14 @@ if (-not ($sdks | Where-Object { $_ -match "^(1[0-9]|[2-9][0-9])\." })) {
 Set-Location -LiteralPath $repoRoot
 $outputPath = [System.IO.Path]::GetFullPath($Output)
 $selfContained = -not $FrameworkDependent.IsPresent
+$gitCommit = (& git rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitCommit)) {
+    $gitCommit = "unknown"
+}
+$gitBranch = (& git branch --show-current 2>$null)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitBranch)) {
+    $gitBranch = "unknown"
+}
 
 if ($Check) {
     Write-Host "AgentHub Native publish check passed."
@@ -53,6 +61,8 @@ if ($Check) {
     Write-Host "Manual validation: $manualValidationScript"
     Write-Host "Output: $outputPath"
     Write-Host "Self-contained: $selfContained"
+    Write-Host "GitCommit: $gitCommit"
+    Write-Host "GitBranch: $gitBranch"
     exit 0
 }
 
@@ -70,6 +80,20 @@ $publishArgs = @(
 )
 
 & dotnet @publishArgs
+
+$packageManifestPath = Join-Path $outputPath "agenthub-native-package.json"
+$packageManifest = [ordered]@{
+    GeneratedAt = (Get-Date).ToString("O")
+    GitCommit = [string]$gitCommit
+    GitBranch = [string]$gitBranch
+    Configuration = $Configuration
+    Runtime = $Runtime
+    SelfContained = $selfContained
+    Project = $nativeProject
+}
+$packageManifest |
+    ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath $packageManifestPath -Encoding UTF8
 
 $publishedHooks = Join-Path $outputPath "scripts/hooks"
 New-Item -ItemType Directory -Force -Path $publishedHooks | Out-Null
@@ -596,6 +620,7 @@ $script:ValidationHadFailure = $false
 Invoke-ValidationStep "published package files" {
     $requiredFiles = @(
         "AgentHub.Native.App.exe",
+        "agenthub-native-package.json",
         "start-agenthub-native.ps1",
         "collect-native-diagnostics.ps1",
         "validate-native-laptop.bat",

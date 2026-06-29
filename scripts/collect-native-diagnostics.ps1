@@ -289,6 +289,21 @@ else {
     Invoke-DiagnosticCommand "Published Dependency Manifest" $publishedDepsCommand
 }
 
+function Add-PublishedPackageManifestDiagnostics {
+    $manifestPath = Join-Path $script:RepoRoot "agenthub-native-package.json"
+    $manifestCommand = @"
+`$manifestPath = $(Quote-PS $manifestPath)
+if (Test-Path -LiteralPath `$manifestPath -PathType Leaf) {
+    Get-Content -LiteralPath `$manifestPath -Raw
+}
+else {
+    "agenthub-native-package.json not found: `$manifestPath"
+}
+"@
+
+    Invoke-DiagnosticCommand "Package Manifest" $manifestCommand
+}
+
 function Resolve-DefaultOutputPath {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     return Join-Path $script:RepoRoot "artifacts/native-diagnostics/$timestamp.md"
@@ -380,7 +395,8 @@ if ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
     (Test-Path -LiteralPath $publishedStarter -PathType Leaf)) {
     Add-Line "## Published Package"
     Add-Line
-    Invoke-DiagnosticCommand "Published Files" "Test-Path -LiteralPath '.\AgentHub.Native.App.exe'; Test-Path -LiteralPath '.\start-agenthub-native.bat'; Test-Path -LiteralPath '.\start-agenthub-native.ps1'; Test-Path -LiteralPath '.\collect-native-diagnostics.bat'; Test-Path -LiteralPath '.\collect-native-diagnostics.ps1'; Test-Path -LiteralPath '.\validate-native-laptop.bat'; Test-Path -LiteralPath '.\validate-native-laptop.ps1'; Test-Path -LiteralPath '.\write-native-validation-report.bat'; Test-Path -LiteralPath '.\write-native-validation-report.ps1'; Test-Path -LiteralPath '.\scripts\collect-native-diagnostics.ps1'; Test-Path -LiteralPath '.\scripts\write-native-validation-report.ps1'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_hook_common.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_codex_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_claude_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_gemini_after_agent.py'"
+    Invoke-DiagnosticCommand "Published Files" "Test-Path -LiteralPath '.\AgentHub.Native.App.exe'; Test-Path -LiteralPath '.\agenthub-native-package.json'; Test-Path -LiteralPath '.\start-agenthub-native.bat'; Test-Path -LiteralPath '.\start-agenthub-native.ps1'; Test-Path -LiteralPath '.\collect-native-diagnostics.bat'; Test-Path -LiteralPath '.\collect-native-diagnostics.ps1'; Test-Path -LiteralPath '.\validate-native-laptop.bat'; Test-Path -LiteralPath '.\validate-native-laptop.ps1'; Test-Path -LiteralPath '.\write-native-validation-report.bat'; Test-Path -LiteralPath '.\write-native-validation-report.ps1'; Test-Path -LiteralPath '.\scripts\collect-native-diagnostics.ps1'; Test-Path -LiteralPath '.\scripts\write-native-validation-report.ps1'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_hook_common.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_codex_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_claude_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_gemini_after_agent.py'"
+    Add-PublishedPackageManifestDiagnostics
 }
 
 Add-Line "## Agent CLIs"

@@ -55,3 +55,13 @@ def test_publish_native_script_embeds_agent_selection_validation() -> None:
     assert '"gemini" { return "gemini" }' in script
     assert 'Invoke-ValidationStep "agent native launchers"' in script
     assert "& $diagnosticsScript -Workspace $Workspace -Agent $Agent -Python $Python -Output $resolvedOutput" in script
+
+
+def test_publish_native_script_writes_package_manifest() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
+
+    assert "agenthub-native-package.json" in script
+    assert "GitCommit" in script
+    assert "GitBranch" in script
+    assert "Runtime" in script
+    assert "SelfContained" in script

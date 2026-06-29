@@ -76,6 +76,7 @@
 - [x] native 诊断脚本和 UI `Run diagnostics` 支持传递 Agent 选择；UI 默认按 `agents` 采集 Codex、Claude、Gemini 预检信息。
 - [x] native UI 提供 `Write validation`，可生成带 workspace、诊断指针、hook log、session 列表和人工勾选项的手工验证报告。
 - [x] native 发布包提供 `write-native-validation-report.ps1/.bat`，无需打开 UI 也能生成同格式手工验证清单。
+- [x] native 发布包生成 `agenthub-native-package.json`，诊断报告会读取发布 commit/branch/runtime，方便确认笔记本运行的是预期版本。
 
 ## 后续任务
 
