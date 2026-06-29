@@ -172,6 +172,23 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Opened workspace folder", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_filters_sessions_to_current_workspace_by_default()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("x:Name=\"CurrentWorkspaceSessionsOnlyCheckBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsChecked=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Checked=\"CurrentWorkspaceSessionsOnlyCheckBox_Changed\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Unchecked=\"CurrentWorkspaceSessionsOnlyCheckBox_Changed\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ReloadSessionList", code, StringComparison.Ordinal);
+        Assert.Contains("SessionListFilter.Filter(", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadTaskPlansAsync(workspace.Path)", code, StringComparison.Ordinal);
+        Assert.Contains("ReloadSessionList()", code, StringComparison.Ordinal);
+        Assert.Contains("ReloadSessionList(sessionId)", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

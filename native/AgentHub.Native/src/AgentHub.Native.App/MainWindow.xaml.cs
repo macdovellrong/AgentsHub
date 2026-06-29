@@ -195,7 +195,18 @@ public partial class MainWindow : Window
             await ReloadTimelineAsync(workspace.Path);
             await ReloadConversationsAsync(workspace.Path);
             await ReloadTaskPlansAsync(workspace.Path);
+            ReloadSessionList();
         }
+    }
+
+    private void CurrentWorkspaceSessionsOnlyCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (SessionListBox is null)
+        {
+            return;
+        }
+
+        ReloadSessionList();
     }
 
     private async void HookReceiver_EventReceived(object? sender, AgentHookEvent hookEvent)
@@ -713,8 +724,7 @@ public partial class MainWindow : Window
             sessions[sessionId] = session;
             inputRouter.Register(new NativeTerminalSessionAdapter(sessionId, terminal));
             sessionRegistry.Register(descriptor);
-            SessionListBox.Items.Add(session);
-            SessionListBox.SelectedItem = session;
+            ReloadSessionList(sessionId);
             StatusTextBlock.Text = $"Started {session.DisplayName}";
         }
         catch (Exception ex)
@@ -942,9 +952,7 @@ public partial class MainWindow : Window
         sessionRegistry.Clear();
         sessions.Clear();
         SessionListBox.Items.Clear();
-        selectedSessionId = null;
-        TerminalHostGrid.Children.Clear();
-        CurrentSessionTextBlock.Text = "No session";
+        ClearSelectedSessionView();
         StatusTextBlock.Text = $"Stopped {stoppedCount} sessions";
     }
 
@@ -1297,24 +1305,55 @@ public partial class MainWindow : Window
         TerminalHostGrid.Children.Add(session.Terminal);
     }
 
+    private void ReloadSessionList(string? selectSessionId = null)
+    {
+        var retainedSessionId = selectSessionId ?? selectedSessionId;
+        var visibleSessions = SessionListFilter.Filter(
+                sessions.Values.OrderBy(session => session.Descriptor.StartedAt),
+                CurrentRoutingWorkspacePath(),
+                CurrentWorkspaceSessionsOnlyCheckBox.IsChecked == true,
+                session => session.Workspace.Path)
+            .ToArray();
+
+        SessionListBox.Items.Clear();
+        SessionViewModel? selected = null;
+        foreach (var session in visibleSessions)
+        {
+            SessionListBox.Items.Add(session);
+            if (string.Equals(session.Id, retainedSessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                selected = session;
+            }
+        }
+
+        selected ??= visibleSessions.FirstOrDefault();
+        if (selected is not null)
+        {
+            SessionListBox.SelectedItem = selected;
+            return;
+        }
+
+        ClearSelectedSessionView();
+    }
+
+    private void ClearSelectedSessionView()
+    {
+        selectedSessionId = null;
+        TerminalHostGrid.Children.Clear();
+        CurrentSessionTextBlock.Text = "No session";
+    }
+
     private void RemoveSessionView(string sessionId)
     {
         sessionRegistry.Remove(sessionId);
         sessions.Remove(sessionId);
-        var item = SessionListBox.Items
-            .OfType<SessionViewModel>()
-            .FirstOrDefault(session => string.Equals(session.Id, sessionId, StringComparison.OrdinalIgnoreCase));
-        if (item is not null)
-        {
-            SessionListBox.Items.Remove(item);
-        }
 
         if (string.Equals(selectedSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
         {
-            selectedSessionId = null;
-            TerminalHostGrid.Children.Clear();
-            CurrentSessionTextBlock.Text = "No session";
+            ClearSelectedSessionView();
         }
+
+        ReloadSessionList();
     }
 
     private sealed record SessionViewModel(
