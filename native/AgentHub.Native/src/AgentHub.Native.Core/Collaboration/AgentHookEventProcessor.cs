@@ -206,6 +206,53 @@ public sealed class AgentHookEventProcessor(
         }
 
         var fromProfileId = hookEvent.ProfileId ?? hookEvent.Source;
+        foreach (var command in dispatchResult.SentMessages)
+        {
+            if (string.IsNullOrWhiteSpace(command.PlanId) ||
+                string.IsNullOrWhiteSpace(command.CommandAction))
+            {
+                continue;
+            }
+
+            await taskPlanEventStore.AppendEventAsync(
+                hookEvent.Workspace,
+                new AgentTaskPlanEventRequest(
+                    command.PlanId,
+                    TaskPlanEventType(command.CommandAction),
+                    command.TaskId,
+                    fromProfileId,
+                    command.To,
+                    command.Message,
+                    command.SessionId,
+                    hookEvent.RunId,
+                    sourceEventId),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var error in dispatchResult.DispatchErrors)
+        {
+            if (error.Command is null ||
+                string.IsNullOrWhiteSpace(error.Command.PlanId) ||
+                string.IsNullOrWhiteSpace(error.Command.CommandAction))
+            {
+                continue;
+            }
+
+            await taskPlanEventStore.AppendEventAsync(
+                hookEvent.Workspace,
+                new AgentTaskPlanEventRequest(
+                    error.Command.PlanId,
+                    "delivery_failed",
+                    error.Command.TaskId,
+                    fromProfileId,
+                    error.Command.To,
+                    error.Message,
+                    hookEvent.SessionId,
+                    hookEvent.RunId,
+                    sourceEventId),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         foreach (var command in dispatchResult.PlanStatusCommands)
         {
             await taskPlanEventStore.AppendEventAsync(
@@ -228,6 +275,9 @@ public sealed class AgentHookEventProcessor(
     {
         return action switch
         {
+            "assign_task" => "assigned",
+            "request_review" => "review_requested",
+            "reject_task" => "rejected",
             "approve_task" => "approved",
             "pause_plan" => "paused",
             _ => action
