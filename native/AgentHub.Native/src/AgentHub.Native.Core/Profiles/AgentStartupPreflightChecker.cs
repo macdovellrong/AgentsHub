@@ -6,10 +6,13 @@ public sealed class AgentStartupPreflightChecker(
     Func<string, string?> commandResolver,
     Func<string, bool> fileExists,
     Func<string, bool> directoryExists,
-    Func<string, IReadOnlyList<string>, AgentStartupPythonProbeResult>? hookPythonProbe = null)
+    Func<string, IReadOnlyList<string>, AgentStartupPythonProbeResult>? hookPythonProbe = null,
+    Func<string, AgentStartupCommand, AgentStartupCommandProbeResult>? startupCommandProbe = null)
 {
     private readonly Func<string, IReadOnlyList<string>, AgentStartupPythonProbeResult> pythonProbe =
         hookPythonProbe ?? ProbeHookPython;
+    private readonly Func<string, AgentStartupCommand, AgentStartupCommandProbeResult> commandProbe =
+        startupCommandProbe ?? ((_, _) => AgentStartupCommandProbeResult.Success());
 
     private static readonly string[] RequiredHookScripts =
     [
@@ -21,7 +24,11 @@ public sealed class AgentStartupPreflightChecker(
 
     public static AgentStartupPreflightChecker CreateDefault()
     {
-        return new AgentStartupPreflightChecker(ResolveCommandOnPath, File.Exists, Directory.Exists);
+        return new AgentStartupPreflightChecker(
+            ResolveCommandOnPath,
+            File.Exists,
+            Directory.Exists,
+            startupCommandProbe: ProbeStartupCommand);
     }
 
     public AgentStartupPreflightResult Check(AgentStartupPreflightRequest request)
@@ -34,17 +41,36 @@ public sealed class AgentStartupPreflightChecker(
             return new AgentStartupPreflightResult(errors);
         }
 
+        var resolvedAgentCli = string.IsNullOrWhiteSpace(startupCommand.Command)
+            ? null
+            : ResolveExecutablePath(startupCommand.Command);
         if (!string.IsNullOrWhiteSpace(startupCommand.Command) &&
-            ResolveExecutablePath(startupCommand.Command) is null)
+            resolvedAgentCli is null)
         {
             errors.Add(IsPathLike(startupCommand.Command)
                 ? $"Agent CLI was not found: {startupCommand.Command}"
                 : $"Agent CLI '{startupCommand.Command}' was not found in PATH.");
         }
+        else if (resolvedAgentCli is not null)
+        {
+            CheckStartupCommandCompatibility(resolvedAgentCli, startupCommand, errors);
+        }
 
         CheckHookScripts(request.HookScriptsDirectory, errors);
         CheckHookPython(request.HookPythonCommand, errors);
         return new AgentStartupPreflightResult(errors);
+    }
+
+    private void CheckStartupCommandCompatibility(
+        string resolvedAgentCli,
+        AgentStartupCommand startupCommand,
+        List<string> errors)
+    {
+        var probeResult = commandProbe(resolvedAgentCli, startupCommand);
+        if (!probeResult.Succeeded)
+        {
+            errors.Add($"Agent CLI check failed: {probeResult.Error ?? "unknown error"}");
+        }
     }
 
     private void CheckHookScripts(string? hookScriptsDirectory, List<string> errors)
@@ -212,6 +238,82 @@ public sealed class AgentStartupPreflightChecker(
         }
     }
 
+    private static AgentStartupCommandProbeResult ProbeStartupCommand(
+        string launcher,
+        AgentStartupCommand startupCommand)
+    {
+        if (startupCommand.AgentKind != AgentKind.Codex ||
+            !startupCommand.Arguments.Contains("--no-alt-screen", StringComparer.Ordinal))
+        {
+            return AgentStartupCommandProbeResult.Success();
+        }
+
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = BuildHelpProbeStartInfo(launcher)
+            };
+            process.Start();
+            if (!process.WaitForExit(milliseconds: 5000))
+            {
+                process.Kill(entireProcessTree: true);
+                return AgentStartupCommandProbeResult.Failure("Codex CLI help probe timed out after 5 seconds.");
+            }
+
+            var stderr = process.StandardError.ReadToEnd();
+            var stdout = process.StandardOutput.ReadToEnd();
+            var combined = $"{stdout}{Environment.NewLine}{stderr}";
+            if (combined.Contains("--no-alt-screen", StringComparison.Ordinal))
+            {
+                return AgentStartupCommandProbeResult.Success();
+            }
+
+            return AgentStartupCommandProbeResult.Failure(
+                "Codex CLI does not list --no-alt-screen. Update Codex CLI before launching AgentHub Native Codex sessions.");
+        }
+        catch (Exception ex)
+        {
+            return AgentStartupCommandProbeResult.Failure(ex.Message);
+        }
+    }
+
+    private static ProcessStartInfo BuildHelpProbeStartInfo(string launcher)
+    {
+        var extension = Path.GetExtension(launcher);
+        if (string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                ArgumentList =
+                {
+                    "/d",
+                    "/c",
+                    $"\"{launcher}\" --help"
+                }
+            };
+        }
+
+        return new ProcessStartInfo
+        {
+            FileName = launcher,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            ArgumentList =
+            {
+                "--help"
+            }
+        };
+    }
+
     private static bool IsPathLike(string value)
     {
         return value.Contains(':', StringComparison.Ordinal) ||
@@ -259,7 +361,7 @@ public sealed class AgentStartupPreflightChecker(
 
         return pathExtensions
             .Select(extension => $"{command}{extension}")
-            .Prepend(command)
+            .Append(command)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

@@ -43,7 +43,7 @@ git status --short --branch
 
 - workspace 路径存在，并且能被当前电脑访问。
 - PowerShell 和 cmd host shell 能找到。
-- `codex` 能在 PATH 中找到。
+- `codex` 能在 PATH 中找到，并且 `codex --help` 包含 `--no-alt-screen`。如果这里失败，先升级 Codex CLI。
 - `py -3.11` 能启动 Python，并能导入 hook 依赖的标准库模块（`json`、`pathlib`、`urllib.request`）。不传 `-Python` 时，native 启动脚本和 WPF UI 默认都使用 `py -3.11`。
 - hook 脚本目录存在；如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，该目录内必须有 Codex/Claude/Gemini hook 脚本。
 - `powershell`、`cmd` 只提示使用 Host shell，不要求额外 Agent CLI。

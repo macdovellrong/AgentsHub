@@ -168,7 +168,35 @@ function Test-AgentCommands {
 
         Write-Host "Agent CLI check passed: $agentName"
         Write-Host "  $($command.Source)"
+        Test-AgentCommandCapabilities -AgentName $agentName -CommandName $commandName
     }
+}
+
+function Test-AgentCommandCapabilities {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AgentName,
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    if ($AgentName.ToLowerInvariant() -ne "codex") {
+        return
+    }
+
+    try {
+        $output = & $CommandName --help 2>&1
+    }
+    catch {
+        throw "Codex CLI help check could not be started: $($_.Exception.Message)"
+    }
+
+    $helpText = (@($output) -join "`n")
+    if ($helpText -notlike "*--no-alt-screen*") {
+        throw "Codex CLI does not support --no-alt-screen. Update Codex CLI before launching AgentHub Native Codex sessions."
+    }
+
+    Write-Host "Codex --no-alt-screen check passed."
 }
 
 function Test-AgentHooksRequired {
