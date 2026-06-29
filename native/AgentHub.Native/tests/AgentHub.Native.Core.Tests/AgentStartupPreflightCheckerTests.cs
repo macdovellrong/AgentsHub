@@ -44,7 +44,8 @@ public sealed class AgentStartupPreflightCheckerTests
         var checker = new AgentStartupPreflightChecker(
             command => command == "codex" || command == "py" ? command : null,
             path => !string.Equals(Path.GetFileName(path), "agenthub_gemini_after_agent.py", StringComparison.Ordinal),
-            _ => true);
+            _ => true,
+            (_, _) => AgentStartupPythonProbeResult.Success());
 
         var result = checker.Check(new AgentStartupPreflightRequest(
             AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Start),
@@ -75,11 +76,17 @@ public sealed class AgentStartupPreflightCheckerTests
     [Fact]
     public void Accepts_quoted_python_path_with_arguments()
     {
+        (string Launcher, IReadOnlyList<string> Arguments)? probedCommand = null;
         var checker = new AgentStartupPreflightChecker(
             command => command is "codex" ? command : null,
             path => RequiredHookFiles().Contains(Path.GetFileName(path), StringComparer.Ordinal)
                 || string.Equals(path, @"C:\Program Files\Python311\python.exe", StringComparison.OrdinalIgnoreCase),
-            path => string.Equals(path, @"V:\AgentHub\scripts\hooks", StringComparison.OrdinalIgnoreCase));
+            path => string.Equals(path, @"V:\AgentHub\scripts\hooks", StringComparison.OrdinalIgnoreCase),
+            (launcher, arguments) =>
+            {
+                probedCommand = (launcher, arguments);
+                return AgentStartupPythonProbeResult.Success();
+            });
 
         var result = checker.Check(new AgentStartupPreflightRequest(
             AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Start),
@@ -88,6 +95,26 @@ public sealed class AgentStartupPreflightCheckerTests
 
         Assert.True(result.Succeeded);
         Assert.Empty(result.Errors);
+        Assert.Equal(@"C:\Program Files\Python311\python.exe", probedCommand?.Launcher);
+        Assert.Equal(["-I"], probedCommand?.Arguments);
+    }
+
+    [Fact]
+    public void Reports_hook_python_probe_failure()
+    {
+        var checker = new AgentStartupPreflightChecker(
+            command => command is "codex" or "py" ? command : null,
+            path => RequiredHookFiles().Contains(Path.GetFileName(path), StringComparer.Ordinal),
+            _ => true,
+            (_, _) => AgentStartupPythonProbeResult.Failure("exit code 1: Python 3.14 cannot run AgentHub hooks"));
+
+        var result = checker.Check(new AgentStartupPreflightRequest(
+            AgentStartupCommandCatalog.Build(AgentKind.Codex, AgentStartupMode.Start),
+            @"V:\AgentHub\scripts\hooks",
+            "py -3.14"));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Hook Python check failed: exit code 1: Python 3.14 cannot run AgentHub hooks", result.Errors);
     }
 
     private static IReadOnlySet<string> RequiredHookFiles()
