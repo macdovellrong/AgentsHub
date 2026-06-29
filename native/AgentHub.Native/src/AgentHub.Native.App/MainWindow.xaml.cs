@@ -9,6 +9,7 @@ using AgentHub.Native.Core.Input;
 using AgentHub.Native.Core.Processes;
 using AgentHub.Native.Core.Profiles;
 using AgentHub.Native.Core.Settings;
+using AgentHub.Native.Core.TaskPlans;
 using AgentHub.Native.Core.Workspaces;
 using EasyWindowsTerminalControl;
 
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
     private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
     private readonly AgentTaskStore taskStore = new();
     private readonly AgentTaskPlanEventStore taskPlanEventStore = new();
+    private readonly AgentTaskPlanStore taskPlanStore = new();
+    private readonly AgentTaskPlanService taskPlanService;
     private readonly NativeAppSettingsStore settingsStore = new(ResolveSettingsPath());
     private readonly WorkspaceStore workspaceStore = new(ResolveWorkspaceStorePath());
     private readonly NativeAppStartupOptions startupOptions;
@@ -38,6 +41,11 @@ public partial class MainWindow : Window
     public MainWindow(NativeAppStartupOptions startupOptions)
     {
         this.startupOptions = startupOptions;
+        taskPlanService = new AgentTaskPlanService(
+            taskPlanStore,
+            collaborationEventStore,
+            inputRouter,
+            sessionRegistry);
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -145,6 +153,7 @@ public partial class MainWindow : Window
         {
             WorkspaceTextBox.Text = workspace.Path;
             await ReloadTimelineAsync(workspace.Path);
+            await ReloadTaskPlansAsync(workspace.Path);
         }
     }
 
@@ -210,6 +219,98 @@ public partial class MainWindow : Window
     private async void StartPowerShell_Click(object sender, RoutedEventArgs e)
     {
         await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.PowerShell, AgentStartupMode.Start));
+    }
+
+    private async void RefreshTaskPlans_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        await ReloadTaskPlansAsync(workspacePath);
+        StatusTextBlock.Text = "Task plans refreshed";
+    }
+
+    private void TaskPlanSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TaskPlanSourceComboBox.SelectedItem is not TaskPlanSourceViewModel source)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(TaskPlanTitleTextBox.Text))
+        {
+            TaskPlanTitleTextBox.Text = source.Source.Title;
+        }
+    }
+
+    private async void CreateTaskPlan_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        if (TaskPlanSourceComboBox.SelectedItem is not TaskPlanSourceViewModel source)
+        {
+            StatusTextBlock.Text = "No task-plan source selected";
+            return;
+        }
+
+        try
+        {
+            var title = string.IsNullOrWhiteSpace(TaskPlanTitleTextBox.Text)
+                ? source.Source.Title
+                : TaskPlanTitleTextBox.Text.Trim();
+            var plan = await taskPlanService.CreatePlanAsync(
+                workspacePath,
+                new CreateAgentTaskPlanRequest(
+                    title,
+                    source.Source.DirectoryName,
+                    "claude",
+                    ["codex", "gemini"]));
+            await ReloadTaskPlansAsync(workspacePath, plan.Id);
+            StatusTextBlock.Text = $"Task plan created: {plan.Title}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Create task plan failed: {ex.Message}";
+        }
+    }
+
+    private async void StartTaskPlanManager_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        if (TaskPlanListBox.SelectedItem is not TaskPlanViewModel selected)
+        {
+            StatusTextBlock.Text = "No task plan selected";
+            return;
+        }
+
+        try
+        {
+            var updated = await taskPlanService.StartManagerAsync(workspacePath, selected.Plan.Id);
+            await ReloadTaskPlansAsync(workspacePath, updated.Id);
+            await ReloadTimelineAsync(workspacePath);
+            StatusTextBlock.Text = updated.Status == "running"
+                ? $"Task plan manager started: {updated.Title}"
+                : $"Task plan manager not started: {updated.Title}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Start task plan manager failed: {ex.Message}";
+        }
     }
 
     private async Task StartAgentAsync(AgentStartupCommand startupCommand)
@@ -649,6 +750,46 @@ public partial class MainWindow : Window
         });
     }
 
+    private async Task ReloadTaskPlansAsync(string workspacePath, string? selectedPlanId = null)
+    {
+        var sources = await taskPlanStore.ListSourceTasksAsync(workspacePath);
+        var plans = await taskPlanStore.ListPlansAsync(workspacePath);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            TaskPlanSourceComboBox.Items.Clear();
+            foreach (var source in sources)
+            {
+                TaskPlanSourceComboBox.Items.Add(new TaskPlanSourceViewModel(source));
+            }
+
+            if (TaskPlanSourceComboBox.Items.Count > 0 && TaskPlanSourceComboBox.SelectedItem is null)
+            {
+                TaskPlanSourceComboBox.SelectedIndex = 0;
+            }
+
+            TaskPlanListBox.Items.Clear();
+            TaskPlanViewModel? selected = null;
+            foreach (var plan in plans)
+            {
+                var item = new TaskPlanViewModel(plan);
+                TaskPlanListBox.Items.Add(item);
+                if (string.Equals(plan.Id, selectedPlanId, StringComparison.Ordinal))
+                {
+                    selected = item;
+                }
+            }
+
+            if (selected is not null)
+            {
+                TaskPlanListBox.SelectedItem = selected;
+            }
+            else if (TaskPlanListBox.Items.Count > 0 && TaskPlanListBox.SelectedItem is null)
+            {
+                TaskPlanListBox.SelectedIndex = 0;
+            }
+        });
+    }
+
     private bool IsCurrentWorkspace(string workspacePath)
     {
         var current = CurrentRoutingWorkspacePath();
@@ -729,6 +870,22 @@ public partial class MainWindow : Window
         public override string ToString()
         {
             return AgentSessionDisplayFormatter.Format(Descriptor);
+        }
+    }
+
+    private sealed record TaskPlanSourceViewModel(AgentTaskPlanSource Source)
+    {
+        public override string ToString()
+        {
+            return $"{Source.DirectoryName} - {Source.Title}";
+        }
+    }
+
+    private sealed record TaskPlanViewModel(AgentTaskPlan Plan)
+    {
+        public override string ToString()
+        {
+            return $"{Plan.Status} | {Plan.Title} | {Plan.Id}";
         }
     }
 }

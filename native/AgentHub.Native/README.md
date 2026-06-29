@@ -125,7 +125,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 12. 用户发送的消息、hook 回传，以及 AgentHub 从 hook 命令自动转发给目标 Agent 的消息都会显示在 Collaboration timeline 列表中。
 13. provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`；`send_message` 记录 sent/failed，`claim_task` / `complete_task` 记录 observed；任务计划路由命令转发后的 mailbox 记录会保留 `planId`。
 14. `claim_task` / `complete_task` 也会尝试更新 `<workspace>/.agenthub/tasks/tasks.jsonl` 中已有 legacy task 的状态；缺少对应 task 时不会阻断 hook 处理。
-15. native Core 已支持从 `<workspace>/tasks/*/task-plan.md` 创建 task-plan 执行快照，并把 manager prompt 投递给当前 workspace 的 manager profile 最新 session；完整 UI 入口和完整状态机仍在迁移中。
+15. 左侧 Task Plans 区域可以刷新 `<workspace>/tasks/*/task-plan.md` 来源、创建 task-plan 执行快照，并把 manager prompt 投递给当前 workspace 的 manager profile 最新 session；完整状态机仍在迁移中。
 16. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 
 workspace 列表保存位置：
