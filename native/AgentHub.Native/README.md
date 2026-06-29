@@ -76,6 +76,7 @@
 .\scripts\start-native.ps1 -Check
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex,claude,gemini -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
 `-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中。`powershell`、`cmd`、`shell` 只使用选中的 Host shell，不检查额外 Agent CLI。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。

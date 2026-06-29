@@ -111,7 +111,13 @@ function Split-AgentList {
         foreach ($agentName in ($rawAgent -split ",")) {
             $trimmed = $agentName.Trim()
             if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
-                $parsedAgents += $trimmed.ToLowerInvariant()
+                $normalized = $trimmed.ToLowerInvariant()
+                if ($normalized -eq "agents") {
+                    $parsedAgents += @("codex", "claude", "gemini")
+                }
+                else {
+                    $parsedAgents += $normalized
+                }
             }
         }
     }
