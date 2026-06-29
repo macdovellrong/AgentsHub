@@ -29,6 +29,35 @@ public sealed class AgentHubCommandDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatches_send_message_to_managed_agent_group()
+    {
+        var codex = new RecordingTerminalSession("codex-1");
+        var claude = new RecordingTerminalSession("claude-1");
+        var gemini = new RecordingTerminalSession("gemini-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(codex);
+        inputRouter.Register(claude);
+        inputRouter.Register(gemini);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        registry.Register(new AgentSessionDescriptor("gemini-1", "gemini", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+
+        var result = await dispatcher.DispatchAsync(
+            @"v:\OrderManager\",
+            "<agenthub>{\"action\":\"send_message\",\"to\":\"agents\",\"message\":\"Sync status.\"}</agenthub>");
+
+        Assert.Equal(3, result.SentCount);
+        Assert.Empty(result.ParseErrors);
+        Assert.Empty(result.DispatchErrors);
+        Assert.Equal(["codex", "claude", "gemini"], result.SentMessages.Select(item => item.To).ToArray());
+        Assert.Equal(["Sync status.", "\r"], codex.Writes);
+        Assert.Equal(["Sync status.", "\r"], claude.Writes);
+        Assert.Equal(["Sync status.", "\r"], gemini.Writes);
+    }
+
+    [Fact]
     public async Task Dispatches_legacy_send_to_latest_target_profile_session()
     {
         var target = new RecordingTerminalSession("gemini-1");

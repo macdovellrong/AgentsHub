@@ -25,22 +25,25 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
         foreach (var command in parsed.SendMessages)
         {
             var dispatchMessage = FormatSendMessageDispatch(command, fromProfileId);
-            var result = await messageRouter.TrySendToProfileDetailedAsync(
-                workspacePath,
-                command.To,
-                dispatchMessage,
-                cancellationToken).ConfigureAwait(false);
-            if (result.Sent)
+            foreach (var targetProfileId in AgentProfileTargetResolver.Resolve(command.To))
             {
-                sentCount += 1;
-                sentMessages.Add(command with { SessionId = result.SessionId });
-            }
-            else
-            {
-                dispatchErrors.Add(new AgentHubCommandDispatchError(
-                    command.To,
-                    FormatSendFailure(workspacePath, command.To, result.Status),
-                    command));
+                var result = await messageRouter.TrySendToProfileDetailedAsync(
+                    workspacePath,
+                    targetProfileId,
+                    dispatchMessage,
+                    cancellationToken).ConfigureAwait(false);
+                if (result.Sent)
+                {
+                    sentCount += 1;
+                    sentMessages.Add(command with { To = targetProfileId, SessionId = result.SessionId });
+                }
+                else
+                {
+                    dispatchErrors.Add(new AgentHubCommandDispatchError(
+                        targetProfileId,
+                        FormatSendFailure(workspacePath, targetProfileId, result.Status),
+                        command with { To = targetProfileId }));
+                }
             }
         }
 
