@@ -24,9 +24,13 @@ public sealed class CollaborationEventStore(string rootDirectory)
             message.Message,
             message.ProfileId,
             message.TargetProfileId,
+            message.SessionId,
             null,
-            null,
-            "user");
+            "user",
+            message.PlanId,
+            message.TaskId,
+            message.ConversationId,
+            message.TeamId);
         return AppendAsync(collaborationEvent, cancellationToken);
     }
 
@@ -144,6 +148,25 @@ public sealed class CollaborationEventStore(string rootDirectory)
     public Task<CollaborationEvent> AppendCommandErrorAsync(
         string workspacePath,
         string message,
+        CancellationToken cancellationToken)
+    {
+        return AppendCommandErrorAsync(
+            workspacePath,
+            message,
+            conversationId: null,
+            taskId: null,
+            teamId: null,
+            planId: null,
+            cancellationToken);
+    }
+
+    public Task<CollaborationEvent> AppendCommandErrorAsync(
+        string workspacePath,
+        string message,
+        string? conversationId = null,
+        string? taskId = null,
+        string? teamId = null,
+        string? planId = null,
         CancellationToken cancellationToken = default)
     {
         var collaborationEvent = new CollaborationEvent(
@@ -156,7 +179,11 @@ public sealed class CollaborationEventStore(string rootDirectory)
             "command-error",
             null,
             null,
-            "agenthub");
+            "agenthub",
+            planId,
+            taskId,
+            conversationId,
+            teamId);
         return AppendAsync(collaborationEvent, cancellationToken);
     }
 

@@ -46,6 +46,7 @@
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。
 - [x] native Core 提供 append-only `AgentConversationStore`，状态保存到 `<workspace>/.agenthub/conversations/conversations.jsonl`，支持 create/update/list、坏 JSONL 行容错和最新状态去重。
+- [x] native Core 提供 manager conversation 启动切片：创建 conversation、投递初始 manager prompt、推进 `currentStep`，并在 supervisor session 缺失或投递失败时标记 `failed`。尚未接入 WPF UI，也尚未实现完整 `handleAgentOutput` 状态流。
 
 ## 后续任务
 
