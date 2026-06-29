@@ -151,6 +151,11 @@ legacy task log 保存位置：
 <workspace>/.agenthub/tasks/tasks.jsonl
 ```
 
+native task-plan 事件保存位置：
+```text
+<workspace>/.agenthub/task-plans/native/<planId>/events.jsonl
+```
+
 Host shell 等本机设置保存位置：
 
 ```text

@@ -6,13 +6,14 @@ public sealed class AgentHookEventProcessor(
     CollaborationEventStore eventStore,
     AgentHubCommandDispatcher commandDispatcher,
     AgentTeamStore? teamStore = null,
-    AgentTaskStore? taskStore = null)
+    AgentTaskStore? taskStore = null,
+    AgentTaskPlanEventStore? taskPlanEventStore = null)
 {
     public async Task<AgentHubCommandDispatchResult> ProcessAsync(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken = default)
     {
-        await eventStore.AppendAgentOutputAsync(hookEvent, cancellationToken).ConfigureAwait(false);
+        var agentOutputEvent = await eventStore.AppendAgentOutputAsync(hookEvent, cancellationToken).ConfigureAwait(false);
         var dispatchResult = await commandDispatcher.DispatchAsync(
             hookEvent.Workspace,
             hookEvent.Message,
@@ -23,6 +24,7 @@ public sealed class AgentHookEventProcessor(
             cancellationToken).ConfigureAwait(false);
         await RecordTeamMailboxAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
         await RecordTaskStatusAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
+        await RecordTaskPlanEventsAsync(hookEvent, dispatchResult, agentOutputEvent.Id, cancellationToken).ConfigureAwait(false);
         return dispatchResult;
     }
 
@@ -190,5 +192,45 @@ public sealed class AgentHookEventProcessor(
                 // Team status commands may refer to task-plan ids rather than legacy task-board ids.
             }
         }
+    }
+
+    private async Task RecordTaskPlanEventsAsync(
+        AgentHookEvent hookEvent,
+        AgentHubCommandDispatchResult dispatchResult,
+        string sourceEventId,
+        CancellationToken cancellationToken)
+    {
+        if (taskPlanEventStore is null)
+        {
+            return;
+        }
+
+        var fromProfileId = hookEvent.ProfileId ?? hookEvent.Source;
+        foreach (var command in dispatchResult.PlanStatusCommands)
+        {
+            await taskPlanEventStore.AppendEventAsync(
+                hookEvent.Workspace,
+                new AgentTaskPlanEventRequest(
+                    command.PlanId,
+                    TaskPlanEventType(command.Action),
+                    command.TaskId,
+                    fromProfileId,
+                    null,
+                    command.Message,
+                    hookEvent.SessionId,
+                    hookEvent.RunId,
+                    sourceEventId),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string TaskPlanEventType(string action)
+    {
+        return action switch
+        {
+            "approve_task" => "approved",
+            "pause_plan" => "paused",
+            _ => action
+        };
     }
 }

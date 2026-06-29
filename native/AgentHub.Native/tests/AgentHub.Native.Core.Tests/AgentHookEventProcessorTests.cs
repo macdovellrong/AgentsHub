@@ -112,6 +112,49 @@ public sealed class AgentHookEventProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Records_task_plan_status_commands_to_task_plan_events()
+    {
+        var workspacePath = CreateWorkspace();
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var taskPlanEventStore = new AgentTaskPlanEventStore();
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));
+        var processor = new AgentHookEventProcessor(
+            store,
+            dispatcher,
+            taskPlanEventStore: taskPlanEventStore);
+
+        await processor.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"approve_task\",\"plan_id\":\"P-001\",\"task_id\":\"T-001\",\"summary\":\"Accepted\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"pause_plan\",\"plan_id\":\"P-001\",\"reason\":\"Need user decision\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude"));
+
+        var events = await taskPlanEventStore.ListEventsAsync(workspacePath, "P-001");
+        Assert.Collection(
+            events,
+            item =>
+            {
+                Assert.Equal("approved", item.Type);
+                Assert.Equal("P-001", item.PlanId);
+                Assert.Equal("T-001", item.TaskId);
+                Assert.Equal("claude", item.FromProfileId);
+                Assert.Equal("Accepted", item.Message);
+                Assert.Equal("claude-1", item.SessionId);
+                Assert.Equal("run-1", item.RunId);
+            },
+            item =>
+            {
+                Assert.Equal("paused", item.Type);
+                Assert.Equal("P-001", item.PlanId);
+                Assert.Null(item.TaskId);
+                Assert.Equal("Need user decision", item.Message);
+            });
+    }
+
+    [Fact]
     public async Task Records_team_status_commands_to_mailbox()
     {
         var workspacePath = CreateWorkspace();
