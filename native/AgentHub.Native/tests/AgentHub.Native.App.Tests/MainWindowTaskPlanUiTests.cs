@@ -18,6 +18,7 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Click=\"RefreshTaskPlans_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"CreateTaskPlan_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartTaskPlanManager_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OpenTaskPlanFolder_Click\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -35,6 +36,9 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("ListEventsAsync", code, StringComparison.Ordinal);
         Assert.Contains("TaskPlanDisplayFormatter.FormatTask", code, StringComparison.Ordinal);
         Assert.Contains("TaskPlanDisplayFormatter.FormatEvent", code, StringComparison.Ordinal);
+        Assert.Contains("OpenTaskPlanFolder_Click", code, StringComparison.Ordinal);
+        Assert.Contains("selected.Plan.PlanPath", code, StringComparison.Ordinal);
+        Assert.Contains("Task plan folder not found", code, StringComparison.Ordinal);
     }
 
     [Fact]

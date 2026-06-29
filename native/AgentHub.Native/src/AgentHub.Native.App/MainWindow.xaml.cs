@@ -520,6 +520,29 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OpenTaskPlanFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (TaskPlanListBox.SelectedItem is not TaskPlanViewModel selected)
+        {
+            StatusTextBlock.Text = "No task plan selected";
+            return;
+        }
+
+        var folderPath = selected.Plan.PlanPath;
+        if (!Directory.Exists(folderPath))
+        {
+            StatusTextBlock.Text = $"Task plan folder not found: {selected.Plan.Id}";
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = folderPath,
+            UseShellExecute = true
+        });
+        StatusTextBlock.Text = $"Opened task plan folder: {selected.Plan.Title}";
+    }
+
     private async void TaskPlanListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         await ReloadSelectedTaskPlanDetailsAsync();

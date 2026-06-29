@@ -297,7 +297,14 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Task plan detail" Foreground="#9FB0C2" Margin="0,0,0,6" />
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock Text="Task plan detail" Foreground="#9FB0C2" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right"
+                                    Content="Open"
+                                    Click="OpenTaskPlanFolder_Click"
+                                    MinHeight="26"
+                                    MinWidth="60" />
+                        </DockPanel>
                         <ListBox Grid.Row="1"
                                  x:Name="TaskPlanTaskListBox"
                                  Background="#0E151D"
