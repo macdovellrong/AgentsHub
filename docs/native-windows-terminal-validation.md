@@ -57,6 +57,14 @@ py -0p
 py -3.11 --version
 ```
 
+也可以一次性生成诊断报告，减少来回复制命令：
+
+```powershell
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+```
+
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。这份报告只读收集 git、.NET、Agent CLI、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
+
 ## 直接运行开发版
 
 先用 PowerShell host 验证 Codex：
@@ -139,6 +147,12 @@ py -0p
 py -3.11 --version
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex -Python "py -3.11"
+```
+
+或者直接回传：
+
+```powershell
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
 同时说明：

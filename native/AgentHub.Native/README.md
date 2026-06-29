@@ -105,6 +105,14 @@
 .\scripts\publish-native.ps1 -Check
 ```
 
+如果需要在另一台 Windows 电脑回传 native 环境差异和 Codex 滚动排障信息，可以生成一份只读诊断报告：
+
+```powershell
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+```
+
+默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Codex/Claude/Gemini CLI、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。
+
 也可以直接运行项目：
 
 ```powershell
