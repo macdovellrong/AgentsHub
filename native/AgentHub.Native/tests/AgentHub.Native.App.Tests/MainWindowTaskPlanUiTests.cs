@@ -47,6 +47,15 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("hookEvent.ProfileId ?? hookEvent.Source ?? \"agent\"", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_refreshes_task_plan_list_after_current_workspace_hooks()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("await ReloadTaskPlansAsync(hookEvent.Workspace", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadSelectedTaskPlanDetailsAsync(hookEvent.Workspace)", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -173,7 +173,9 @@ public partial class MainWindow : Window
             var shouldReload = await Dispatcher.InvokeAsync(() => IsCurrentWorkspace(hookEvent.Workspace));
             if (shouldReload)
             {
+                var selectedPlanId = await Dispatcher.InvokeAsync(CurrentTaskPlanId);
                 await ReloadTimelineAsync(hookEvent.Workspace);
+                await ReloadTaskPlansAsync(hookEvent.Workspace, selectedPlanId);
                 await ReloadSelectedTaskPlanDetailsAsync(hookEvent.Workspace);
             }
         }
@@ -866,6 +868,11 @@ public partial class MainWindow : Window
     {
         var selectedPath = WorkspaceListBox.SelectedItem is WorkspaceEntry workspace ? workspace.Path : null;
         return WorkspacePathSelection.ResolveRoutingPath(WorkspaceTextBox.Text, selectedPath);
+    }
+
+    private string? CurrentTaskPlanId()
+    {
+        return TaskPlanListBox.SelectedItem is TaskPlanViewModel selected ? selected.Plan.Id : null;
     }
 
     private async Task RecordUserMessageAsync(string workspacePath, string targetProfileId, string text)
