@@ -136,6 +136,16 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("await ReloadTimelineAsync(workspacePath)", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_records_manual_messages_with_selected_orchestration_context()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("var conversationId = await Dispatcher.InvokeAsync(CurrentConversationId)", code, StringComparison.Ordinal);
+        Assert.Contains("var planId = await Dispatcher.InvokeAsync(CurrentTaskPlanId)", code, StringComparison.Ordinal);
+        Assert.Contains("ManualUserMessageFactory.Create(", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -1240,11 +1240,14 @@ public partial class MainWindow : Window
 
     private async Task RecordUserMessageAsync(string workspacePath, string targetProfileId, string text)
     {
-        await collaborationEventStore.AppendUserMessageAsync(new CollaborationUserMessage(
+        var conversationId = await Dispatcher.InvokeAsync(CurrentConversationId);
+        var planId = await Dispatcher.InvokeAsync(CurrentTaskPlanId);
+        await collaborationEventStore.AppendUserMessageAsync(ManualUserMessageFactory.Create(
             workspacePath,
-            "user",
             targetProfileId,
-            text));
+            text,
+            conversationId,
+            planId));
         await ReloadTimelineAsync(workspacePath);
     }
 
