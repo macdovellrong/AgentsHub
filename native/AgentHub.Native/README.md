@@ -81,6 +81,8 @@
 
 `-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否在 PATH 中。`powershell`、`cmd`、`shell` 只使用选中的 Host shell，不检查额外 Agent CLI。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。
 
+在 UI 中点击 `Start Codex`、`Resume Codex`、`Start Claude`、`Start Gemini`、`Start Agents` 或 `Resume Agents` 时，native app 也会先做托管 Agent 启动预检：Agent CLI 必须能在 PATH 中找到，hook 脚本目录必须存在，hook Python launcher 必须能定位。预检失败时不会创建新的终端 session，状态栏会直接显示缺失项。
+
 ## 发布
 
 在开发机生成可复制到其他 Windows 电脑的发布目录：

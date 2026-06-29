@@ -20,6 +20,7 @@ public partial class MainWindow : Window
 {
     private readonly AgentInputRouter inputRouter = new();
     private readonly AgentSessionRegistry sessionRegistry = new();
+    private readonly AgentStartupPreflightChecker startupPreflightChecker = AgentStartupPreflightChecker.CreateDefault();
     private readonly Dictionary<string, SessionViewModel> sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly CollaborationEventStore collaborationEventStore = new(ResolveCollaborationEventsDirectory());
     private readonly AgentTaskStore taskStore = new();
@@ -746,12 +747,24 @@ public partial class MainWindow : Window
                 return false;
             }
 
+            var hookScriptsDirectory = startupCommand.AgentKind == AgentKind.PowerShell
+                ? null
+                : TryResolveHookScriptsDirectory();
+            var hookPythonCommand = startupCommand.AgentKind == AgentKind.PowerShell
+                ? null
+                : ResolveHookPythonCommand();
+            var preflightResult = startupPreflightChecker.Check(new AgentStartupPreflightRequest(
+                startupCommand,
+                hookScriptsDirectory,
+                hookPythonCommand));
+            preflightResult.ThrowIfFailed();
+
             if (startupCommand.AgentKind != AgentKind.PowerShell)
             {
                 StatusTextBlock.Text = "Installing project hooks...";
                 await ProjectAgentHookInstaller.InstallAsync(
                     workspace.Path,
-                    new ProjectAgentHookInstallerOptions(ResolveHookScriptsDirectory(), ResolveHookPythonCommand()));
+                    new ProjectAgentHookInstallerOptions(hookScriptsDirectory!, hookPythonCommand!));
             }
 
             var shellKind = SelectedShellKind();
@@ -941,26 +954,26 @@ public partial class MainWindow : Window
         return NativeDiagnosticsPaths.ResolveDataDirectory();
     }
 
-    private static string ResolveHookScriptsDirectory()
+    private static string? TryResolveHookScriptsDirectory()
     {
         var environmentOverride = Environment.GetEnvironmentVariable("AGENTHUB_HOOKS_SOURCE_DIR");
         var candidates = new List<string>();
         if (!string.IsNullOrWhiteSpace(environmentOverride))
         {
-            candidates.Add(environmentOverride);
+            return environmentOverride;
         }
 
         AddAncestorCandidates(candidates, Directory.GetCurrentDirectory());
         AddAncestorCandidates(candidates, AppContext.BaseDirectory);
         foreach (var candidate in candidates)
         {
-            if (File.Exists(Path.Combine(candidate, "agenthub_hook_common.py")))
+            if (Directory.Exists(candidate))
             {
                 return candidate;
             }
         }
 
-        throw new DirectoryNotFoundException($"AgentHub hook scripts not found. Checked: {string.Join(", ", candidates)}");
+        return null;
     }
 
     private string ResolveHookPythonCommand()

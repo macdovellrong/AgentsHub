@@ -201,6 +201,18 @@ public sealed class MainWindowTaskPlanUiTests
     }
 
     [Fact]
+    public async Task Main_window_runs_startup_preflight_before_installing_managed_agent_hooks()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("AgentStartupPreflightChecker.CreateDefault()", code, StringComparison.Ordinal);
+        Assert.Contains("preflightResult.ThrowIfFailed()", code, StringComparison.Ordinal);
+        Assert.True(
+            code.IndexOf("preflightResult.ThrowIfFailed()", StringComparison.Ordinal) <
+            code.IndexOf("ProjectAgentHookInstaller.InstallAsync", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Main_window_can_start_all_managed_agents_for_current_workspace()
     {
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
