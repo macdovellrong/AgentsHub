@@ -186,7 +186,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="150" />
+                <RowDefinition Height="220" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -218,6 +218,8 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="12" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
                 <Border Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="10">
@@ -231,6 +233,43 @@
                 </Border>
 
                 <Border Grid.Column="2" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="8" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock Text="Conversations" Foreground="#9FB0C2" VerticalAlignment="Center" />
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="Refresh"
+                                        Click="RefreshConversations_Click"
+                                        MinHeight="26"
+                                        MinWidth="70"
+                                        Margin="0,0,6,0" />
+                                <Button Content="Open"
+                                        Click="OpenConversationFolder_Click"
+                                        MinHeight="26"
+                                        MinWidth="60" />
+                            </StackPanel>
+                        </DockPanel>
+                        <ListBox Grid.Row="1"
+                                 x:Name="ConversationListBox"
+                                 Background="#0E151D"
+                                 Foreground="#F2F6FA"
+                                 BorderBrush="#40566E"
+                                 SelectionChanged="ConversationListBox_SelectionChanged" />
+                        <ListBox Grid.Row="3"
+                                 x:Name="ConversationDetailListBox"
+                                 Background="#0E151D"
+                                 Foreground="#F2F6FA"
+                                 BorderBrush="#40566E" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="4" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />

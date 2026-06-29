@@ -111,6 +111,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 ## 当前流程
 
 左侧 Conversations 区域可以输入 topic 和 participants；默认 participants 是 `claude,codex`。`Start manager` 会以 Claude 作为 supervisor，把其余参与者作为 workers；`Roundtable` 会按参与者顺序轮转；`Pair` 要求正好两名参与者。
+右侧底部 Conversations 面板会列出当前 workspace 的 conversation 状态、步数、参与者和持久化目录；启动 conversation 或当前 workspace 收到 hook 回传后会自动刷新，也可以手动 Refresh，并用 Open 打开 `.agenthub/conversations/<id>` 目录查看 `brief.md`、`memory.md`、`state.json` 和 `turns/*.md`。
 
 1. 启动 native app。
 2. 输入已存在的 workspace 路径并点击 Add，或点击 Browse 选择目录并加入工作区列表；如果列表中已有选中项，输入框或 Browse 新选中的路径会优先生效。
@@ -172,7 +173,7 @@ native conversation 状态保存位置：
 <workspace>/.agenthub/conversations/conversations.jsonl
 ```
 
-native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。Core 也提供了 manager `handleAgentOutput` 状态流：supervisor 的 `send` / `send_message` 会转成带 conversation/task 上下文的 delegated prompt 并投递到目标 profile 最新 session，`done` 会完成 conversation，`ask_user` 会暂停 conversation；participant 的 hook 回传会生成 observation prompt 投回 supervisor，显式 `conversationId/taskId` 和从最近 delegated event 推断两种路径都支持。Core 还支持 roundtable conversation：按 `claude -> codex -> gemini` 优先顺序规范参与者，启动时投递给第一位，hook 回传后轮转到下一位，到达 `maxSteps` 后完成。Core 也支持两人 pair negotiation conversation：启动时创建 brief/memory/state/turns 文件并投递第一轮文件型协商 prompt，`continue` 会校验或补写当前 turn artifact 后投递给另一位参与者，双方 `accept` 同一 `proposal_version` 后完成，达到 `maxSteps` 时暂停。WPF hook pipeline 已接入这些 conversation 分流逻辑。WPF App 已提供 Conversations 基础入口，可输入 topic 和 participants 后启动 manager、roundtable 或 pair negotiation。
+native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。Core 也提供了 manager `handleAgentOutput` 状态流：supervisor 的 `send` / `send_message` 会转成带 conversation/task 上下文的 delegated prompt 并投递到目标 profile 最新 session，`done` 会完成 conversation，`ask_user` 会暂停 conversation；participant 的 hook 回传会生成 observation prompt 投回 supervisor，显式 `conversationId/taskId` 和从最近 delegated event 推断两种路径都支持。Core 还支持 roundtable conversation：按 `claude -> codex -> gemini` 优先顺序规范参与者，启动时投递给第一位，hook 回传后轮转到下一位，到达 `maxSteps` 后完成。Core 也支持两人 pair negotiation conversation：启动时创建 brief/memory/state/turns 文件并投递第一轮文件型协商 prompt，`continue` 会校验或补写当前 turn artifact 后投递给另一位参与者，双方 `accept` 同一 `proposal_version` 后完成，达到 `maxSteps` 时暂停。WPF hook pipeline 已接入这些 conversation 分流逻辑。WPF App 已提供 Conversations 基础入口，可输入 topic 和 participants 后启动 manager、roundtable 或 pair negotiation，并能查看 conversation 列表、详情和打开对应持久化目录。
 
 Host shell 等本机设置保存位置：
 

@@ -65,9 +65,14 @@ public sealed class MainWindowTaskPlanUiTests
 
         Assert.Contains("x:Name=\"ConversationTopicTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ConversationParticipantsTextBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ConversationListBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ConversationDetailListBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartManagerConversation_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartRoundtableConversation_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartPairNegotiationConversation_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"RefreshConversations_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OpenConversationFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionChanged=\"ConversationListBox_SelectionChanged\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -82,6 +87,21 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("StartManagerAsync(new StartAgentManagerConversationRequest", code, StringComparison.Ordinal);
         Assert.Contains("StartRoundtableAsync(new StartRoundtableConversationRequest", code, StringComparison.Ordinal);
         Assert.Contains("StartPairNegotiationAsync(new StartPairNegotiationConversationRequest", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_window_refreshes_conversation_list_after_workspace_start_and_hooks()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("ReloadConversationsAsync", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadConversationsAsync(workspace.Path", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadConversationsAsync(workspacePath, conversation.Id)", code, StringComparison.Ordinal);
+        Assert.Contains("await ReloadConversationsAsync(hookEvent.Workspace", code, StringComparison.Ordinal);
+        Assert.Contains("ReloadSelectedConversationDetailsAsync", code, StringComparison.Ordinal);
+        Assert.Contains("OpenConversationFolder_Click", code, StringComparison.Ordinal);
+        Assert.Contains("ProcessStartInfo", code, StringComparison.Ordinal);
+        Assert.Contains("AgentConversationDisplayFormatter.Format", code, StringComparison.Ordinal);
     }
 
     private static string FindSourceFile(params string[] relativeParts)

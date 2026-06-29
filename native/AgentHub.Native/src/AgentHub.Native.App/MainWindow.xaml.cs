@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -171,6 +172,7 @@ public partial class MainWindow : Window
         {
             WorkspaceTextBox.Text = workspace.Path;
             await ReloadTimelineAsync(workspace.Path);
+            await ReloadConversationsAsync(workspace.Path);
             await ReloadTaskPlansAsync(workspace.Path);
         }
     }
@@ -192,7 +194,10 @@ public partial class MainWindow : Window
             if (shouldReload)
             {
                 var selectedPlanId = await Dispatcher.InvokeAsync(CurrentTaskPlanId);
+                var selectedConversationId = await Dispatcher.InvokeAsync(CurrentConversationId);
                 await ReloadTimelineAsync(hookEvent.Workspace);
+                await ReloadConversationsAsync(hookEvent.Workspace, selectedConversationId);
+                await ReloadSelectedConversationDetailsAsync(hookEvent.Workspace);
                 await ReloadTaskPlansAsync(hookEvent.Workspace, selectedPlanId);
                 await ReloadSelectedTaskPlanDetailsAsync(hookEvent.Workspace);
             }
@@ -309,6 +314,8 @@ public partial class MainWindow : Window
                 _ => throw new InvalidOperationException($"Unknown conversation mode: {mode}")
             };
             await ReloadTimelineAsync(workspacePath);
+            await ReloadConversationsAsync(workspacePath, conversation.Id);
+            await ReloadSelectedConversationDetailsAsync(workspacePath);
             StatusTextBlock.Text = conversation.Status == "running"
                 ? $"Started {conversation.Mode}: {conversation.Id}"
                 : $"{conversation.Mode} not started: {conversation.Status}";
@@ -317,6 +324,55 @@ public partial class MainWindow : Window
         {
             StatusTextBlock.Text = $"Start conversation failed: {ex.Message}";
         }
+    }
+
+    private async void RefreshConversations_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        await ReloadConversationsAsync(workspacePath, CurrentConversationId());
+        await ReloadSelectedConversationDetailsAsync(workspacePath);
+        StatusTextBlock.Text = "Conversations refreshed";
+    }
+
+    private async void ConversationListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        await ReloadSelectedConversationDetailsAsync();
+    }
+
+    private void OpenConversationFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        if (ConversationListBox.SelectedItem is not ConversationViewModel selected)
+        {
+            StatusTextBlock.Text = "No conversation selected";
+            return;
+        }
+
+        var folderPath = ResolveConversationFolderPath(workspacePath, selected.Conversation.Id);
+        if (!Directory.Exists(folderPath))
+        {
+            StatusTextBlock.Text = $"Conversation folder not found: {selected.Conversation.Id}";
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = folderPath,
+            UseShellExecute = true
+        });
+        StatusTextBlock.Text = $"Opened conversation folder: {selected.Conversation.Id}";
     }
 
     private void TaskPlanSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -841,6 +897,69 @@ public partial class MainWindow : Window
         });
     }
 
+    private async Task ReloadConversationsAsync(string workspacePath, string? selectedConversationId = null)
+    {
+        var conversations = await conversationStore.ListAsync(workspacePath);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            var retainedSelection = selectedConversationId ?? CurrentConversationId();
+            ConversationListBox.Items.Clear();
+            ConversationViewModel? selected = null;
+            foreach (var conversation in conversations.OrderByDescending(item => item.UpdatedAt).Take(100))
+            {
+                var item = new ConversationViewModel(conversation);
+                ConversationListBox.Items.Add(item);
+                if (string.Equals(conversation.Id, retainedSelection, StringComparison.Ordinal))
+                {
+                    selected = item;
+                }
+            }
+
+            if (selected is not null)
+            {
+                ConversationListBox.SelectedItem = selected;
+            }
+            else if (ConversationListBox.Items.Count > 0 && ConversationListBox.SelectedItem is null)
+            {
+                ConversationListBox.SelectedIndex = 0;
+            }
+            else if (ConversationListBox.Items.Count == 0)
+            {
+                ConversationDetailListBox.Items.Clear();
+            }
+        });
+    }
+
+    private async Task ReloadSelectedConversationDetailsAsync(string? workspacePath = null)
+    {
+        var resolvedWorkspacePath = workspacePath ?? await Dispatcher.InvokeAsync(CurrentRoutingWorkspacePath);
+        var selected = await Dispatcher.InvokeAsync(() =>
+            ConversationListBox.SelectedItem as ConversationViewModel);
+        if (resolvedWorkspacePath is null || selected is null)
+        {
+            await ClearConversationDetailsAsync();
+            return;
+        }
+
+        var folderPath = ResolveConversationFolderPath(resolvedWorkspacePath, selected.Conversation.Id);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            ConversationDetailListBox.Items.Clear();
+            foreach (var detail in AgentConversationDisplayFormatter.FormatDetails(selected.Conversation, folderPath))
+            {
+                ConversationDetailListBox.Items.Add(detail);
+            }
+        });
+    }
+
+    private async Task ClearConversationDetailsAsync()
+    {
+        await Dispatcher.InvokeAsync(() =>
+        {
+            ConversationDetailListBox.Items.Clear();
+        });
+    }
+
     private async Task ReloadTaskPlansAsync(string workspacePath, string? selectedPlanId = null)
     {
         var sources = await taskPlanStore.ListSourceTasksAsync(workspacePath);
@@ -960,6 +1079,16 @@ public partial class MainWindow : Window
         return TaskPlanListBox.SelectedItem is TaskPlanViewModel selected ? selected.Plan.Id : null;
     }
 
+    private string? CurrentConversationId()
+    {
+        return ConversationListBox.SelectedItem is ConversationViewModel selected ? selected.Conversation.Id : null;
+    }
+
+    private static string ResolveConversationFolderPath(string workspacePath, string conversationId)
+    {
+        return Path.Combine(workspacePath, ".agenthub", "conversations", conversationId);
+    }
+
     private async Task RecordUserMessageAsync(string workspacePath, string targetProfileId, string text)
     {
         await collaborationEventStore.AppendUserMessageAsync(new CollaborationUserMessage(
@@ -1019,6 +1148,14 @@ public partial class MainWindow : Window
         public override string ToString()
         {
             return AgentSessionDisplayFormatter.Format(Descriptor);
+        }
+    }
+
+    private sealed record ConversationViewModel(AgentConversation Conversation)
+    {
+        public override string ToString()
+        {
+            return AgentConversationDisplayFormatter.Format(Conversation);
         }
     }
 
