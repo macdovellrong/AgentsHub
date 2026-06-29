@@ -86,7 +86,8 @@ public static class NativeDiagnosticsLauncher
         string scriptPath,
         string outputPath,
         string pythonCommand,
-        string? workspacePath)
+        string? workspacePath,
+        string? agentSelection = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -116,6 +117,12 @@ public static class NativeDiagnosticsLauncher
             startInfo.ArgumentList.Add(workspacePath);
         }
 
+        if (!string.IsNullOrWhiteSpace(agentSelection))
+        {
+            startInfo.ArgumentList.Add("-Agent");
+            startInfo.ArgumentList.Add(agentSelection);
+        }
+
         return startInfo;
     }
 
@@ -123,6 +130,7 @@ public static class NativeDiagnosticsLauncher
         string dataDirectory,
         string? workspacePath,
         string pythonCommand,
+        string agentSelection = "agents",
         CancellationToken cancellationToken = default)
     {
         var scriptPath = ResolveScriptPath(AppContext.BaseDirectory);
@@ -131,7 +139,7 @@ public static class NativeDiagnosticsLauncher
 
         using var process = new Process
         {
-            StartInfo = BuildStartInfo(scriptPath, outputPath, pythonCommand, workspacePath)
+            StartInfo = BuildStartInfo(scriptPath, outputPath, pythonCommand, workspacePath, agentSelection)
         };
         process.Start();
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);

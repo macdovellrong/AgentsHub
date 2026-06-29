@@ -158,6 +158,43 @@ def test_collect_native_diagnostics_resolves_relative_output_from_current_locati
     assert "# AgentHub Native Diagnostics" in output.read_text(encoding="utf-8")
 
 
+def test_collect_native_diagnostics_accepts_agent_selection_for_launch_checks(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "collect-native-diagnostics.ps1"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = tmp_path / "agent-selection-diagnostics.md"
+
+    command = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            (
+                f"& {ps_quote(str(script_path))} "
+                f"-Workspace {ps_quote(str(workspace))} "
+                f"-Agent agents "
+                f"-Python {ps_quote(sys.executable)} "
+                f"-Output {ps_quote(str(output))}"
+            ),
+            "exit $LASTEXITCODE",
+        ]
+    )
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = output.read_text(encoding="utf-8")
+    assert "- Agent selection: agents" in report
+    assert "PowerShell Host agents Check" in report
+    assert "cmd Host agents Check" in report
+    assert "-Agent 'agents'" in report
+
+
 def test_publish_native_script_includes_diagnostics_entrypoints() -> None:
     script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
 

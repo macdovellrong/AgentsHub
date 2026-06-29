@@ -596,7 +596,7 @@ Invoke-ValidationStep "hook python" {
 }
 
 Invoke-ValidationStep "native diagnostics report" {
-    & $diagnosticsScript -Workspace $Workspace -Python $Python -Output $resolvedOutput
+    & $diagnosticsScript -Workspace $Workspace -Agent $Agent -Python $Python -Output $resolvedOutput
 }
 
 $status = if ($script:ValidationHadFailure) { "failed" } else { "passed" }

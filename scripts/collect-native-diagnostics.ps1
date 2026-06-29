@@ -1,5 +1,6 @@
 param(
     [string]$Workspace,
+    [string[]]$Agent = @("codex"),
     [string]$Python = "py -3.11",
     [string]$Output
 )
@@ -308,6 +309,8 @@ if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {
 
 $workspaceArgument = if ([string]::IsNullOrWhiteSpace($Workspace)) { "" } else { " -Workspace $(Quote-PS $Workspace)" }
 $pythonArgument = if ([string]::IsNullOrWhiteSpace($Python)) { "" } else { " -Python $(Quote-PS $Python)" }
+$agentLabel = if ($null -eq $Agent -or $Agent.Count -eq 0) { "codex" } else { $Agent -join "," }
+$agentArgument = " -Agent $(Quote-PS $agentLabel)"
 $localAppData = $env:LOCALAPPDATA
 if ([string]::IsNullOrWhiteSpace($localAppData)) {
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
@@ -338,6 +341,7 @@ Add-Line "- Generated at: $generatedAt"
 Add-Line "- Execution mode: $executionMode"
 Add-Line "- Repository: $script:RepoRoot"
 Add-Line "- Workspace: $Workspace"
+Add-Line "- Agent selection: $agentLabel"
 Add-Line "- Python command: $Python"
 Add-Line "- Native data directory: $nativeDataDirectory"
 Add-Line
@@ -392,14 +396,14 @@ Add-Line
 Invoke-DiagnosticCommand "Python Launchers" "py -0p; where.exe python; python --version"
 if (-not [string]::IsNullOrWhiteSpace($Python) -and
     (Test-Path -LiteralPath $repoStartNativeScript -PathType Leaf)) {
-    Invoke-DiagnosticCommand "Hook Python Probe" "& $startNativeCommand -Check -Agent codex$pythonArgument"
+    Invoke-DiagnosticCommand "Hook Python Probe" "& $startNativeCommand -Check$agentArgument$pythonArgument"
 }
 
 Add-Line "## Native Launch Checks"
 Add-Line
 if (Test-Path -LiteralPath $repoStartNativeScript -PathType Leaf) {
-    Invoke-DiagnosticCommand "PowerShell Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell powershell -Agent codex$pythonArgument"
-    Invoke-DiagnosticCommand "cmd Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell cmd -Agent codex$pythonArgument"
+    Invoke-DiagnosticCommand "PowerShell Host $agentLabel Check" "& $startNativeCommand -Check$workspaceArgument -Shell powershell$agentArgument$pythonArgument"
+    Invoke-DiagnosticCommand "cmd Host $agentLabel Check" "& $startNativeCommand -Check$workspaceArgument -Shell cmd$agentArgument$pythonArgument"
     Invoke-DiagnosticCommand "Plain PowerShell Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent powershell"
     Invoke-DiagnosticCommand "Plain cmd Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent cmd"
     Invoke-DiagnosticCommand "Publish Check" "& $publishNativeCommand -Check"

@@ -153,3 +153,4 @@ def test_validate_native_laptop_supports_agent_selection() -> None:
     assert '[string[]]$Agent = @("codex")' in script
     assert "-Agent $Agent" in script
     assert '$agentLabel = $Agent -join ","' in script
+    assert "& $diagnosticsScript -Workspace $Workspace -Agent $Agent -Python $Python -Output $resolvedOutput" in script

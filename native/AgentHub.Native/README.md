@@ -124,12 +124,14 @@
 
 ```powershell
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.bat -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Codex/Claude/Gemini CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
+默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Codex/Claude/Gemini CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、所选 Agent 的 native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，默认按 `-Agent agents` 采集 Codex、Claude、Gemini 预检信息，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
 
 也可以直接运行项目：
 
@@ -164,7 +166,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 18. WPF hook pipeline 会优先识别 running conversation 输出；manager supervisor hook 会绕过通用 command dispatcher，交给 conversation orchestrator 投递 delegated prompt 或更新 conversation 状态，避免同一条 `send` 命令被通用 dispatcher 和 conversation orchestrator 重复发送。manager participant hook 如果显式带 `conversationId/taskId`，或可以从最近一次 delegated event 的 `conversationId/taskId/sessionId` 推断上下文，会生成 observation prompt 投回 supervisor。roundtable hook 会按 conversation 的 participant 顺序投递给下一位，到达 `maxSteps` 后完成 conversation。pair negotiation hook 会按两名参与者轮转投递 `continue`，双方接受同一 `proposal_version` 时完成 conversation，达到 `maxSteps` 时暂停。
 19. Sessions 默认勾选 `Current`，只显示当前 workspace 的 session，切换 workspace 时会自动刷新；取消勾选后可以查看所有 workspace 的 session。可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 20. 顶部 `Open data` 会打开本机 native 数据目录，方便查看 `workspaces.json`、`settings.json`、`events/` 和 `hooks.jsonl` 等诊断文件。
-21. 顶部 `Run diagnostics` 会用当前 workspace 和 hook Python 命令生成诊断报告，默认保存到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`，并更新 `latest-diagnostics.txt`。
+21. 顶部 `Run diagnostics` 会用当前 workspace、hook Python 命令和 `agents` Agent 选择生成诊断报告，默认保存到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`，并更新 `latest-diagnostics.txt`。
 
 workspace 列表保存位置：
 

@@ -54,3 +54,4 @@ def test_publish_native_script_embeds_agent_selection_validation() -> None:
     assert '"claude" { return "claude" }' in script
     assert '"gemini" { return "gemini" }' in script
     assert 'Invoke-ValidationStep "agent native launchers"' in script
+    assert "& $diagnosticsScript -Workspace $Workspace -Agent $Agent -Python $Python -Output $resolvedOutput" in script

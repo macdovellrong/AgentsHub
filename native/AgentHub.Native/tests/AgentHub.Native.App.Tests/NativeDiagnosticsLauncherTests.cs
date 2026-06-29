@@ -86,6 +86,37 @@ public sealed class NativeDiagnosticsLauncherTests
     }
 
     [Fact]
+    public void Builds_process_start_info_with_agent_selection()
+    {
+        var startInfo = NativeDiagnosticsLauncher.BuildStartInfo(
+            @"C:\AgentHub\scripts\collect-native-diagnostics.ps1",
+            @"C:\AgentHub\diagnostics.md",
+            "py -3.11",
+            @"V:\OrderManager",
+            "agents");
+
+        Assert.Contains("-Agent", startInfo.ArgumentList);
+        Assert.Contains("agents", startInfo.ArgumentList);
+        Assert.Equal(
+            [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                @"C:\AgentHub\scripts\collect-native-diagnostics.ps1",
+                "-Output",
+                @"C:\AgentHub\diagnostics.md",
+                "-Python",
+                "py -3.11",
+                "-Workspace",
+                @"V:\OrderManager",
+                "-Agent",
+                "agents"
+            ],
+            startInfo.ArgumentList.ToArray());
+    }
+
+    [Fact]
     public void Writes_latest_report_pointer_next_to_diagnostics_reports()
     {
         var root = CreateTempDirectory();

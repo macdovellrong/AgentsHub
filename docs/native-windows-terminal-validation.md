@@ -71,9 +71,10 @@ py -3.11 --version
 
 ```powershell
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode` 和 `Agent selection`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本，以及 native 启动预检查的是 Codex 还是三类托管 Agent。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、所选 Agent 的 native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，默认按 `-Agent agents` 采集 Codex、Claude、Gemini 预检信息，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
 
 ## 直接运行开发版
 
@@ -127,6 +128,7 @@ py -3.11 --version
 ```powershell
 .\artifacts\native\win-x64\collect-native-diagnostics.bat -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
@@ -188,6 +190,7 @@ py -3.11 --version
 
 ```powershell
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
 也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/latest-diagnostics.txt` 读取最新报告路径并回传对应报告。
