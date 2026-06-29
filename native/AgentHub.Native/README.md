@@ -125,7 +125,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 12. 用户发送的消息、hook 回传，以及 AgentHub 从 hook 命令自动转发给目标 Agent 的消息都会显示在 Collaboration timeline 列表中。
 13. provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`；`send_message` 记录 sent/failed，`claim_task` / `complete_task` 记录 observed；任务计划路由命令转发后的 mailbox 记录会保留 `planId`。
 14. `claim_task` / `complete_task` 也会尝试更新 `<workspace>/.agenthub/tasks/tasks.jsonl` 中已有 legacy task 的状态；缺少对应 task 时不会阻断 hook 处理。
-15. 左侧 Task Plans 区域可以刷新 `<workspace>/tasks/*/task-plan.md` 来源、创建 task-plan 执行快照，并把 manager prompt 投递给当前 workspace 的 manager profile 最新 session。
+15. 左侧 Task Plans 区域可以刷新 `<workspace>/tasks/*/task-plan.md` 来源、创建 task-plan 执行快照，并把 manager prompt 投递给当前 workspace 的 manager profile 最新 session；选中执行快照后，右侧 Task plan detail 会显示最新 tasks 和最近 events。
 16. manager hook 输出的 `assign_task` / `request_review` / `reject_task` / `approve_task` / `pause_plan` 在完成现有终端转发后，会同步写入执行快照内的 `tasks.jsonl` / `events.jsonl`。
 17. delegated agent 的 hook 回传会从最近的 task-plan 分派事件推断 plan/task，写入 `artifacts/*.md`，把任务状态置为 `review`，并把 observation prompt 投递回 manager session；manager 不在线时会记录带 task/artifact 上下文的 `delivery_failed`。
 18. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。

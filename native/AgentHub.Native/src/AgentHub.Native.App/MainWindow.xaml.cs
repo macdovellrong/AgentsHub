@@ -174,6 +174,7 @@ public partial class MainWindow : Window
             if (shouldReload)
             {
                 await ReloadTimelineAsync(hookEvent.Workspace);
+                await ReloadSelectedTaskPlanDetailsAsync(hookEvent.Workspace);
             }
         }
         catch (Exception ex)
@@ -314,6 +315,7 @@ public partial class MainWindow : Window
         {
             var updated = await taskPlanService.StartManagerAsync(workspacePath, selected.Plan.Id);
             await ReloadTaskPlansAsync(workspacePath, updated.Id);
+            await ReloadSelectedTaskPlanDetailsAsync(workspacePath);
             await ReloadTimelineAsync(workspacePath);
             StatusTextBlock.Text = updated.Status == "running"
                 ? $"Task plan manager started: {updated.Title}"
@@ -323,6 +325,11 @@ public partial class MainWindow : Window
         {
             StatusTextBlock.Text = $"Start task plan manager failed: {ex.Message}";
         }
+    }
+
+    private async void TaskPlanListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        await ReloadSelectedTaskPlanDetailsAsync();
     }
 
     private async Task StartAgentAsync(AgentStartupCommand startupCommand)
@@ -799,6 +806,44 @@ public partial class MainWindow : Window
             {
                 TaskPlanListBox.SelectedIndex = 0;
             }
+        });
+    }
+
+    private async Task ReloadSelectedTaskPlanDetailsAsync(string? workspacePath = null)
+    {
+        var resolvedWorkspacePath = workspacePath ?? await Dispatcher.InvokeAsync(CurrentRoutingWorkspacePath);
+        var selectedPlanId = await Dispatcher.InvokeAsync(() =>
+            TaskPlanListBox.SelectedItem is TaskPlanViewModel selected ? selected.Plan.Id : null);
+        if (resolvedWorkspacePath is null || selectedPlanId is null)
+        {
+            await ClearTaskPlanDetailsAsync();
+            return;
+        }
+
+        var tasks = await taskPlanStore.ListTasksAsync(resolvedWorkspacePath, selectedPlanId);
+        var events = await taskPlanStore.ListEventsAsync(resolvedWorkspacePath, selectedPlanId);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            TaskPlanTaskListBox.Items.Clear();
+            foreach (var task in tasks.OrderBy(task => task.Id, StringComparer.Ordinal))
+            {
+                TaskPlanTaskListBox.Items.Add(TaskPlanDisplayFormatter.FormatTask(task));
+            }
+
+            TaskPlanEventListBox.Items.Clear();
+            foreach (var item in events.OrderByDescending(item => item.Timestamp).Take(100))
+            {
+                TaskPlanEventListBox.Items.Add(TaskPlanDisplayFormatter.FormatEvent(item, TimeZoneInfo.Local));
+            }
+        });
+    }
+
+    private async Task ClearTaskPlanDetailsAsync()
+    {
+        await Dispatcher.InvokeAsync(() =>
+        {
+            TaskPlanTaskListBox.Items.Clear();
+            TaskPlanEventListBox.Items.Clear();
         });
     }
 

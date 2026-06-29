@@ -12,6 +12,9 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("x:Name=\"TaskPlanSourceComboBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TaskPlanTitleTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TaskPlanListBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TaskPlanTaskListBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TaskPlanEventListBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionChanged=\"TaskPlanListBox_SelectionChanged\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"RefreshTaskPlans_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"CreateTaskPlan_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartTaskPlanManager_Click\"", xaml, StringComparison.Ordinal);
@@ -27,6 +30,11 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("CreateTaskPlan_Click", code, StringComparison.Ordinal);
         Assert.Contains("StartTaskPlanManager_Click", code, StringComparison.Ordinal);
         Assert.Contains("StartManagerAsync", code, StringComparison.Ordinal);
+        Assert.Contains("ReloadSelectedTaskPlanDetailsAsync", code, StringComparison.Ordinal);
+        Assert.Contains("ListTasksAsync", code, StringComparison.Ordinal);
+        Assert.Contains("ListEventsAsync", code, StringComparison.Ordinal);
+        Assert.Contains("TaskPlanDisplayFormatter.FormatTask", code, StringComparison.Ordinal);
+        Assert.Contains("TaskPlanDisplayFormatter.FormatEvent", code, StringComparison.Ordinal);
     }
 
     [Fact]
