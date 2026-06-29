@@ -312,6 +312,8 @@ Invoke-DiagnosticCommand "Console Host Registry" "Get-ItemProperty 'HKCU:\Consol
 Add-Line "## Input Devices"
 Add-Line
 Invoke-DiagnosticCommand "Pointer and HID Devices" "Get-PnpDevice -Class Mouse,Keyboard,HIDClass | Select-Object Status,Class,FriendlyName,InstanceId | Format-Table -AutoSize"
+Invoke-DiagnosticCommand "Pointing Device Details" "Get-CimInstance Win32_PointingDevice | Select-Object Name,Manufacturer,DeviceID,PointingType,NumberOfButtons,HardwareType,Status | Format-List"
+Invoke-DiagnosticCommand "Precision Touchpad Settings" "Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad' -ErrorAction SilentlyContinue | Format-List; Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad' -ErrorAction SilentlyContinue | Select-Object PSChildName | Format-Table -AutoSize"
 
 if ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
     (Test-Path -LiteralPath $publishedStarter -PathType Leaf)) {

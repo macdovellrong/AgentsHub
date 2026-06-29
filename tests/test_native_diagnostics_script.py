@@ -54,6 +54,8 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "HKCU:\\Console" in report
     assert "## Input Devices" in report
     assert "Get-PnpDevice" in report
+    assert "Win32_PointingDevice" in report
+    assert "PrecisionTouchPad" in report
     assert "### Codex Native Launcher" in report
     assert "### Codex No Alt Screen Probe" in report
     assert "## Native Launch Checks" in report
