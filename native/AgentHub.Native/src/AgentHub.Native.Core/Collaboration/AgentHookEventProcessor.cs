@@ -27,7 +27,7 @@ public sealed class AgentHookEventProcessor(
         await RecordTeamMailboxAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
         await RecordTaskStatusAsync(hookEvent, dispatchResult, cancellationToken).ConfigureAwait(false);
         await RecordTaskPlanEventsAsync(hookEvent, dispatchResult, agentOutputEvent.Id, cancellationToken).ConfigureAwait(false);
-        return dispatchResult;
+        return dispatchResult with { SourceEventId = agentOutputEvent.Id };
     }
 
     private async Task RecordTeamMailboxAsync(

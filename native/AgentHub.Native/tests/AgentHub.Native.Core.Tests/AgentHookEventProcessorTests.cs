@@ -34,6 +34,7 @@ public sealed class AgentHookEventProcessorTests : IDisposable
         Assert.Equal(["Please inspect.", "\r"], target.Writes);
         var events = await store.ListAsync(workspacePath);
         Assert.Equal([CollaborationEventKind.AgentOutput, CollaborationEventKind.UserMessage], events.Select(item => item.Kind).ToArray());
+        Assert.Equal(events[0].Id, result.SourceEventId);
         Assert.Equal("claude", events[0].ProfileId);
         Assert.Equal("agenthub", events[1].ProfileId);
         Assert.Equal("codex", events[1].TargetProfileId);

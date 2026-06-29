@@ -8,4 +8,7 @@ public sealed record AgentHubCommandDispatchResult(
     IReadOnlyList<AgentHubWorkflowCommand> WorkflowCommands,
     IReadOnlyList<AgentHubPairNegotiationCommand> PairNegotiationCommands,
     IReadOnlyList<AgentHubCommandParseError> ParseErrors,
-    IReadOnlyList<AgentHubCommandDispatchError> DispatchErrors);
+    IReadOnlyList<AgentHubCommandDispatchError> DispatchErrors)
+{
+    public string? SourceEventId { get; init; }
+}

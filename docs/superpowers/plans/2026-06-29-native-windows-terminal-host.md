@@ -37,6 +37,7 @@
 - [x] native task-plan hook completion 会写入 `artifacts/*.md`，把 delegated task 置为 `review`，并把 observation prompt 投递回 manager session；manager 不在线时记录带 task/artifact 上下文的 `delivery_failed`。
 - [x] native App 会在选中 task-plan 执行快照后展示最新 task 状态和最近 event，hook 回传后自动刷新当前 plan detail。
 - [x] native App 在当前 workspace 收到 hook 后会刷新 Task Plans 列表，确保 paused/running 等 plan 状态能及时反映到 UI。
+- [x] native hook processor 会把 Collaboration `agent_output` 事件 id 透传到 task-plan 执行快照事件，方便后续追踪和去重。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。

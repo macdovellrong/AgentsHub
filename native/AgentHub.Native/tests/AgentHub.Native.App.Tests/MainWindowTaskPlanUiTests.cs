@@ -45,6 +45,8 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("RecordManagerDispatchResultAsync", code, StringComparison.Ordinal);
         Assert.Contains("RecordHookCompletionAsync", code, StringComparison.Ordinal);
         Assert.Contains("hookEvent.ProfileId ?? hookEvent.Source ?? \"agent\"", code, StringComparison.Ordinal);
+        Assert.Matches(@"RecordManagerDispatchResultAsync\([\s\S]*?result,\s*result\.SourceEventId", code);
+        Assert.Matches(@"AgentTaskPlanHookCompletionInput\([\s\S]*?SourceEventId:\s*result\.SourceEventId", code);
     }
 
     [Fact]

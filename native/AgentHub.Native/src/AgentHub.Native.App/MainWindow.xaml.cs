@@ -200,14 +200,16 @@ public partial class MainWindow : Window
         await taskPlanService.RecordManagerDispatchResultAsync(
             hookEvent.Workspace,
             hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
-            result);
+            result,
+            result.SourceEventId);
         await taskPlanService.RecordHookCompletionAsync(
             hookEvent.Workspace,
             new AgentTaskPlanHookCompletionInput(
                 hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
                 hookEvent.Message,
                 hookEvent.SessionId,
-                hookEvent.RunId));
+                hookEvent.RunId,
+                SourceEventId: result.SourceEventId));
         return result;
     }
 
