@@ -143,8 +143,11 @@ function Resolve-AgentCommandName {
         "powershell" { return $null }
         "cmd" { return $null }
         "shell" { return $null }
+        "scrolltest" { return $null }
+        "scroll-test" { return $null }
+        "scroll" { return $null }
         default {
-            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, powershell, cmd, shell."
+            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, powershell, cmd, shell, scrolltest."
         }
     }
 }
@@ -347,6 +350,9 @@ function Resolve-HostShellForCheck {
             "cmd" { return "cmd" }
             "powershell" { return "powershell" }
             "shell" { return "powershell" }
+            "scrolltest" { return "powershell" }
+            "scroll-test" { return "powershell" }
+            "scroll" { return "powershell" }
         }
     }
 

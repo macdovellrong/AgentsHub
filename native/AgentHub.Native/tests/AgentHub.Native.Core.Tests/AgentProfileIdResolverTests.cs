@@ -11,6 +11,8 @@ public sealed class AgentProfileIdResolverTests
     [InlineData(AgentKind.Gemini, ShellKind.PowerShell, "gemini")]
     [InlineData(AgentKind.PowerShell, ShellKind.PowerShell, "powershell")]
     [InlineData(AgentKind.PowerShell, ShellKind.Cmd, "cmd")]
+    [InlineData(AgentKind.ScrollTest, ShellKind.PowerShell, "scrolltest")]
+    [InlineData(AgentKind.ScrollTest, ShellKind.Cmd, "scrolltest")]
     public void Resolves_profile_id_from_agent_and_shell_kind(
         AgentKind agentKind,
         ShellKind shellKind,

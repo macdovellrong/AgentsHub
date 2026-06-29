@@ -5,5 +5,6 @@ public enum AgentKind
     PowerShell,
     Codex,
     Claude,
-    Gemini
+    Gemini,
+    ScrollTest
 }

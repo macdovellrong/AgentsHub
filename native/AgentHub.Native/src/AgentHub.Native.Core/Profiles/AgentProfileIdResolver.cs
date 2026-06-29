@@ -9,6 +9,11 @@ public static class AgentProfileIdResolver
             return "cmd";
         }
 
+        if (agentKind == AgentKind.ScrollTest)
+        {
+            return "scrolltest";
+        }
+
         return agentKind.ToString().ToLowerInvariant();
     }
 }

@@ -25,6 +25,19 @@ public sealed class AgentStartupCommandCatalogTests
     }
 
     [Fact]
+    public void Builds_terminal_scrollback_smoke_command()
+    {
+        var command = AgentStartupCommandCatalog.Build(AgentKind.ScrollTest, AgentStartupMode.Start);
+
+        Assert.Equal(AgentKind.ScrollTest, command.AgentKind);
+        Assert.Equal("powershell.exe", command.Command);
+        Assert.Contains("-NoExit", command.Arguments);
+        Assert.Contains("-Command", command.Arguments);
+        Assert.Contains(command.Arguments, argument => argument.Contains("AgentHub scroll smoke line 240", StringComparison.Ordinal));
+        Assert.Contains(command.Arguments, argument => argument.Contains("Use mouse wheel or touchpad to scroll up", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Builds_managed_agent_start_commands_in_default_ui_order()
     {
         var commands = AgentStartupCommandCatalog.BuildManagedAgentStartCommands();
@@ -55,6 +68,7 @@ public sealed class AgentStartupCommandCatalogTests
     [InlineData(AgentKind.Claude, true)]
     [InlineData(AgentKind.Gemini, true)]
     [InlineData(AgentKind.PowerShell, false)]
+    [InlineData(AgentKind.ScrollTest, false)]
     public void Identifies_managed_agent_kinds(AgentKind agentKind, bool expected)
     {
         Assert.Equal(expected, AgentStartupCommandCatalog.IsManagedAgent(agentKind));

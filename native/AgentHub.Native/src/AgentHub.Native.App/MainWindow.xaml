@@ -70,16 +70,17 @@
                     <ComboBoxItem Content="cmd" />
                 </ComboBox>
 
-                <UniformGrid DockPanel.Dock="Top" Columns="2" Rows="5" Margin="0,0,0,14">
+                <UniformGrid DockPanel.Dock="Top" Columns="2" Rows="6" Margin="0,0,0,14">
                     <Button Content="Start Codex" Click="StartCodex_Click" Margin="0,0,6,6" MinHeight="36" />
                     <Button Content="Resume Codex" Click="ResumeCodex_Click" Margin="6,0,0,6" MinHeight="36" />
                     <Button Content="Start Claude" Click="StartClaude_Click" Margin="0,6,6,6" MinHeight="36" />
                     <Button Content="Start Gemini" Click="StartGemini_Click" Margin="6,6,0,6" MinHeight="36" />
                     <Button Content="Start Shell" Click="StartPowerShell_Click" Margin="0,6,6,0" MinHeight="36" />
-                    <Button Content="Start Agents" Click="StartManagedAgents_Click" Margin="6,6,0,6" MinHeight="36" />
-                    <Button Content="Resume Agents" Click="ResumeManagedAgents_Click" Margin="0,6,6,0" MinHeight="36" />
-                    <Button Content="Stop Agents" Click="StopManagedAgents_Click" Margin="6,6,0,0" MinHeight="36" />
-                    <Button Content="Interrupt Agents" Click="InterruptManagedAgents_Click" Margin="0,6,6,0" MinHeight="36" />
+                    <Button Content="Scroll Test" Click="StartScrollTest_Click" Margin="6,6,0,6" MinHeight="36" />
+                    <Button Content="Start Agents" Click="StartManagedAgents_Click" Margin="0,6,6,6" MinHeight="36" />
+                    <Button Content="Resume Agents" Click="ResumeManagedAgents_Click" Margin="6,6,0,6" MinHeight="36" />
+                    <Button Content="Stop Agents" Click="StopManagedAgents_Click" Margin="0,6,6,0" MinHeight="36" />
+                    <Button Content="Interrupt Agents" Click="InterruptManagedAgents_Click" Margin="6,6,0,0" MinHeight="36" />
                 </UniformGrid>
 
                 <TextBlock DockPanel.Dock="Top" Text="Conversations" Foreground="#9FB0C2" Margin="0,0,0,6" />

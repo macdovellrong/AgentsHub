@@ -66,6 +66,7 @@
 - [x] native 发布包同时提供 `.bat` 和 `.ps1` 根入口；NAS/UNC 路径下可用 `.ps1` 启动或生成诊断，避免 `cmd.exe` 的 UNC 当前目录提示干扰报告。
 - [x] native 诊断报告会采集 Windows Terminal 包信息、settings 文件存在性和 Console Host 注册表关键项，方便对比不同电脑的滚动/终端环境差异。
 - [x] native 诊断报告会采集 `Win32_PointingDevice` 和 Precision Touchpad 设置，方便对比笔记本触摸板/指针设备对滚动行为的影响。
+- [x] native App 和启动脚本提供 `Scroll Test` / `-Agent scrolltest`，用普通 PowerShell 输出 240 行文本作为 Codex 以外的终端滚动对照组。
 
 ## 后续任务
 
@@ -81,6 +82,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 验证：
 
 - 启动 Codex。
+- 启动 Scroll Test，确认普通 scrollback 是否能滚动。
 - 执行或进入 resume。
 - 检查滚动条是否出现。
 - 检查鼠标滚轮和触摸板滚动。

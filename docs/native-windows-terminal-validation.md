@@ -36,6 +36,7 @@ git status --short --branch
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent powershell
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent cmd
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent scrolltest
 .\scripts\publish-native.ps1 -Check
 ```
 
@@ -46,7 +47,7 @@ git status --short --branch
 - `codex` 能以 Windows native launcher 形式在 PATH 中找到（`.com`、`.exe`、`.bat`、`.cmd`；npm 安装通常应显示 `codex.cmd` 而不是 `codex.ps1`），并且该 launcher 的 `--help` 包含 `--no-alt-screen`。如果这里失败，先升级 Codex CLI 或检查 npm shim 是否完整。
 - `py -3.11` 能启动 Python，并能导入 hook 依赖的标准库模块（`json`、`pathlib`、`urllib.request`）。不传 `-Python` 时，native 启动脚本和 WPF UI 默认都使用 `py -3.11`。
 - hook 脚本目录存在；如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，该目录内必须有 Codex/Claude/Gemini hook 脚本。
-- `powershell`、`cmd` 只提示使用 Host shell，不要求额外 Agent CLI。
+- `powershell`、`cmd`、`scrolltest` 只提示使用 Host shell，不要求额外 Agent CLI。`scrolltest` 会默认检查 PowerShell host。
 - publish check 输出 native project、hooks 目录和发布目录。
 
 如果第一条失败，优先检查：
@@ -87,6 +88,14 @@ py -3.11 --version
 ```
 
 `-Agent shell` 也是普通 shell 启动别名，默认选择 PowerShell host；需要 cmd 时使用 `-Agent cmd`。
+
+先启动滚动烟测，确认 Codex 以外的普通输出是否能产生可滚动历史：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent scrolltest
+```
+
+`scrolltest` 会在 native 终端里输出 240 行 `AgentHub scroll smoke line ...` 并停在 PowerShell 中。若这里有滚动条且鼠标/触摸板可滚，而 Codex 不能滚，问题更可能在 Codex TUI 行为；若这里也不能滚，问题更可能在 native 终端控件、Windows 输入设备或系统滚动设置。
 
 ## 发布版验证
 
@@ -132,18 +141,20 @@ artifacts/native/win-x64/scripts/hooks/agenthub_gemini_after_agent.py
 
 1. workspace 可以添加、选中和移除。
 2. Host shell 默认是 PowerShell，并且可以切换到 cmd。
-3. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
-4. Codex TUI 刚进入时是否有终端滚动条。
-5. 鼠标滚轮是否能向上翻历史。
-6. 触摸板双指滚动是否能向上翻历史。
-7. 底部输入框按 Enter 会发送。
-8. 底部输入框按 Shift+Enter 会换行，不会发送。
-9. 多行输入能被 Codex 收到。
-10. `@codex message` 可以路由到最新 Codex session。
-11. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
-12. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
-13. `Stop selected` 可以停止当前 session。
-14. `Stop all` 可以停止全部 session。
+3. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
+4. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
+5. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
+6. Codex TUI 刚进入时是否有终端滚动条。
+7. 鼠标滚轮是否能向上翻历史。
+8. 触摸板双指滚动是否能向上翻历史。
+9. 底部输入框按 Enter 会发送。
+10. 底部输入框按 Shift+Enter 会换行，不会发送。
+11. 多行输入能被 Codex 收到。
+12. `@codex message` 可以路由到最新 Codex session。
+13. 如果同时启动 Claude/Gemini，`@claude`、`@gemini` 可以路由到对应 session。
+14. Codex 完成响应后，Collaboration timeline 是否出现 hook 回传。
+15. `Stop selected` 可以停止当前 session。
+16. `Stop all` 可以停止全部 session。
 
 ## 需要回传的信息
 
@@ -170,6 +181,7 @@ py -3.11 --version
 
 - 使用的是 PowerShell host 还是 cmd host。
 - 是鼠标滚轮不能滚、触摸板不能滚，还是滚动条本身不显示。
+- `Scroll Test` session 是否能显示滚动条并用鼠标/触摸板滚动。
 - 是刚进入 `codex --no-alt-screen resume` 就不显示，还是输出变多后才消失。
 - Windows Terminal 或 VS Code 终端里同一个 `codex --no-alt-screen resume` 是否能滚动。
 - AgentHub Native 状态栏最后显示的文本。

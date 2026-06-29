@@ -201,6 +201,16 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_scrolltest_as_terminal_scrollback_smoke_agent()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "scrolltest"]);
+
+        Assert.Equal(AgentKind.ScrollTest, options.StartupAgentKind);
+        Assert.Equal(AgentStartupMode.Start, options.StartupMode);
+        Assert.Equal([AgentKind.ScrollTest], options.StartupAgents.Select(item => item.AgentKind).ToArray());
+    }
+
+    [Fact]
     public void Applies_resume_only_to_codex()
     {
         var options = NativeAppStartupOptions.Parse(["--agent", "claude", "--resume"]);

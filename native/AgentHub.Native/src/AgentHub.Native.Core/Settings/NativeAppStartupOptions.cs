@@ -147,6 +147,7 @@ public sealed record NativeAppStartupOptions(
             "codex" => AgentKind.Codex,
             "claude" => AgentKind.Claude,
             "gemini" => AgentKind.Gemini,
+            "scrolltest" or "scroll-test" or "scroll" => AgentKind.ScrollTest,
             "powershell" or "cmd" or "shell" => AgentKind.PowerShell,
             _ => null
         };
@@ -173,6 +174,7 @@ public sealed record NativeAppStartupOptions(
                 {
                     "powershell" or "shell" => ShellKind.PowerShell,
                     "cmd" => ShellKind.Cmd,
+                    "scrolltest" or "scroll-test" or "scroll" => ShellKind.PowerShell,
                     _ => (ShellKind?)null
                 };
                 if (shellKind is not null)

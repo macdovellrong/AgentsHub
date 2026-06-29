@@ -63,6 +63,14 @@
 
 `shell` 是普通 shell 的默认别名，等价于 `powershell`；需要 cmd 时请使用 `-Agent cmd` 或 `-Shell cmd`。
 
+启动终端滚动烟测：
+
+```powershell
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent scrolltest
+```
+
+`scrolltest` 会输出 240 行 `AgentHub scroll smoke line ...` 并停在 PowerShell 中，用于在不启动 Codex 的情况下验证 native 终端滚动条、鼠标滚轮和触摸板滚动。
+
 启动时指定 Agent hook 使用的 Python 命令；未指定时默认使用 `py -3.11`，也可以通过 `-Python` 显式覆盖：
 
 ```powershell
@@ -77,9 +85,10 @@
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex,claude,gemini -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
+.\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent scrolltest
 ```
 
-`-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否能以 Windows native launcher 形式从 PATH 中找到（`.com`、`.exe`、`.bat`、`.cmd`，Codex 通常应显示 `codex.cmd` 而不是 `codex.ps1`）；Codex 还会检查该 launcher 的 `--help` 是否包含 `--no-alt-screen`。`powershell`、`cmd`、`shell` 只使用选中的 Host shell，不检查额外 Agent CLI。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；Python 预检会实际导入 hook 使用的标准库模块（`json`、`pathlib`、`urllib.request`），不是只检查 Python 可执行文件是否存在。如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。
+`-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否能以 Windows native launcher 形式从 PATH 中找到（`.com`、`.exe`、`.bat`、`.cmd`，Codex 通常应显示 `codex.cmd` 而不是 `codex.ps1`）；Codex 还会检查该 launcher 的 `--help` 是否包含 `--no-alt-screen`。`powershell`、`cmd`、`shell`、`scrolltest` 只使用选中的 Host shell，不检查额外 Agent CLI；`scrolltest` 默认检查 PowerShell host。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；Python 预检会实际导入 hook 使用的标准库模块（`json`、`pathlib`、`urllib.request`），不是只检查 Python 可执行文件是否存在。如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。
 
 在 UI 中点击 `Start Codex`、`Resume Codex`、`Start Claude`、`Start Gemini`、`Start Agents` 或 `Resume Agents` 时，native app 也会先做托管 Agent 启动预检：Agent CLI 必须能在 PATH 中找到，hook 脚本目录必须存在，hook Python launcher 必须能定位并成功执行一次 hook 依赖探针。预检失败时不会创建新的终端 session，状态栏会直接显示缺失项。
 
@@ -132,7 +141,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
    Open 会打开当前输入框或选中项解析出的 workspace 目录；Remove 会优先删除列表中选中的 workspace，选中项为空时才使用输入框路径。
 3. app 会在该 workspace 的 `.gitignore` 中幂等加入 `.agenthub/`、`.codex/`、`.claude/`、`.gemini/`。
 4. 选中 workspace 后选择 Host shell，默认 PowerShell，也可以切换为 cmd。
-5. 启动 Codex、Claude、Gemini 或普通 shell session；Codex 会自动追加 `--no-alt-screen`，`Resume Codex` 实际启动 `codex --no-alt-screen resume`。也可以用 `Start Agents` 按 Codex、Claude、Gemini 顺序一次启动当前 workspace 的三类托管 Agent，用 `Resume Agents` 以 `codex --no-alt-screen resume` + Claude/Gemini 普通启动的组合恢复协作环境，用 `Interrupt Agents` 向当前 workspace 的托管 Agent 发送 Ctrl+C，或用 `Stop Agents` 停止当前 workspace 的托管 Agent，并在状态栏显示处理数量。
+5. 启动 Codex、Claude、Gemini、普通 shell session 或 `Scroll Test`；Codex 会自动追加 `--no-alt-screen`，`Resume Codex` 实际启动 `codex --no-alt-screen resume`。`Scroll Test` 会输出 240 行普通 PowerShell 文本用于验证终端 scrollback。也可以用 `Start Agents` 按 Codex、Claude、Gemini 顺序一次启动当前 workspace 的三类托管 Agent，用 `Resume Agents` 以 `codex --no-alt-screen resume` + Claude/Gemini 普通启动的组合恢复协作环境，用 `Interrupt Agents` 向当前 workspace 的托管 Agent 发送 Ctrl+C，或用 `Stop Agents` 停止当前 workspace 的托管 Agent，并在状态栏显示处理数量。
 6. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
 7. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
 8. 可以用底部输入栏向选中的 terminal session 发送文本；Enter 发送，Shift+Enter 在输入框内换行。多行文本会用 bracketed paste 写入终端，再发送 Enter。
@@ -207,14 +216,17 @@ Agent hook 诊断日志位置：
 1. 启动 AgentHub Native。
 2. 添加并选择出现滚动问题的项目目录。
 3. Host shell 先保持默认 PowerShell。
-4. 点击 Resume Codex，直接启动 `codex --no-alt-screen resume`。
-5. 等待 Codex 进入恢复后的 TUI。
-6. 验证终端滚动条是否出现。
-7. 验证鼠标滚轮 / 触摸板滚动。
-8. 从 AgentHub 输入栏发送文本，并验证 Enter 发送、Shift+Enter 换行。
-9. 验证 Codex 收到输入。
-10. 让 Codex 完成一次响应，确认 Collaboration timeline 列表出现回传。
-11. 切换 Host shell 为 cmd 后重复第 4-10 步。
+4. 点击 Scroll Test，确认普通 PowerShell 输出能产生滚动条，并验证鼠标滚轮 / 触摸板滚动。
+5. 点击 Resume Codex，直接启动 `codex --no-alt-screen resume`。
+6. 等待 Codex 进入恢复后的 TUI。
+7. 验证终端滚动条是否出现。
+8. 验证鼠标滚轮 / 触摸板滚动。
+9. 从 AgentHub 输入栏发送文本，并验证 Enter 发送、Shift+Enter 换行。
+10. 验证 Codex 收到输入。
+11. 让 Codex 完成一次响应，确认 Collaboration timeline 列表出现回传。
+12. 切换 Host shell 为 cmd 后重复第 4-11 步。
+
+若 `Scroll Test` 可以滚而 Codex 不能滚，优先排查 Codex TUI；若 `Scroll Test` 也不能滚，优先排查 native 终端控件、Windows 输入设备或系统滚动设置。
 
 ## 注意
 

@@ -351,6 +351,11 @@ public partial class MainWindow : Window
         await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.PowerShell, AgentStartupMode.Start));
     }
 
+    private async void StartScrollTest_Click(object sender, RoutedEventArgs e)
+    {
+        await StartAgentAsync(AgentStartupCommandCatalog.Build(AgentKind.ScrollTest, AgentStartupMode.Start));
+    }
+
     private async void RefreshTaskPlans_Click(object sender, RoutedEventArgs e)
     {
         var workspacePath = CurrentRoutingWorkspacePath();
@@ -747,19 +752,20 @@ public partial class MainWindow : Window
                 return false;
             }
 
-            var hookScriptsDirectory = startupCommand.AgentKind == AgentKind.PowerShell
-                ? null
-                : TryResolveHookScriptsDirectory();
-            var hookPythonCommand = startupCommand.AgentKind == AgentKind.PowerShell
-                ? null
-                : ResolveHookPythonCommand();
+            var isManagedAgent = AgentStartupCommandCatalog.IsManagedAgent(startupCommand.AgentKind);
+            var hookScriptsDirectory = isManagedAgent
+                ? TryResolveHookScriptsDirectory()
+                : null;
+            var hookPythonCommand = isManagedAgent
+                ? ResolveHookPythonCommand()
+                : null;
             var preflightResult = startupPreflightChecker.Check(new AgentStartupPreflightRequest(
                 startupCommand,
                 hookScriptsDirectory,
                 hookPythonCommand));
             preflightResult.ThrowIfFailed();
 
-            if (startupCommand.AgentKind != AgentKind.PowerShell)
+            if (isManagedAgent)
             {
                 StatusTextBlock.Text = "Installing project hooks...";
                 await ProjectAgentHookInstaller.InstallAsync(

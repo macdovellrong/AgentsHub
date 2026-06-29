@@ -234,7 +234,7 @@ public sealed class MainWindowTaskPlanUiTests
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
         var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("Rows=\"5\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Rows=\"6\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"Resume Agents\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"ResumeManagedAgents_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ResumeManagedAgents_Click", code, StringComparison.Ordinal);
@@ -264,7 +264,7 @@ public sealed class MainWindowTaskPlanUiTests
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
         var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("Rows=\"5\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Rows=\"6\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"Interrupt Agents\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"InterruptManagedAgents_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("InterruptManagedAgents_Click", code, StringComparison.Ordinal);
@@ -272,6 +272,20 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("IsCurrentWorkspace(session.Workspace.Path)", code, StringComparison.Ordinal);
         Assert.Contains("await inputRouter.TrySendControlDetailedAsync(session.Id, \"\\x03\")", code, StringComparison.Ordinal);
         Assert.Contains("Interrupted managed agents: {interruptedCount}/{targetSessions.Length}", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_window_can_start_terminal_scrollback_smoke_test_without_managed_agent_hooks()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Content=\"Scroll Test\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StartScrollTest_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("StartScrollTest_Click", code, StringComparison.Ordinal);
+        Assert.Contains("AgentStartupCommandCatalog.Build(AgentKind.ScrollTest, AgentStartupMode.Start)", code, StringComparison.Ordinal);
+        Assert.Contains("var isManagedAgent = AgentStartupCommandCatalog.IsManagedAgent(startupCommand.AgentKind)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("startupCommand.AgentKind != AgentKind.PowerShell", code, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -47,6 +47,33 @@ def test_start_native_check_accepts_agents_alias() -> None:
     assert "AgentHub Native launch check passed." in result.stdout
 
 
+def test_start_native_check_accepts_scrolltest_without_agent_hooks() -> None:
+    script_path = REPO_ROOT / "scripts" / "start-native.ps1"
+    command = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            f"& {ps_quote(str(script_path))} -Check -Agent scrolltest",
+            "exit $LASTEXITCODE",
+        ]
+    )
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Host shell check passed: powershell" in result.stdout
+    assert "Agent CLI check skipped: scrolltest uses the selected Host shell." in result.stdout
+    assert "Hook Python check passed" not in result.stdout
+    assert "Hook scripts check passed" not in result.stdout
+    assert "AgentHub Native launch check passed." in result.stdout
+
+
 def test_start_native_check_uses_hook_dependency_python_probe(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "start-native.ps1"
     fake_python = tmp_path / "fake-python.ps1"
