@@ -149,6 +149,48 @@ public sealed class AgentHookProcessingPipelineTests : IDisposable
         Assert.Equal(4, targetSession.Writes.Count);
     }
 
+    [Fact]
+    public async Task Routes_roundtable_conversation_hook_through_conversation_orchestrator()
+    {
+        var workspacePath = CreateWorkspace();
+        var eventStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var inputRouter = new AgentInputRouter();
+        var registry = new AgentSessionRegistry();
+        var targetSession = new RecordingTerminalSession("codex-1");
+        inputRouter.Register(targetSession);
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.Parse("2026-06-29T10:02:00Z")));
+        var conversationStore = new AgentConversationStore();
+        await conversationStore.CreateAsync(
+            workspacePath,
+            new CreateAgentConversationRequest(
+                "roundtable-1",
+                "roundtable",
+                null,
+                ["claude", "codex"],
+                "Compare native terminal options",
+                CurrentStep: 1,
+                MaxSteps: 3));
+        var pipeline = CreatePipeline(eventStore, inputRouter, registry, conversationStore);
+
+        var result = await pipeline.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            "Claude view: prefer native host.",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude",
+            ConversationId: "roundtable-1"));
+
+        Assert.Equal(0, result.SentCount);
+        Assert.NotNull(result.SourceEventId);
+        Assert.Equal("\x1b[200~", targetSession.Writes[0]);
+        Assert.Contains("AgentHub roundtable conversation.", targetSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Conversation: roundtable-1", targetSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Claude view: prefer native host.", targetSession.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", targetSession.Writes[2]);
+        Assert.Equal("\r", targetSession.Writes[3]);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

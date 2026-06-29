@@ -10,6 +10,8 @@ public sealed class AgentConversationOrchestrator(
     AgentSessionRegistry sessionRegistry)
 {
     private const int DefaultMaxSteps = 12;
+    private const int DefaultMaxRounds = 2;
+    private static readonly string[] RoundtableProfileOrder = ["claude", "codex", "gemini"];
 
     public async Task<AgentConversation> StartManagerAsync(
         StartAgentManagerConversationRequest request,
@@ -85,12 +87,92 @@ public sealed class AgentConversationOrchestrator(
         return updated;
     }
 
+    public async Task<AgentConversation> StartRoundtableAsync(
+        StartRoundtableConversationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var participants = NormalizeRoundtableParticipants(request.ParticipantProfileIds);
+        if (participants.Count == 0)
+        {
+            throw new InvalidOperationException("Roundtable requires at least one participant.");
+        }
+
+        var maxRounds = request.MaxRounds ?? DefaultMaxRounds;
+        var conversation = await conversationStore.CreateAsync(
+            request.WorkspacePath,
+            new CreateAgentConversationRequest(
+                request.ConversationId,
+                "roundtable",
+                null,
+                participants,
+                request.Topic,
+                MaxSteps: participants.Count * maxRounds + 1),
+            cancellationToken).ConfigureAwait(false);
+        var firstProfileId = conversation.ParticipantProfileIds[0];
+        var firstSession = sessionRegistry.FindLatest(request.WorkspacePath, firstProfileId);
+        if (firstSession is null)
+        {
+            var error = $"No active session for profile '{firstProfileId}'";
+            await timelineStore.AppendCommandErrorAsync(
+                request.WorkspacePath,
+                error,
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await conversationStore.UpdateAsync(
+                request.WorkspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var sendResult = await inputRouter.TrySendLineDetailedAsync(
+            firstSession.Id,
+            BuildInitialRoundtablePrompt(conversation),
+            cancellationToken).ConfigureAwait(false);
+        if (!sendResult.Sent)
+        {
+            if (sendResult.ShouldRemoveSession)
+            {
+                sessionRegistry.Remove(firstSession.Id);
+            }
+
+            await timelineStore.AppendCommandErrorAsync(
+                request.WorkspacePath,
+                $"Unable to send roundtable conversation prompt to session '{firstSession.Id}': {sendResult.Status}",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await conversationStore.UpdateAsync(
+                request.WorkspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var updated = await conversationStore.UpdateAsync(
+            request.WorkspacePath,
+            conversation.Id,
+            new UpdateAgentConversationRequest(CurrentStep: conversation.CurrentStep + 1),
+            cancellationToken).ConfigureAwait(false);
+        await timelineStore.AppendUserMessageAsync(
+            new CollaborationUserMessage(
+                request.WorkspacePath,
+                "agenthub",
+                firstProfileId,
+                $"Roundtable conversation started: {conversation.Topic}",
+                ConversationId: conversation.Id,
+                SessionId: firstSession.Id),
+            cancellationToken).ConfigureAwait(false);
+        return updated;
+    }
+
     public async Task<bool> CanHandleAgentOutputAsync(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken = default)
     {
         return await FindManagedConversationOutputAsync(hookEvent, cancellationToken)
-            .ConfigureAwait(false) is not null;
+                   .ConfigureAwait(false) is not null ||
+               await FindRoundtableConversationOutputAsync(hookEvent, cancellationToken)
+                   .ConfigureAwait(false) is not null;
     }
 
     public async Task<bool> HandleAgentOutputAsync(
@@ -101,7 +183,16 @@ public sealed class AgentConversationOrchestrator(
             .ConfigureAwait(false);
         if (output is null)
         {
-            return false;
+            var roundtable = await FindRoundtableConversationOutputAsync(hookEvent, cancellationToken)
+                .ConfigureAwait(false);
+            if (roundtable is null)
+            {
+                return false;
+            }
+
+            await RouteRoundtableOutputAsync(hookEvent.Workspace, roundtable, hookEvent, cancellationToken)
+                .ConfigureAwait(false);
+            return true;
         }
 
         if (!output.IsSupervisor)
@@ -196,6 +287,34 @@ public sealed class AgentConversationOrchestrator(
             hookEvent.SessionId,
             conversations,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AgentConversation?> FindRoundtableConversationOutputAsync(
+        AgentHookEvent hookEvent,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(hookEvent.ConversationId) ||
+            string.IsNullOrWhiteSpace(hookEvent.ProfileId))
+        {
+            return null;
+        }
+
+        var conversation = (await conversationStore.ListAsync(hookEvent.Workspace, cancellationToken)
+                .ConfigureAwait(false))
+            .FirstOrDefault(item =>
+                string.Equals(item.Id, hookEvent.ConversationId, StringComparison.Ordinal) &&
+                item.Mode == "roundtable" &&
+                item.Status == "running" &&
+                item.ParticipantProfileIds.Contains(hookEvent.ProfileId, StringComparer.OrdinalIgnoreCase));
+        if (conversation is null)
+        {
+            return null;
+        }
+
+        var expectedProfileId = RoundtableSpeakerForStep(conversation, conversation.CurrentStep);
+        return string.Equals(expectedProfileId, hookEvent.ProfileId, StringComparison.OrdinalIgnoreCase)
+            ? conversation
+            : null;
     }
 
     private async Task<ManagedConversationOutput?> InferParticipantConversationOutputAsync(
@@ -376,6 +495,83 @@ public sealed class AgentConversationOrchestrator(
         return updated;
     }
 
+    private async Task<AgentConversation> RouteRoundtableOutputAsync(
+        string workspacePath,
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        CancellationToken cancellationToken)
+    {
+        if (conversation.MaxSteps is not null && conversation.CurrentStep >= conversation.MaxSteps)
+        {
+            var completed = await conversationStore.UpdateAsync(
+                workspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "completed"),
+                cancellationToken).ConfigureAwait(false);
+            await timelineStore.AppendUserMessageAsync(
+                new CollaborationUserMessage(
+                    workspacePath,
+                    "agenthub",
+                    "workflow",
+                    $"[roundtable_completed] {hookEvent.Message}",
+                    ConversationId: conversation.Id),
+                cancellationToken).ConfigureAwait(false);
+            return completed;
+        }
+
+        var nextStep = conversation.CurrentStep + 1;
+        var nextProfileId = RoundtableSpeakerForStep(conversation, nextStep);
+        var nextSession = sessionRegistry.FindLatest(workspacePath, nextProfileId);
+        if (nextSession is null)
+        {
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"No active session for profile '{nextProfileId}' in workspace '{workspacePath}'.",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await conversationStore.UpdateAsync(
+                workspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var sendResult = await inputRouter.TrySendLineDetailedAsync(
+            nextSession.Id,
+            BuildRoundtableTurnPrompt(conversation, hookEvent, nextStep),
+            cancellationToken).ConfigureAwait(false);
+        if (!sendResult.Sent)
+        {
+            if (sendResult.ShouldRemoveSession)
+            {
+                sessionRegistry.Remove(nextSession.Id);
+            }
+
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"Unable to send roundtable conversation prompt to session '{nextSession.Id}': {sendResult.Status}",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return conversation;
+        }
+
+        var updated = await conversationStore.UpdateAsync(
+            workspacePath,
+            conversation.Id,
+            new UpdateAgentConversationRequest(CurrentStep: nextStep),
+            cancellationToken).ConfigureAwait(false);
+        await timelineStore.AppendUserMessageAsync(
+            new CollaborationUserMessage(
+                workspacePath,
+                "agenthub",
+                nextProfileId,
+                hookEvent.Message,
+                ConversationId: conversation.Id,
+                SessionId: nextSession.Id),
+            cancellationToken).ConfigureAwait(false);
+        return updated;
+    }
+
     private async Task<AgentConversation> ApplyManagerWorkflowCommandAsync(
         string workspacePath,
         AgentConversation conversation,
@@ -424,6 +620,19 @@ public sealed class AgentConversationOrchestrator(
             ]);
     }
 
+    private static string BuildInitialRoundtablePrompt(AgentConversation conversation)
+    {
+        return string.Join(
+            "\r\n",
+            [
+                "AgentHub roundtable conversation.",
+                $"Conversation: {conversation.Id}",
+                $"Topic: {conversation.Topic}",
+                $"Participants: {string.Join(" -> ", conversation.ParticipantProfileIds)}",
+                "You are the first speaker. Give a concise view, then stop and wait."
+            ]);
+    }
+
     private static string BuildDelegatedTaskPrompt(
         AgentConversation conversation,
         AgentHubSendMessageCommand command)
@@ -468,6 +677,28 @@ public sealed class AgentConversationOrchestrator(
             ]);
     }
 
+    private static string BuildRoundtableTurnPrompt(
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        int nextStep)
+    {
+        var isSummaryTurn = conversation.MaxSteps is not null && nextStep >= conversation.MaxSteps;
+        return string.Join(
+            "\r\n",
+            [
+                "AgentHub roundtable conversation.",
+                $"Conversation: {conversation.Id}",
+                $"Topic: {conversation.Topic}",
+                $"Previous speaker: {hookEvent.ProfileId ?? "agent"}",
+                "",
+                hookEvent.Message,
+                "",
+                isSummaryTurn
+                    ? "Please provide the final summary, including consensus, disagreements, and next actions."
+                    : "Please respond with your bounded view, then stop and wait."
+            ]);
+    }
+
     private static string FormatWorkflowCommand(AgentHubWorkflowCommand command)
     {
         var message = string.IsNullOrWhiteSpace(command.Message) ? "completed" : command.Message;
@@ -495,6 +726,31 @@ public sealed class AgentConversationOrchestrator(
         return string.IsNullOrWhiteSpace(expectedSessionId) ||
                string.IsNullOrWhiteSpace(actualSessionId) ||
                string.Equals(expectedSessionId, actualSessionId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string> NormalizeRoundtableParticipants(IReadOnlyList<string> participantProfileIds)
+    {
+        return participantProfileIds
+            .Where(profileId => !string.IsNullOrWhiteSpace(profileId))
+            .Select(profileId => profileId.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(profileId =>
+            {
+                var index = Array.FindIndex(
+                    RoundtableProfileOrder,
+                    candidate => string.Equals(candidate, profileId, StringComparison.OrdinalIgnoreCase));
+                return index < 0 ? int.MaxValue : index;
+            })
+            .ThenBy(profileId => Array.FindIndex(
+                participantProfileIds.ToArray(),
+                candidate => string.Equals(candidate, profileId, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+    }
+
+    private static string RoundtableSpeakerForStep(AgentConversation conversation, int step)
+    {
+        var index = Math.Max(0, step - 1) % conversation.ParticipantProfileIds.Count;
+        return conversation.ParticipantProfileIds[index];
     }
 
     private sealed record ManagedConversationOutput(
