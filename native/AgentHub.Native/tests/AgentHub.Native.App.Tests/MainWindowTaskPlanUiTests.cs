@@ -220,6 +220,19 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Resumed managed agents: {startedCount}/{commands.Count}", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_can_route_input_to_all_managed_agents()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("<ComboBoxItem Content=\"agents\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("AgentProfileTargetResolver.Resolve(targetProfileId)", code, StringComparison.Ordinal);
+        Assert.Contains("foreach (var profileId in profileIds)", code, StringComparison.Ordinal);
+        Assert.Contains("firstFailedResult?.Status == AgentMessageSendStatus.TerminalNotReady", code, StringComparison.Ordinal);
+        Assert.Contains("Sent input to {sentCount}/{profileIds.Count} profile(s)", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

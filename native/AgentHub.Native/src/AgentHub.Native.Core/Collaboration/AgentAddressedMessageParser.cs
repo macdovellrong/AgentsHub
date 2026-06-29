@@ -9,6 +9,7 @@ public static partial class AgentAddressedMessageParser
         "codex",
         "claude",
         "gemini",
+        "agents",
         "powershell",
         "cmd"
     };

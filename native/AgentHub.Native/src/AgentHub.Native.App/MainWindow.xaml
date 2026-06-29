@@ -379,6 +379,7 @@
                     <ComboBoxItem Content="codex" />
                     <ComboBoxItem Content="claude" />
                     <ComboBoxItem Content="gemini" />
+                    <ComboBoxItem Content="agents" />
                     <ComboBoxItem Content="powershell" />
                     <ComboBoxItem Content="cmd" />
                 </ComboBox>

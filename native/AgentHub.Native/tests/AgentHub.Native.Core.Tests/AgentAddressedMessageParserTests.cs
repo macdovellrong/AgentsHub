@@ -8,6 +8,7 @@ public sealed class AgentAddressedMessageParserTests
     [InlineData("@codex please review", "codex", "please review")]
     [InlineData("  @Claude   check this  ", "claude", "check this")]
     [InlineData("@gemini: summarize", "gemini", "summarize")]
+    [InlineData("@agents: sync status", "agents", "sync status")]
     [InlineData("@cmd dir", "cmd", "dir")]
     public void Parses_profile_prefix(string raw, string expectedProfileId, string expectedMessage)
     {

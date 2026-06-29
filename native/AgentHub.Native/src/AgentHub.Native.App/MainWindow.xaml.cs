@@ -1090,17 +1090,43 @@ public partial class MainWindow : Window
         }
 
         var messageRouter = new AgentMessageRouter(inputRouter, sessionRegistry);
-        var result = await messageRouter.TrySendToProfileDetailedAsync(workspacePath, targetProfileId, text);
-        if (!result.Sent)
+        var profileIds = AgentProfileTargetResolver.Resolve(targetProfileId);
+        var sentCount = 0;
+        AgentMessageSendResult? firstFailedResult = null;
+        foreach (var profileId in profileIds)
         {
-            StatusTextBlock.Text = result.Status == AgentMessageSendStatus.TerminalNotReady
-                ? $"{targetProfileId} is still starting"
-                : $"{targetProfileId} is not online";
+            var result = await messageRouter.TrySendToProfileDetailedAsync(workspacePath, profileId, text);
+            if (result.Sent)
+            {
+                sentCount++;
+                continue;
+            }
+
+            firstFailedResult ??= result;
+        }
+
+        if (sentCount == 0)
+        {
+            if (firstFailedResult?.Status == AgentMessageSendStatus.TerminalNotReady)
+            {
+                StatusTextBlock.Text = profileIds.Count == 1
+                    ? $"{profileIds[0]} is still starting"
+                    : $"Target profiles are still starting: {string.Join(", ", profileIds)}";
+            }
+            else
+            {
+                StatusTextBlock.Text = profileIds.Count == 1
+                    ? $"{profileIds[0]} is not online"
+                    : $"No target profiles are online: {string.Join(", ", profileIds)}";
+            }
+
             return false;
         }
 
         await RecordUserMessageAsync(workspacePath, targetProfileId, text);
-        StatusTextBlock.Text = $"Sent input to latest {targetProfileId}";
+        StatusTextBlock.Text = profileIds.Count == 1
+            ? $"Sent input to latest {profileIds[0]}"
+            : $"Sent input to {sentCount}/{profileIds.Count} profile(s)";
         return true;
     }
 
