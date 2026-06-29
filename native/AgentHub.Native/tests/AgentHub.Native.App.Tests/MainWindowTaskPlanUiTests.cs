@@ -19,6 +19,9 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Click=\"CreateTaskPlan_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"StartTaskPlanManager_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OpenTaskPlanFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"PauseTaskPlan_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ResumeTaskPlan_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ArchiveTaskPlan_Click\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -39,6 +42,12 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("OpenTaskPlanFolder_Click", code, StringComparison.Ordinal);
         Assert.Contains("selected.Plan.PlanPath", code, StringComparison.Ordinal);
         Assert.Contains("Task plan folder not found", code, StringComparison.Ordinal);
+        Assert.Contains("PauseTaskPlan_Click", code, StringComparison.Ordinal);
+        Assert.Contains("ResumeTaskPlan_Click", code, StringComparison.Ordinal);
+        Assert.Contains("ArchiveTaskPlan_Click", code, StringComparison.Ordinal);
+        Assert.Contains("taskPlanService.PausePlanAsync", code, StringComparison.Ordinal);
+        Assert.Contains("taskPlanService.ResumePlanAsync", code, StringComparison.Ordinal);
+        Assert.Contains("taskPlanService.ArchivePlanAsync", code, StringComparison.Ordinal);
     }
 
     [Fact]

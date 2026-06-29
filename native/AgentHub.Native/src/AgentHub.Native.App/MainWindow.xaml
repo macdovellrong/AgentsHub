@@ -150,7 +150,28 @@
                              Margin="0,0,0,6" />
                     <Button Content="Start manager"
                             Click="StartTaskPlanManager_Click"
-                            MinHeight="32" />
+                            MinHeight="32"
+                            Margin="0,0,0,6" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Pause"
+                                Click="PauseTaskPlan_Click"
+                                MinHeight="32" />
+                        <Button Grid.Column="2"
+                                Content="Resume"
+                                Click="ResumeTaskPlan_Click"
+                                MinHeight="32" />
+                        <Button Grid.Column="4"
+                                Content="Archive"
+                                Click="ArchiveTaskPlan_Click"
+                                MinHeight="32" />
+                    </Grid>
                 </StackPanel>
 
                 <TextBlock DockPanel.Dock="Top" Text="Sessions" Foreground="#9FB0C2" Margin="0,0,0,6" />

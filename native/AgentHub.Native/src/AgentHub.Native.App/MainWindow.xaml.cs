@@ -520,6 +520,67 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void PauseTaskPlan_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedTaskPlanStatusAsync(
+            "pause",
+            (workspacePath, planId) => taskPlanService.PausePlanAsync(
+                workspacePath,
+                planId,
+                "Paused from AgentHub Native"));
+    }
+
+    private async void ResumeTaskPlan_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedTaskPlanStatusAsync(
+            "resume",
+            (workspacePath, planId) => taskPlanService.ResumePlanAsync(
+                workspacePath,
+                planId,
+                "Resumed from AgentHub Native"));
+    }
+
+    private async void ArchiveTaskPlan_Click(object sender, RoutedEventArgs e)
+    {
+        await ChangeSelectedTaskPlanStatusAsync(
+            "archive",
+            (workspacePath, planId) => taskPlanService.ArchivePlanAsync(
+                workspacePath,
+                planId,
+                "Archived from AgentHub Native"));
+    }
+
+    private async Task ChangeSelectedTaskPlanStatusAsync(
+        string action,
+        Func<string, string, Task<AgentTaskPlan>> updateAsync)
+    {
+        var workspacePath = CurrentRoutingWorkspacePath();
+        if (workspacePath is null)
+        {
+            StatusTextBlock.Text = "No workspace selected";
+            return;
+        }
+
+        if (TaskPlanListBox.SelectedItem is not TaskPlanViewModel selected)
+        {
+            StatusTextBlock.Text = "No task plan selected";
+            return;
+        }
+
+        try
+        {
+            var updated = await updateAsync(workspacePath, selected.Plan.Id);
+            await ReloadTaskPlansAsync(workspacePath, updated.Id);
+            await ReloadSelectedTaskPlanDetailsAsync(workspacePath);
+            await ReloadTimelineAsync(workspacePath);
+            StatusTextBlock.Text = $"Task plan {action}: {updated.Title}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Task plan {action} failed: {ex.Message}";
+        }
+    }
+
     private void OpenTaskPlanFolder_Click(object sender, RoutedEventArgs e)
     {
         if (TaskPlanListBox.SelectedItem is not TaskPlanViewModel selected)

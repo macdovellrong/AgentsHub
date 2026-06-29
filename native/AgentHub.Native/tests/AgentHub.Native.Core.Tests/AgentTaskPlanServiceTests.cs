@@ -95,6 +95,95 @@ public sealed class AgentTaskPlanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Pause_plan_updates_status_and_records_events()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out var timelineStore, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        await store.UpdatePlanStatusAsync(workspacePath, plan.Id, "running");
+
+        var updated = await service.PausePlanAsync(workspacePath, plan.Id, "Need user decision");
+
+        Assert.Equal("paused", updated.Status);
+        Assert.Equal("paused", (await store.GetPlanAsync(workspacePath, plan.Id)).Status);
+        var planEvent = Assert.Single(await store.ListEventsAsync(workspacePath, plan.Id), item => item.Type == "paused");
+        Assert.Equal("agenthub", planEvent.FromProfileId);
+        Assert.Equal("Need user decision", planEvent.Message);
+        var timeline = await timelineStore.ListAsync(workspacePath);
+        Assert.Contains(timeline, item =>
+            item.Kind == CollaborationEventKind.UserMessage &&
+            item.ProfileId == "agenthub" &&
+            item.TargetProfileId == "task-plan" &&
+            item.Message == $"[pause_plan {plan.Id}] Need user decision");
+    }
+
+    [Fact]
+    public async Task Resume_plan_updates_status_and_records_events()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out var timelineStore, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        await store.UpdatePlanStatusAsync(workspacePath, plan.Id, "paused");
+
+        var updated = await service.ResumePlanAsync(workspacePath, plan.Id, "User resumed");
+
+        Assert.Equal("running", updated.Status);
+        var planEvent = Assert.Single(await store.ListEventsAsync(workspacePath, plan.Id), item => item.Type == "resumed");
+        Assert.Equal("User resumed", planEvent.Message);
+        var timeline = await timelineStore.ListAsync(workspacePath);
+        Assert.Contains(timeline, item => item.Message == $"[resume_plan {plan.Id}] User resumed");
+    }
+
+    [Fact]
+    public async Task Archive_plan_updates_status_and_records_events()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out var timelineStore, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+
+        var updated = await service.ArchivePlanAsync(workspacePath, plan.Id, "No longer active");
+
+        Assert.Equal("archived", updated.Status);
+        var planEvent = Assert.Single(await store.ListEventsAsync(workspacePath, plan.Id), item => item.Type == "archived");
+        Assert.Equal("No longer active", planEvent.Message);
+        var timeline = await timelineStore.ListAsync(workspacePath);
+        Assert.Contains(timeline, item => item.Message == $"[archive_plan {plan.Id}] No longer active");
+    }
+
+    [Fact]
+    public async Task Resume_plan_rejects_completed_plan()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out var timelineStore, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        await store.UpdatePlanStatusAsync(workspacePath, plan.Id, "completed");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ResumePlanAsync(workspacePath, plan.Id, "User resumed"));
+
+        Assert.Contains("Cannot resume task plan", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("completed", (await store.GetPlanAsync(workspacePath, plan.Id)).Status);
+        Assert.DoesNotContain(await store.ListEventsAsync(workspacePath, plan.Id), item => item.Type == "resumed");
+        Assert.Empty(await timelineStore.ListAsync(workspacePath));
+    }
+
+    [Fact]
     public async Task Records_sent_manager_routing_commands_to_execution_snapshot()
     {
         var workspacePath = CreateWorkspaceWithSourcePlan();

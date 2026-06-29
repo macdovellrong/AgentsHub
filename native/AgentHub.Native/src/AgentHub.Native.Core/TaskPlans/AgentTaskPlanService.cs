@@ -84,6 +84,57 @@ public sealed class AgentTaskPlanService(
         return updated;
     }
 
+    public Task<AgentTaskPlan> PausePlanAsync(
+        string workspacePath,
+        string planId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        return ChangePlanStatusAsync(
+            workspacePath,
+            planId,
+            "paused",
+            ["draft", "running", "paused"],
+            "paused",
+            "pause_plan",
+            DefaultReason(reason, "Paused by user"),
+            cancellationToken);
+    }
+
+    public Task<AgentTaskPlan> ResumePlanAsync(
+        string workspacePath,
+        string planId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        return ChangePlanStatusAsync(
+            workspacePath,
+            planId,
+            "running",
+            ["paused"],
+            "resumed",
+            "resume_plan",
+            DefaultReason(reason, "Resumed by user"),
+            cancellationToken);
+    }
+
+    public Task<AgentTaskPlan> ArchivePlanAsync(
+        string workspacePath,
+        string planId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        return ChangePlanStatusAsync(
+            workspacePath,
+            planId,
+            "archived",
+            ["draft", "running", "paused", "completed", "failed", "archived"],
+            "archived",
+            "archive_plan",
+            DefaultReason(reason, "Archived by user"),
+            cancellationToken);
+    }
+
     public async Task RecordManagerDispatchResultAsync(
         string workspacePath,
         string fromProfileId,
@@ -219,6 +270,43 @@ public sealed class AgentTaskPlanService(
 
         await ObserveManagerAsync(workspacePath, plan, taskId, input, artifactPath, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task<AgentTaskPlan> ChangePlanStatusAsync(
+        string workspacePath,
+        string planId,
+        string nextStatus,
+        IReadOnlyCollection<string> allowedCurrentStatuses,
+        string eventType,
+        string timelineAction,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var plan = await store.GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        if (!allowedCurrentStatuses.Contains(plan.Status))
+        {
+            throw new InvalidOperationException(
+                $"Cannot {PlanActionVerb(timelineAction)} task plan '{planId}' from status '{plan.Status}'.");
+        }
+
+        var updated = await store.UpdatePlanStatusAsync(workspacePath, planId, nextStatus, cancellationToken)
+            .ConfigureAwait(false);
+        await store.AppendEventAsync(
+            workspacePath,
+            planId,
+            new AgentTaskPlanLogEventInput(
+                eventType,
+                FromProfileId: "agenthub",
+                Message: reason),
+            cancellationToken).ConfigureAwait(false);
+        await timelineStore.AppendUserMessageAsync(
+            new CollaborationUserMessage(
+                workspacePath,
+                "agenthub",
+                "task-plan",
+                $"[{timelineAction} {planId}] {reason}"),
+            cancellationToken).ConfigureAwait(false);
+        return updated;
     }
 
     private async Task RecordUnmatchedHookAsync(
@@ -666,6 +754,22 @@ public sealed class AgentTaskPlanService(
             "approve_task" => "approved",
             "pause_plan" => "paused",
             _ => action
+        };
+    }
+
+    private static string DefaultReason(string reason, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(reason) ? fallback : reason.Trim();
+    }
+
+    private static string PlanActionVerb(string timelineAction)
+    {
+        return timelineAction switch
+        {
+            "pause_plan" => "pause",
+            "resume_plan" => "resume",
+            "archive_plan" => "archive",
+            _ => "update"
         };
     }
 
