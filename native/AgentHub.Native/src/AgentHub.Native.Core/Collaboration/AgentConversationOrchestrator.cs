@@ -89,7 +89,7 @@ public sealed class AgentConversationOrchestrator(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken = default)
     {
-        return await FindManagedSupervisorConversationAsync(hookEvent, cancellationToken)
+        return await FindManagedConversationOutputAsync(hookEvent, cancellationToken)
             .ConfigureAwait(false) is not null;
     }
 
@@ -97,13 +97,25 @@ public sealed class AgentConversationOrchestrator(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken = default)
     {
-        var conversation = await FindManagedSupervisorConversationAsync(hookEvent, cancellationToken)
+        var output = await FindManagedConversationOutputAsync(hookEvent, cancellationToken)
             .ConfigureAwait(false);
-        if (conversation is null)
+        if (output is null)
         {
             return false;
         }
 
+        if (!output.IsSupervisor)
+        {
+            await RouteParticipantObservationAsync(
+                hookEvent.Workspace,
+                output.Conversation,
+                hookEvent,
+                output.TaskId,
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        var conversation = output.Conversation;
         var parsed = AgentHubCommandParser.Parse(hookEvent.Message);
         foreach (var error in parsed.Errors)
         {
@@ -135,23 +147,109 @@ public sealed class AgentConversationOrchestrator(
         return true;
     }
 
-    private async Task<AgentConversation?> FindManagedSupervisorConversationAsync(
+    private async Task<ManagedConversationOutput?> FindManagedConversationOutputAsync(
         AgentHookEvent hookEvent,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(hookEvent.ConversationId) ||
-            string.IsNullOrWhiteSpace(hookEvent.ProfileId))
+        if (string.IsNullOrWhiteSpace(hookEvent.ProfileId))
         {
             return null;
         }
 
-        return (await conversationStore.ListAsync(hookEvent.Workspace, cancellationToken)
-                .ConfigureAwait(false))
-            .FirstOrDefault(item =>
+        var conversations = await conversationStore.ListAsync(hookEvent.Workspace, cancellationToken)
+            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(hookEvent.ConversationId))
+        {
+            var conversation = conversations.FirstOrDefault(item =>
                 string.Equals(item.Id, hookEvent.ConversationId, StringComparison.Ordinal) &&
                 item.Mode == "manager" &&
-                item.Status == "running" &&
-                string.Equals(item.SupervisorProfileId, hookEvent.ProfileId, StringComparison.OrdinalIgnoreCase));
+                item.Status == "running");
+            if (conversation is null)
+            {
+                return null;
+            }
+
+            if (string.Equals(conversation.SupervisorProfileId, hookEvent.ProfileId, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ManagedConversationOutput(conversation, IsSupervisor: true, TaskId: hookEvent.TaskId);
+            }
+
+            if (conversation.ParticipantProfileIds.Contains(hookEvent.ProfileId, StringComparer.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(hookEvent.TaskId) &&
+                await HasMatchingDelegatedTaskAsync(
+                    hookEvent.Workspace,
+                    conversation.Id,
+                    hookEvent.ProfileId,
+                    hookEvent.TaskId,
+                    hookEvent.SessionId,
+                    cancellationToken).ConfigureAwait(false))
+            {
+                return new ManagedConversationOutput(conversation, IsSupervisor: false, hookEvent.TaskId);
+            }
+
+            return null;
+        }
+
+        return await InferParticipantConversationOutputAsync(
+            hookEvent.Workspace,
+            hookEvent.ProfileId,
+            hookEvent.SessionId,
+            conversations,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ManagedConversationOutput?> InferParticipantConversationOutputAsync(
+        string workspacePath,
+        string profileId,
+        string? sessionId,
+        IReadOnlyList<AgentConversation> conversations,
+        CancellationToken cancellationToken)
+    {
+        var events = await timelineStore.ListAsync(workspacePath, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var item in events.Reverse())
+        {
+            if (item.Kind != CollaborationEventKind.UserMessage ||
+                !string.Equals(item.ProfileId, "agenthub", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(item.TargetProfileId, profileId, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(item.ConversationId) ||
+                string.IsNullOrWhiteSpace(item.TaskId) ||
+                !SessionMatches(item.SessionId, sessionId))
+            {
+                continue;
+            }
+
+            var conversation = conversations.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, item.ConversationId, StringComparison.Ordinal) &&
+                candidate.Mode == "manager" &&
+                candidate.Status == "running" &&
+                candidate.ParticipantProfileIds.Contains(profileId, StringComparer.OrdinalIgnoreCase));
+            if (conversation is not null)
+            {
+                return new ManagedConversationOutput(conversation, IsSupervisor: false, item.TaskId);
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<bool> HasMatchingDelegatedTaskAsync(
+        string workspacePath,
+        string conversationId,
+        string profileId,
+        string taskId,
+        string? sessionId,
+        CancellationToken cancellationToken)
+    {
+        var events = await timelineStore.ListAsync(workspacePath, cancellationToken)
+            .ConfigureAwait(false);
+        return events.Any(item =>
+            item.Kind == CollaborationEventKind.UserMessage &&
+            string.Equals(item.ProfileId, "agenthub", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.TargetProfileId, profileId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.ConversationId, conversationId, StringComparison.Ordinal) &&
+            string.Equals(item.TaskId, taskId, StringComparison.Ordinal) &&
+            SessionMatches(item.SessionId, sessionId));
     }
 
     private async Task<AgentConversation> RouteManagerSendCommandAsync(
@@ -196,14 +294,9 @@ public sealed class AgentConversationOrchestrator(
             return conversation;
         }
 
-        var nextStep = conversation.CurrentStep + 1;
-        var nextStatus = conversation.MaxSteps is not null && nextStep >= conversation.MaxSteps
-            ? "paused"
-            : conversation.Status;
-        var updated = await conversationStore.UpdateAsync(
+        var updated = await RecordDeliveryStepAsync(
             workspacePath,
-            conversation.Id,
-            new UpdateAgentConversationRequest(Status: nextStatus, CurrentStep: nextStep),
+            conversation,
             cancellationToken).ConfigureAwait(false);
         await timelineStore.AppendUserMessageAsync(
             new CollaborationUserMessage(
@@ -216,6 +309,69 @@ public sealed class AgentConversationOrchestrator(
                 command.TeamId,
                 command.PlanId,
                 targetSession.Id),
+            cancellationToken).ConfigureAwait(false);
+        return updated;
+    }
+
+    private async Task<AgentConversation> RouteParticipantObservationAsync(
+        string workspacePath,
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        string? taskId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(conversation.SupervisorProfileId))
+        {
+            return conversation;
+        }
+
+        var supervisorSession = sessionRegistry.FindLatest(workspacePath, conversation.SupervisorProfileId);
+        if (supervisorSession is null)
+        {
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"No active session for profile '{conversation.SupervisorProfileId}' in workspace '{workspacePath}'.",
+                conversation.Id,
+                taskId,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await conversationStore.UpdateAsync(
+                workspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var sendResult = await inputRouter.TrySendLineDetailedAsync(
+            supervisorSession.Id,
+            BuildObservationPrompt(conversation, hookEvent, taskId),
+            cancellationToken).ConfigureAwait(false);
+        if (!sendResult.Sent)
+        {
+            if (sendResult.ShouldRemoveSession)
+            {
+                sessionRegistry.Remove(supervisorSession.Id);
+            }
+
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"Unable to send manager conversation observation to session '{supervisorSession.Id}': {sendResult.Status}",
+                conversation.Id,
+                taskId,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return conversation;
+        }
+
+        var updated = await RecordDeliveryStepAsync(workspacePath, conversation, cancellationToken)
+            .ConfigureAwait(false);
+        await timelineStore.AppendUserMessageAsync(
+            new CollaborationUserMessage(
+                workspacePath,
+                "agenthub",
+                conversation.SupervisorProfileId,
+                hookEvent.Message,
+                conversation.Id,
+                taskId,
+                SessionId: supervisorSession.Id),
             cancellationToken).ConfigureAwait(false);
         return updated;
     }
@@ -294,9 +450,55 @@ public sealed class AgentConversationOrchestrator(
         return string.Join("\r\n", lines);
     }
 
+    private static string BuildObservationPrompt(
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        string? taskId)
+    {
+        return string.Join(
+            "\r\n",
+            [
+                $"Observation from {hookEvent.ProfileId ?? "agent"}.",
+                $"Conversation: {conversation.Id}",
+                $"Task: {taskId ?? "unknown"}",
+                "",
+                hookEvent.Message,
+                "",
+                "Continue the manager conversation with the next bounded step, ask the user, or finish with a done command."
+            ]);
+    }
+
     private static string FormatWorkflowCommand(AgentHubWorkflowCommand command)
     {
         var message = string.IsNullOrWhiteSpace(command.Message) ? "completed" : command.Message;
         return $"[{command.Action}] {message}";
     }
+
+    private async Task<AgentConversation> RecordDeliveryStepAsync(
+        string workspacePath,
+        AgentConversation conversation,
+        CancellationToken cancellationToken)
+    {
+        var nextStep = conversation.CurrentStep + 1;
+        var nextStatus = conversation.MaxSteps is not null && nextStep >= conversation.MaxSteps
+            ? "paused"
+            : conversation.Status;
+        return await conversationStore.UpdateAsync(
+            workspacePath,
+            conversation.Id,
+            new UpdateAgentConversationRequest(Status: nextStatus, CurrentStep: nextStep),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool SessionMatches(string? expectedSessionId, string? actualSessionId)
+    {
+        return string.IsNullOrWhiteSpace(expectedSessionId) ||
+               string.IsNullOrWhiteSpace(actualSessionId) ||
+               string.Equals(expectedSessionId, actualSessionId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed record ManagedConversationOutput(
+        AgentConversation Conversation,
+        bool IsSupervisor,
+        string? TaskId);
 }

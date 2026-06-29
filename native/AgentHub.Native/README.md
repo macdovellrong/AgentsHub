@@ -128,7 +128,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 15. 左侧 Task Plans 区域可以刷新 `<workspace>/tasks/*/task-plan.md` 来源、创建 task-plan 执行快照，并把 manager prompt 投递给当前 workspace 的 manager profile 最新 session；选中执行快照后，右侧 Task plan detail 会显示最新 tasks 和最近 events。
 16. manager hook 输出的 `assign_task` / `reject_task` / `request_review` 会向目标 Agent 发送带 plan/task/from 上下文的标准 prompt，而不是只转发裸 message；`approve_task` / `pause_plan` 不会投递到终端，只会更新 task-plan 状态记录。所有 manager task-plan 命令都会同步写入执行快照内的 `tasks.jsonl` / `events.jsonl`。
 17. delegated agent 的 hook 回传会从最近的 task-plan 分派事件推断 plan/task；hook payload 也可以显式带 `planId/taskId` 或 `plan_id/task_id`，HTTP header 也兼容 `X-AgentHub-Plan-Id` / `X-AgentHub-Task-Id`。匹配成功时会写入 `artifacts/*.md`，把任务状态置为 `review`，并把 observation prompt 投递回 manager session；manager 不在线时会记录带 task/artifact 上下文的 `delivery_failed`；显式 plan 无法匹配任务时会记录 `unmatched_hook`。task-plan 执行快照事件会保留触发它们的 Collaboration `agent_output` source event id；同一个 source event id 的重复 hook completion 会被忽略，方便后续追踪和去重。当前 workspace 的 hook 处理完成后会刷新 timeline、Task Plans 列表和当前 plan detail。
-18. WPF hook pipeline 会优先识别带 `conversationId` 的 running manager conversation supervisor 输出；这类 hook 会绕过通用 command dispatcher，交给 conversation orchestrator 投递 delegated prompt 或更新 conversation 状态，避免同一条 `send` 命令被通用 dispatcher 和 conversation orchestrator 重复发送。
+18. WPF hook pipeline 会优先识别 running manager conversation 输出；supervisor hook 会绕过通用 command dispatcher，交给 conversation orchestrator 投递 delegated prompt 或更新 conversation 状态，避免同一条 `send` 命令被通用 dispatcher 和 conversation orchestrator 重复发送。participant hook 如果显式带 `conversationId/taskId`，或可以从最近一次 delegated event 的 `conversationId/taskId/sessionId` 推断上下文，会生成 observation prompt 投回 supervisor。
 19. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 
 workspace 列表保存位置：
@@ -170,7 +170,7 @@ native conversation 状态保存位置：
 <workspace>/.agenthub/conversations/conversations.jsonl
 ```
 
-native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。Core 也提供了 manager `handleAgentOutput` 的第一段状态流：supervisor 的 `send` / `send_message` 会转成带 conversation/task 上下文的 delegated prompt 并投递到目标 profile 最新 session，`done` 会完成 conversation，`ask_user` 会暂停 conversation。WPF hook pipeline 已接入该分流逻辑；带 `conversationId` 的 manager supervisor hook 不再走通用 dispatcher。当前仍未提供 WPF UI 创建/启动 native conversation，也尚未实现 participant 回填 observation、roundtable 或 pair negotiation 的完整状态机。
+native Core 已提供 manager conversation 启动切片：创建 conversation 状态、向最新 supervisor session 投递初始 manager prompt，并在缺少 supervisor session 或投递失败时把 conversation 标记为 `failed`。Core 也提供了 manager `handleAgentOutput` 状态流：supervisor 的 `send` / `send_message` 会转成带 conversation/task 上下文的 delegated prompt 并投递到目标 profile 最新 session，`done` 会完成 conversation，`ask_user` 会暂停 conversation；participant 的 hook 回传会生成 observation prompt 投回 supervisor，显式 `conversationId/taskId` 和从最近 delegated event 推断两种路径都支持。WPF hook pipeline 已接入该分流逻辑。当前仍未提供 WPF UI 创建/启动 native conversation，也尚未实现 roundtable 或 pair negotiation 的完整状态机。
 
 Host shell 等本机设置保存位置：
 

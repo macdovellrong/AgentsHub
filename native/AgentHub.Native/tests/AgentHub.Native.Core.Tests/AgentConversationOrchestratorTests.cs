@@ -223,6 +223,69 @@ public sealed class AgentConversationOrchestratorTests : IDisposable
         Assert.Equal("[ask_user] Which option should I use?", item.Message);
     }
 
+    [Fact]
+    public async Task Sends_participant_task_observation_back_to_supervisor()
+    {
+        var workspacePath = CreateWorkspace();
+        var conversationStore = new AgentConversationStore();
+        var timelineStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var inputRouter = new AgentInputRouter();
+        var registry = new AgentSessionRegistry();
+        var supervisorSession = new RecordingTerminalSession("claude-1");
+        inputRouter.Register(supervisorSession);
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", workspacePath, DateTimeOffset.Parse("2026-06-29T10:01:00Z")));
+        await conversationStore.CreateAsync(
+            workspacePath,
+            new CreateAgentConversationRequest(
+                "conversation-1",
+                "manager",
+                "claude",
+                ["codex"],
+                "Implement native orchestration",
+                CurrentStep: 2,
+                MaxSteps: 12));
+        await timelineStore.AppendUserMessageAsync(new CollaborationUserMessage(
+            workspacePath,
+            "agenthub",
+            "codex",
+            "Implement parser.",
+            ConversationId: "conversation-1",
+            TaskId: "T-001",
+            SessionId: "codex-1"));
+        var orchestrator = new AgentConversationOrchestrator(conversationStore, timelineStore, inputRouter, registry);
+
+        var handled = await orchestrator.HandleAgentOutputAsync(new AgentHookEvent(
+            workspacePath,
+            "Implemented parser and added tests.",
+            "codex",
+            "codex-1",
+            "run-2",
+            "codex",
+            TaskId: "T-001",
+            ConversationId: "conversation-1"));
+
+        Assert.True(handled);
+        Assert.Equal("\x1b[200~", supervisorSession.Writes[0]);
+        Assert.Contains("Observation from codex.", supervisorSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Conversation: conversation-1", supervisorSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Task: T-001", supervisorSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Implemented parser and added tests.", supervisorSession.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", supervisorSession.Writes[2]);
+        Assert.Equal("\r", supervisorSession.Writes[3]);
+        var latest = Assert.Single(await conversationStore.ListAsync(workspacePath));
+        Assert.Equal(3, latest.CurrentStep);
+        var events = await timelineStore.ListAsync(workspacePath);
+        Assert.Equal(2, events.Count);
+        var observation = events[^1];
+        Assert.Equal(CollaborationEventKind.UserMessage, observation.Kind);
+        Assert.Equal("agenthub", observation.ProfileId);
+        Assert.Equal("claude", observation.TargetProfileId);
+        Assert.Equal("conversation-1", observation.ConversationId);
+        Assert.Equal("T-001", observation.TaskId);
+        Assert.Equal("claude-1", observation.SessionId);
+        Assert.Equal("Implemented parser and added tests.", observation.Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
