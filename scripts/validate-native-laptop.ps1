@@ -13,15 +13,12 @@ function Resolve-ValidationOutputPath {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-        if ([System.IO.Path]::IsPathRooted($OutputPath)) {
-            return $OutputPath
-        }
-
-        return Join-Path (Get-Location) $OutputPath
+        return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     }
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    return Join-Path $RepositoryRoot "artifacts/native-diagnostics/laptop-validation-$timestamp.md"
+    $defaultOutputPath = Join-Path $RepositoryRoot "artifacts/native-diagnostics/laptop-validation-$timestamp.md"
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($defaultOutputPath)
 }
 
 function Write-LatestValidationPointer {

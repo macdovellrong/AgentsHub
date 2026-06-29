@@ -162,8 +162,283 @@ exit $exitCode
 '@
 Set-Content -LiteralPath $powershellDiagnosticsStarterPath -Value $powershellDiagnosticsStarter -Encoding UTF8
 
+$powershellValidationPath = Join-Path $outputPath "validate-native-laptop.ps1"
+$powershellValidation = @'
+param(
+    [string]$Workspace,
+    [string]$Python = "py -3.11",
+    [string]$Output
+)
+
+$ErrorActionPreference = "Stop"
+
+function Resolve-ValidationOutputPath {
+    param(
+        [string]$OutputPath,
+        [string]$PackageRoot
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+        return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    }
+
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $defaultOutputPath = Join-Path $PackageRoot "artifacts/native-diagnostics/laptop-validation-$timestamp.md"
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($defaultOutputPath)
+}
+
+function Write-LatestValidationPointer {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReportPath,
+        [Parameter(Mandatory = $true)]
+        [string]$Status,
+        [Parameter(Mandatory = $true)]
+        [object[]]$Steps
+    )
+
+    $directory = Split-Path -Parent $ReportPath
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }
+
+    $pointerPath = Join-Path $directory "latest-laptop-validation.txt"
+    $lines = @(
+        "timestamp: $((Get-Date).ToString('O'))",
+        "status: $Status",
+        "report: $ReportPath"
+    )
+    foreach ($step in $Steps) {
+        $lines += "step: $($step.Name) = $($step.Status)"
+    }
+
+    Set-Content -LiteralPath $pointerPath -Value $lines -Encoding UTF8
+    return $pointerPath
+}
+
+function Invoke-ValidationStep {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Action
+    )
+
+    Write-Host "== $Name =="
+    try {
+        & $Action
+        $script:ValidationSteps += [pscustomobject]@{
+            Name = $Name
+            Status = "passed"
+        }
+        Write-Host "PASS: $Name"
+    }
+    catch {
+        $script:ValidationHadFailure = $true
+        $script:ValidationSteps += [pscustomobject]@{
+            Name = $Name
+            Status = "failed"
+            Error = $_.Exception.Message
+        }
+        Write-Host "FAIL: $Name"
+        Write-Host $_.Exception.Message
+    }
+}
+
+function Get-NativeAgentCommandCandidates {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $extension = [System.IO.Path]::GetExtension($CommandName)
+    if (-not [string]::IsNullOrWhiteSpace($extension)) {
+        return @($CommandName)
+    }
+
+    $nativeExtensions = @(".COM", ".EXE", ".BAT", ".CMD")
+    $pathExtensions = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:PATHEXT)) {
+        foreach ($pathExtension in ($env:PATHEXT -split ";")) {
+            $trimmed = $pathExtension.Trim()
+            if ($nativeExtensions -contains $trimmed.ToUpperInvariant()) {
+                $pathExtensions += $trimmed
+            }
+        }
+    }
+
+    if ($pathExtensions.Count -eq 0) {
+        $pathExtensions = $nativeExtensions
+    }
+
+    $candidates = @()
+    foreach ($pathExtension in $pathExtensions) {
+        $candidates += "$CommandName$pathExtension"
+    }
+
+    return $candidates | Select-Object -Unique
+}
+
+function Resolve-NativeAgentCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($env:PATH)) {
+        return $null
+    }
+
+    foreach ($directory in ($env:PATH -split [System.IO.Path]::PathSeparator)) {
+        if ([string]::IsNullOrWhiteSpace($directory)) {
+            continue
+        }
+
+        foreach ($candidate in (Get-NativeAgentCommandCandidates -CommandName $CommandName)) {
+            $candidatePath = Join-Path $directory.Trim() $candidate
+            if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+                return $candidatePath
+            }
+        }
+    }
+
+    return $null
+}
+
+function Invoke-NativeLauncherHelp {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Launcher
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Launcher)
+    if ($extension -in @(".cmd", ".bat")) {
+        $cmd = Join-Path ([Environment]::SystemDirectory) "cmd.exe"
+        $commandLine = "`"$Launcher`" --help"
+        $previousLocation = Get-Location
+        try {
+            Set-Location -LiteralPath ([Environment]::SystemDirectory)
+            $output = & $cmd /d /s /c $commandLine 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            Set-Location -LiteralPath $previousLocation
+        }
+    }
+    else {
+        $output = & $Launcher --help 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+
+    if ($null -eq $exitCode) {
+        $exitCode = 0
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = @($output)
+    }
+}
+
+$packageRoot = $PSScriptRoot
+$env:AGENTHUB_HOOKS_SOURCE_DIR = Join-Path $packageRoot "scripts/hooks"
+$diagnosticsScript = Join-Path $packageRoot "scripts/collect-native-diagnostics.ps1"
+$resolvedOutput = Resolve-ValidationOutputPath -OutputPath $Output -PackageRoot $packageRoot
+
+$script:ValidationSteps = @()
+$script:ValidationHadFailure = $false
+
+Invoke-ValidationStep "published package files" {
+    $requiredFiles = @(
+        "AgentHub.Native.App.exe",
+        "start-agenthub-native.ps1",
+        "collect-native-diagnostics.ps1",
+        "validate-native-laptop.bat",
+        "validate-native-laptop.ps1",
+        "scripts/collect-native-diagnostics.ps1",
+        "scripts/hooks/agenthub_hook_common.py",
+        "scripts/hooks/agenthub_codex_stop.py",
+        "scripts/hooks/agenthub_claude_stop.py",
+        "scripts/hooks/agenthub_gemini_after_agent.py"
+    )
+
+    foreach ($relativePath in $requiredFiles) {
+        $path = Join-Path $packageRoot $relativePath
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Published package file was not found: $relativePath"
+        }
+    }
+}
+
+Invoke-ValidationStep "powershell host" {
+    $path = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell/v1.0/powershell.exe"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "PowerShell host was not found: $path"
+    }
+}
+
+Invoke-ValidationStep "cmd host" {
+    $path = Join-Path ([Environment]::SystemDirectory) "cmd.exe"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "cmd host was not found: $path"
+    }
+}
+
+Invoke-ValidationStep "codex native launcher" {
+    $launcher = Resolve-NativeAgentCommand -CommandName "codex"
+    if ([string]::IsNullOrWhiteSpace($launcher)) {
+        throw "Codex native Windows launcher was not found in PATH."
+    }
+
+    Write-Host $launcher
+    $probe = Invoke-NativeLauncherHelp -Launcher $launcher
+    $helpText = @($probe.Output) -join "`n"
+    if ($helpText -notlike "*--no-alt-screen*") {
+        throw "Codex CLI does not support --no-alt-screen. Update Codex CLI before launching AgentHub Native Codex sessions."
+    }
+}
+
+Invoke-ValidationStep "native diagnostics report" {
+    & $diagnosticsScript -Workspace $Workspace -Python $Python -Output $resolvedOutput
+}
+
+$status = if ($script:ValidationHadFailure) { "failed" } else { "passed" }
+$pointerPath = Write-LatestValidationPointer -ReportPath $resolvedOutput -Status $status -Steps $script:ValidationSteps
+
+Write-Host "Native laptop validation completed."
+Write-Host "Status: $status"
+Write-Host "Diagnostics report: $resolvedOutput"
+Write-Host "Latest pointer: $pointerPath"
+
+if ($script:ValidationHadFailure) {
+    exit 1
+}
+
+exit 0
+'@
+Set-Content -LiteralPath $powershellValidationPath -Value $powershellValidation -Encoding UTF8
+
+$validationStarterPath = Join-Path $outputPath "validate-native-laptop.bat"
+$validationStarter = @"
+@echo off
+setlocal
+pushd "%~dp0" || exit /b 1
+set "AGENTHUB_HOOKS_SOURCE_DIR=%CD%\scripts\hooks"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\validate-native-laptop.ps1" %*
+set "AGENTHUB_NATIVE_VALIDATION_EXIT_CODE=%ERRORLEVEL%"
+popd
+if not "%AGENTHUB_NATIVE_VALIDATION_EXIT_CODE%"=="0" (
+  echo AgentHub Native laptop validation exited with code %AGENTHUB_NATIVE_VALIDATION_EXIT_CODE%.
+  pause
+)
+exit /b %AGENTHUB_NATIVE_VALIDATION_EXIT_CODE%
+"@
+Set-Content -LiteralPath $validationStarterPath -Value $validationStarter -Encoding ASCII
+
 Write-Host "AgentHub Native published to: $outputPath"
 Write-Host "Run: $starterPath -Workspace V:\OrderManager -Agent codex -Resume"
 Write-Host "Run without cmd: $powershellStarterPath -Workspace V:\OrderManager -Agent codex -Resume"
 Write-Host "Diagnostics: $diagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
 Write-Host "Diagnostics without cmd: $powershellDiagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
+Write-Host "Validation: $validationStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
+Write-Host "Validation without cmd: $powershellValidationPath -Workspace V:\OrderManager -Python `"py -3.11`""

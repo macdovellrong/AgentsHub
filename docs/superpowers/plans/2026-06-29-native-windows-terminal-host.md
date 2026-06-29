@@ -71,6 +71,7 @@
 - [x] native UI 提供 `Run diagnostics`，可用当前 workspace 直接生成诊断报告到 native data 的 `diagnostics/` 目录。
 - [x] native UI 诊断完成后会更新 `diagnostics/latest-diagnostics.txt`，方便定位最近一次报告。
 - [x] 提供 `scripts/validate-native-laptop.ps1`，一键执行笔记本 Codex/scrolltest 预检并生成诊断报告。
+- [x] native 发布包提供 `validate-native-laptop.ps1/.bat`，目标电脑不依赖源码仓库也能生成验证指针和诊断报告。
 
 ## 后续任务
 

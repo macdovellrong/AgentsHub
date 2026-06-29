@@ -82,6 +82,7 @@
 
 ```powershell
 .\scripts\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\scripts\start-native.ps1 -Check
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex,claude,gemini -Python "py -3.11"
@@ -89,7 +90,7 @@
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent scrolltest
 ```
 
-`validate-native-laptop.ps1` 会串行执行 PowerShell/Codex 预检、cmd/Codex 预检、`scrolltest` 预检，并生成诊断报告。即使预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
+源码版 `validate-native-laptop.ps1` 会串行执行 PowerShell/Codex 预检、cmd/Codex 预检、`scrolltest` 预检，并生成诊断报告。发布包版 `validate-native-laptop.ps1` 会检查包文件、PowerShell/cmd host、Codex native launcher 和 `--no-alt-screen`，再生成诊断报告。两者即使预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
 
 `-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否能以 Windows native launcher 形式从 PATH 中找到（`.com`、`.exe`、`.bat`、`.cmd`，Codex 通常应显示 `codex.cmd` 而不是 `codex.ps1`）；Codex 还会检查该 launcher 的 `--help` 是否包含 `--no-alt-screen`。`powershell`、`cmd`、`shell`、`scrolltest` 只使用选中的 Host shell，不检查额外 Agent CLI；`scrolltest` 默认检查 PowerShell host。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；Python 预检会实际导入 hook 使用的标准库模块（`json`、`pathlib`、`urllib.request`），不是只检查 Python 可执行文件是否存在。如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。
 
@@ -109,7 +110,7 @@
 .\artifacts\native\win-x64\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume
 ```
 
-发布版 `start-agenthub-native.bat` 会直接调用 native exe，并将 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`，避免目标机器残留的同名环境变量指向旧 hook。native exe 同时兼容 `-Workspace/-Agent/-Shell/-Python/-Resume` 和 `--workspace/--agent/--shell/--python/--resume` 两种参数风格。发布目录也会包含 `start-agenthub-native.ps1`、`collect-native-diagnostics.bat`、`collect-native-diagnostics.ps1` 和 `scripts/collect-native-diagnostics.ps1`，可以不依赖源码仓库直接启动或生成诊断报告；如果发布包位于 NAS/UNC 路径，优先用 `.ps1` 入口可以避开 `cmd.exe` 的 UNC 当前目录提示。
+发布版 `start-agenthub-native.bat` 会直接调用 native exe，并将 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`，避免目标机器残留的同名环境变量指向旧 hook。native exe 同时兼容 `-Workspace/-Agent/-Shell/-Python/-Resume` 和 `--workspace/--agent/--shell/--python/--resume` 两种参数风格。发布目录也会包含 `start-agenthub-native.ps1`、`collect-native-diagnostics.bat`、`collect-native-diagnostics.ps1`、`validate-native-laptop.bat`、`validate-native-laptop.ps1` 和 `scripts/collect-native-diagnostics.ps1`，可以不依赖源码仓库直接启动、生成诊断报告或执行笔记本验证；如果发布包位于 NAS/UNC 路径，优先用 `.ps1` 入口可以避开 `cmd.exe` 的 UNC 当前目录提示。
 
 只检查发布环境、不执行发布：
 
@@ -123,6 +124,7 @@
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.bat -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
 默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、native 终端后端依赖、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Codex/Claude/Gemini CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。

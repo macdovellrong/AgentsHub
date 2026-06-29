@@ -11,7 +11,18 @@ def test_publish_native_script_generates_powershell_entrypoints() -> None:
 
     assert "start-agenthub-native.ps1" in script
     assert "collect-native-diagnostics.ps1" in script
+    assert "validate-native-laptop.ps1" in script
     assert "AgentHub.Native.App.exe" in script
     assert "AGENTHUB_HOOKS_SOURCE_DIR" in script
     assert "Push-Location -LiteralPath $packageRoot" in script
     assert "Pop-Location" in script
+
+
+def test_publish_native_script_embeds_laptop_validation_pointer() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
+
+    assert "latest-laptop-validation.txt" in script
+    assert "status: $Status" in script
+    assert '"passed"' in script
+    assert '"failed"' in script
+    assert "report:" in script

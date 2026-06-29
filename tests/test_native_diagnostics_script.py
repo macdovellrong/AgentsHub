@@ -118,6 +118,8 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "start-agenthub-native.ps1" in report
     assert "collect-native-diagnostics.bat" in report
     assert "collect-native-diagnostics.ps1" in report
+    assert "validate-native-laptop.bat" in report
+    assert "validate-native-laptop.ps1" in report
     assert "scripts\\collect-native-diagnostics.ps1" in report
     assert "agenthub_hook_common.py" in report
     assert "## Native Terminal Backend" in report

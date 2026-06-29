@@ -101,3 +101,47 @@ def test_validate_native_laptop_still_writes_diagnostics_when_preflight_fails(tm
     pointer_text = (output.parent / "latest-laptop-validation.txt").read_text(encoding="utf-8")
     assert f"report: {output}" in pointer_text
     assert "status: failed" in pointer_text
+
+
+def test_validate_native_laptop_accepts_provider_qualified_output_path(tmp_path: Path) -> None:
+    script_path = REPO_ROOT / "scripts" / "validate-native-laptop.ps1"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = tmp_path / "provider-qualified-validation.md"
+    provider_output = f"Microsoft.PowerShell.Core\\FileSystem::{output}"
+
+    command = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            "function Get-Command {",
+            "    $Name = $args[0]",
+            "    if ($Name -eq 'codex') {",
+            "        [pscustomobject]@{ Source = \"mock:$Name\" }",
+            "        return",
+            "    }",
+            "    Microsoft.PowerShell.Core\\Get-Command @args",
+            "}",
+            "function codex { '--no-alt-screen' }",
+            (
+                f"& {ps_quote(str(script_path))} "
+                f"-Workspace {ps_quote(str(workspace))} "
+                f"-Python {ps_quote(sys.executable)} "
+                f"-Output {ps_quote(provider_output)}"
+            ),
+            "exit $LASTEXITCODE",
+        ]
+    )
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output.exists()
+    pointer_text = (output.parent / "latest-laptop-validation.txt").read_text(encoding="utf-8")
+    assert f"report: {output}" in pointer_text
