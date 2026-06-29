@@ -14,9 +14,11 @@ public sealed class AgentHookEventProcessor(
         CancellationToken cancellationToken = default)
     {
         var agentOutputEvent = await eventStore.AppendAgentOutputAsync(hookEvent, cancellationToken).ConfigureAwait(false);
+        var fromProfileId = hookEvent.ProfileId ?? hookEvent.Source ?? "agent";
         var dispatchResult = await commandDispatcher.DispatchAsync(
             hookEvent.Workspace,
             hookEvent.Message,
+            fromProfileId,
             cancellationToken).ConfigureAwait(false);
         await eventStore.AppendForwardedAgentHubCommandsAsync(
             hookEvent.Workspace,

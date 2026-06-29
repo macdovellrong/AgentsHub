@@ -2,9 +2,18 @@ namespace AgentHub.Native.Core.Collaboration;
 
 public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
 {
+    public Task<AgentHubCommandDispatchResult> DispatchAsync(
+        string workspacePath,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
+        return DispatchAsync(workspacePath, text, null, cancellationToken);
+    }
+
     public async Task<AgentHubCommandDispatchResult> DispatchAsync(
         string workspacePath,
         string text,
+        string? fromProfileId,
         CancellationToken cancellationToken = default)
     {
         var parsed = AgentHubCommandParser.Parse(text);
@@ -15,7 +24,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
 
         foreach (var command in parsed.SendMessages)
         {
-            var dispatchMessage = FormatSendMessageDispatch(command);
+            var dispatchMessage = FormatSendMessageDispatch(command, fromProfileId);
             var result = await messageRouter.TrySendToProfileDetailedAsync(
                 workspacePath,
                 command.To,
@@ -75,7 +84,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             dispatchErrors);
     }
 
-    private static string FormatSendMessageDispatch(AgentHubSendMessageCommand command)
+    private static string FormatSendMessageDispatch(AgentHubSendMessageCommand command, string? fromProfileId)
     {
         if (string.IsNullOrWhiteSpace(command.PlanId) ||
             string.IsNullOrWhiteSpace(command.TaskId) ||
@@ -92,6 +101,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
                     "AgentHub task-plan review request.",
                     $"Plan: {command.PlanId}",
                     $"Task: {command.TaskId}",
+                    string.IsNullOrWhiteSpace(fromProfileId) ? "" : $"From: {fromProfileId}",
                     "",
                     command.Message,
                     "",
@@ -105,6 +115,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
                 "AgentHub task-plan delegated task.",
                 $"Plan: {command.PlanId}",
                 $"Task: {command.TaskId}",
+                string.IsNullOrWhiteSpace(fromProfileId) ? "" : $"From: {fromProfileId}",
                 "",
                 command.Message,
                 "",

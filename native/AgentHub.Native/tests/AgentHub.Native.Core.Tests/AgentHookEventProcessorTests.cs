@@ -161,8 +161,10 @@ public sealed class AgentHookEventProcessorTests : IDisposable
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
         var taskPlanEventStore = new AgentTaskPlanEventStore();
         var inputRouter = new AgentInputRouter();
-        inputRouter.Register(new RecordingTerminalSession("codex-1"));
-        inputRouter.Register(new RecordingTerminalSession("gemini-1"));
+        var codex = new RecordingTerminalSession("codex-1");
+        var gemini = new RecordingTerminalSession("gemini-1");
+        inputRouter.Register(codex);
+        inputRouter.Register(gemini);
         var registry = new AgentSessionRegistry();
         registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.UtcNow));
         registry.Register(new AgentSessionDescriptor("gemini-1", "gemini", workspacePath, DateTimeOffset.UtcNow));
@@ -182,6 +184,8 @@ public sealed class AgentHookEventProcessorTests : IDisposable
             "run-1",
             "claude"));
 
+        Assert.Contains("From: claude", codex.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("From: claude", gemini.Writes[1], StringComparison.Ordinal);
         var events = await taskPlanEventStore.ListEventsAsync(workspacePath, "P-001");
         Assert.Collection(
             events,
