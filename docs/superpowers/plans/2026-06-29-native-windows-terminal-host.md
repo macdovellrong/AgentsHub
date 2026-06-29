@@ -24,6 +24,7 @@
 - [x] WPF App 接入 hook receiver、hook installer、hook env 注入和输入栏。
 - [x] 多 session 列表支持 Stop selected、Stop all、切换时保留各自 terminal 实例。
 - [x] session 列表显示 profile、workspace、runId 和 hook receiver 状态。
+- [x] hook 控制命令的解析错误和转发失败会进入 Collaboration timeline。
 
 ## 后续任务
 

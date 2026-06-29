@@ -72,7 +72,42 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 cancellationToken).ConfigureAwait(false));
         }
 
+        foreach (var error in result.ParseErrors)
+        {
+            events.Add(await AppendCommandErrorAsync(
+                workspacePath,
+                $"[parse_error {error.Code} #{error.Index}] {error.Message}",
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        foreach (var error in result.DispatchErrors)
+        {
+            events.Add(await AppendCommandErrorAsync(
+                workspacePath,
+                $"[dispatch_error {error.TargetProfileId}] {error.Message}",
+                cancellationToken).ConfigureAwait(false));
+        }
+
         return events;
+    }
+
+    private Task<CollaborationEvent> AppendCommandErrorAsync(
+        string workspacePath,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var collaborationEvent = new CollaborationEvent(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            CollaborationEventKind.AgentHubCommandError,
+            NormalizePath(workspacePath),
+            message,
+            "agenthub",
+            "command-error",
+            null,
+            null,
+            "agenthub");
+        return AppendAsync(collaborationEvent, cancellationToken);
     }
 
     private static string FormatPlanStatusCommand(AgentHubPlanStatusCommand command)

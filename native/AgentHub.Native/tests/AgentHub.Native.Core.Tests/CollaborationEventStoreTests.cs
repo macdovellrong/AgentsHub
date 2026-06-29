@@ -102,6 +102,31 @@ public sealed class CollaborationEventStoreTests : IDisposable
         Assert.Equal("[pause_plan P001] Need user decision", events[1].Message);
     }
 
+    [Fact]
+    public async Task Appends_parse_and_dispatch_errors_as_agenthub_command_error_events()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [],
+            [new AgentHubCommandParseError(0, "invalid_json", "Invalid JSON in agenthub command block", "{\"action\":")],
+            [new AgentHubCommandDispatchError("codex", "No active session for profile 'codex'.")]);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.All(events, item =>
+        {
+            Assert.Equal(CollaborationEventKind.AgentHubCommandError, item.Kind);
+            Assert.Equal("agenthub", item.ProfileId);
+            Assert.Equal("command-error", item.TargetProfileId);
+        });
+        Assert.Equal("[parse_error invalid_json #0] Invalid JSON in agenthub command block", events[0].Message);
+        Assert.Equal("[dispatch_error codex] No active session for profile 'codex'.", events[1].Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

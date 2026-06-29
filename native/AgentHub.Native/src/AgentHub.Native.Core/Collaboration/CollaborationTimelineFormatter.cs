@@ -9,6 +9,7 @@ public static class CollaborationTimelineFormatter
         {
             CollaborationEventKind.UserMessage => $"{timestamp} {item.ProfileId ?? "user"} -> {item.TargetProfileId ?? "selected"}: {item.Message}",
             CollaborationEventKind.AgentOutput => $"{timestamp} {item.ProfileId ?? item.Source ?? "agent"}: {item.Message}",
+            CollaborationEventKind.AgentHubCommandError => $"{timestamp} agenthub command error: {item.Message}",
             _ => $"{timestamp} {item.Message}"
         };
     }

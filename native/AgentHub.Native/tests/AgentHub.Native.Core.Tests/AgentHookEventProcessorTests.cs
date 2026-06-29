@@ -38,6 +38,31 @@ public sealed class AgentHookEventProcessorTests : IDisposable
         Assert.Equal("Please inspect.", events[1].Message);
     }
 
+    [Fact]
+    public async Task Records_dispatch_errors_from_agenthub_commands()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));
+        var processor = new AgentHookEventProcessor(store, dispatcher);
+
+        var result = await processor.ProcessAsync(new AgentHookEvent(
+            @"V:\OrderManager",
+            "<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude"));
+
+        Assert.Equal(0, result.SentCount);
+        var dispatchError = Assert.Single(result.DispatchErrors);
+        Assert.Equal("codex", dispatchError.TargetProfileId);
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal([CollaborationEventKind.AgentOutput, CollaborationEventKind.AgentHubCommandError], events.Select(item => item.Kind).ToArray());
+        Assert.Equal("agenthub", events[1].ProfileId);
+        Assert.Equal("command-error", events[1].TargetProfileId);
+        Assert.Contains("No active session for profile 'codex'", events[1].Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

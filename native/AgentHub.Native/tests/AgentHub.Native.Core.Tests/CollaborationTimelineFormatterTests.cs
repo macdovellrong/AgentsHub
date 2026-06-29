@@ -43,4 +43,24 @@ public sealed class CollaborationTimelineFormatterTests
 
         Assert.Equal("09:02:03 codex: done", line);
     }
+
+    [Fact]
+    public void Formats_agenthub_command_errors()
+    {
+        var item = new CollaborationEvent(
+            "event-3",
+            new DateTimeOffset(2026, 6, 29, 9, 5, 0, TimeSpan.Zero),
+            CollaborationEventKind.AgentHubCommandError,
+            @"V:\OrderManager",
+            "[dispatch_error codex] No active session",
+            "agenthub",
+            "command-error",
+            null,
+            null,
+            "agenthub");
+
+        var line = CollaborationTimelineFormatter.Format(item, TimeZoneInfo.Utc);
+
+        Assert.Equal("09:05:00 agenthub command error: [dispatch_error codex] No active session", line);
+    }
 }
