@@ -270,12 +270,17 @@ public partial class MainWindow : Window
 
     private async void StartManagedAgents_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var command in AgentStartupCommandCatalog.BuildManagedAgentStartCommands())
+        var commands = AgentStartupCommandCatalog.BuildManagedAgentStartCommands();
+        var startedCount = 0;
+        foreach (var command in commands)
         {
-            await StartAgentAsync(command);
+            if (await StartAgentAsync(command))
+            {
+                startedCount++;
+            }
         }
 
-        StatusTextBlock.Text = "Started managed agents";
+        StatusTextBlock.Text = $"Started managed agents: {startedCount}/{commands.Count}";
     }
 
     private async void StartPowerShell_Click(object sender, RoutedEventArgs e)
@@ -666,7 +671,7 @@ public partial class MainWindow : Window
         await ReloadSelectedTaskPlanDetailsAsync();
     }
 
-    private async Task StartAgentAsync(AgentStartupCommand startupCommand)
+    private async Task<bool> StartAgentAsync(AgentStartupCommand startupCommand)
     {
         try
         {
@@ -676,7 +681,7 @@ public partial class MainWindow : Window
                 StatusTextBlock.Text = WorkspaceStatusResolver.ResolveMissingWorkspaceStatus(
                     StatusTextBlock.Text,
                     "Select or add a workspace first");
-                return;
+                return false;
             }
 
             if (startupCommand.AgentKind != AgentKind.PowerShell)
@@ -736,10 +741,12 @@ public partial class MainWindow : Window
             sessionRegistry.Register(descriptor);
             ReloadSessionList(sessionId);
             StatusTextBlock.Text = $"Started {session.DisplayName}";
+            return true;
         }
         catch (Exception ex)
         {
             StatusTextBlock.Text = AgentStartupStatusFormatter.FormatFailure(startupCommand.AgentKind, ex);
+            return false;
         }
     }
 

@@ -199,7 +199,10 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("Click=\"StartManagedAgents_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("StartManagedAgents_Click", code, StringComparison.Ordinal);
         Assert.Contains("AgentStartupCommandCatalog.BuildManagedAgentStartCommands()", code, StringComparison.Ordinal);
-        Assert.Contains("Started managed agents", code, StringComparison.Ordinal);
+        Assert.Contains("var startedCount = 0", code, StringComparison.Ordinal);
+        Assert.Contains("if (await StartAgentAsync(command))", code, StringComparison.Ordinal);
+        Assert.Contains("Started managed agents: {startedCount}/{commands.Count}", code, StringComparison.Ordinal);
+        Assert.Contains("private async Task<bool> StartAgentAsync", code, StringComparison.Ordinal);
     }
 
     private static string FindSourceFile(params string[] relativeParts)
