@@ -330,6 +330,30 @@ function Test-HookPythonCommand {
     }
 }
 
+function Test-WorkspacePath {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Write-Host "Workspace path check skipped: no workspace provided."
+        return
+    }
+
+    try {
+        $resolvedPath = Convert-Path -LiteralPath $Path -ErrorAction Stop
+    }
+    catch {
+        throw "Workspace path was not found or is not a directory: $Path"
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Container)) {
+        throw "Workspace path was not found or is not a directory: $Path"
+    }
+
+    Write-Host "Workspace check passed: $resolvedPath"
+}
+
 function Get-NativeAgentCommandCandidates {
     param(
         [Parameter(Mandatory = $true)]
@@ -453,6 +477,10 @@ Invoke-ValidationStep "published package files" {
             throw "Published package file was not found: $relativePath"
         }
     }
+}
+
+Invoke-ValidationStep "workspace path" {
+    Test-WorkspacePath -Path $Workspace
 }
 
 Invoke-ValidationStep "powershell host" {
