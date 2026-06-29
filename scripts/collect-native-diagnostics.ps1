@@ -85,6 +85,9 @@ $nativeDataDirectory = Join-Path $localAppData "AgentHub/Native"
 $hookLogPath = Join-Path $nativeDataDirectory "hooks.jsonl"
 $startNativeCommand = ".\scripts\start-native.ps1"
 $publishNativeCommand = ".\scripts\publish-native.ps1"
+$repoStartNativeScript = Join-Path $script:RepoRoot "scripts/start-native.ps1"
+$publishedApp = Join-Path $script:RepoRoot "AgentHub.Native.App.exe"
+$publishedStarter = Join-Path $script:RepoRoot "start-agenthub-native.bat"
 
 $generatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
@@ -117,6 +120,13 @@ Add-Line "## Input Devices"
 Add-Line
 Invoke-DiagnosticCommand "Pointer and HID Devices" "Get-PnpDevice -Class Mouse,Keyboard,HIDClass | Select-Object Status,Class,FriendlyName,InstanceId | Format-Table -AutoSize"
 
+if ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
+    (Test-Path -LiteralPath $publishedStarter -PathType Leaf)) {
+    Add-Line "## Published Package"
+    Add-Line
+    Invoke-DiagnosticCommand "Published Files" "Test-Path -LiteralPath '.\AgentHub.Native.App.exe'; Test-Path -LiteralPath '.\start-agenthub-native.bat'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_hook_common.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_codex_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_claude_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_gemini_after_agent.py'"
+}
+
 Add-Line "## Agent CLIs"
 Add-Line
 Invoke-DiagnosticCommand "Codex CLI" "where.exe codex; codex --version"
@@ -126,17 +136,26 @@ Invoke-DiagnosticCommand "Gemini CLI" "where.exe gemini; gemini --version"
 Add-Line "## Python"
 Add-Line
 Invoke-DiagnosticCommand "Python Launchers" "py -0p; where.exe python; python --version"
-if (-not [string]::IsNullOrWhiteSpace($Python)) {
+if (-not [string]::IsNullOrWhiteSpace($Python) -and
+    (Test-Path -LiteralPath $repoStartNativeScript -PathType Leaf)) {
     Invoke-DiagnosticCommand "Hook Python Probe" "& $startNativeCommand -Check -Agent codex$pythonArgument"
 }
 
 Add-Line "## Native Launch Checks"
 Add-Line
-Invoke-DiagnosticCommand "PowerShell Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell powershell -Agent codex$pythonArgument"
-Invoke-DiagnosticCommand "cmd Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell cmd -Agent codex$pythonArgument"
-Invoke-DiagnosticCommand "Plain PowerShell Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent powershell"
-Invoke-DiagnosticCommand "Plain cmd Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent cmd"
-Invoke-DiagnosticCommand "Publish Check" "& $publishNativeCommand -Check"
+if (Test-Path -LiteralPath $repoStartNativeScript -PathType Leaf) {
+    Invoke-DiagnosticCommand "PowerShell Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell powershell -Agent codex$pythonArgument"
+    Invoke-DiagnosticCommand "cmd Host Codex Check" "& $startNativeCommand -Check$workspaceArgument -Shell cmd -Agent codex$pythonArgument"
+    Invoke-DiagnosticCommand "Plain PowerShell Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent powershell"
+    Invoke-DiagnosticCommand "Plain cmd Host Check" "& $startNativeCommand -Check$workspaceArgument -Agent cmd"
+    Invoke-DiagnosticCommand "Publish Check" "& $publishNativeCommand -Check"
+}
+else {
+    Add-Line '```text'
+    Add-Line "Repository launch checks skipped because scripts/start-native.ps1 was not found. This is expected in a published package."
+    Add-Line '```'
+    Add-Line
+}
 
 Add-Line "## Hook Diagnostics"
 Add-Line

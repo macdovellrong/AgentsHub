@@ -97,7 +97,7 @@
 .\artifacts\native\win-x64\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex -Resume
 ```
 
-发布版 `start-agenthub-native.bat` 会直接调用 native exe，并将 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`，避免目标机器残留的同名环境变量指向旧 hook。native exe 同时兼容 `-Workspace/-Agent/-Shell/-Python/-Resume` 和 `--workspace/--agent/--shell/--python/--resume` 两种参数风格。
+发布版 `start-agenthub-native.bat` 会直接调用 native exe，并将 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`，避免目标机器残留的同名环境变量指向旧 hook。native exe 同时兼容 `-Workspace/-Agent/-Shell/-Python/-Resume` 和 `--workspace/--agent/--shell/--python/--resume` 两种参数风格。发布目录也会包含 `collect-native-diagnostics.bat` 和 `scripts/collect-native-diagnostics.ps1`，可以不依赖源码仓库直接生成诊断报告。
 
 只检查发布环境、不执行发布：
 
@@ -109,6 +109,7 @@
 
 ```powershell
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\collect-native-diagnostics.bat -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
 默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、输入设备、Codex/Claude/Gemini CLI、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。

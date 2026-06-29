@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from shutil import copyfile
 from pathlib import Path
 
 
@@ -53,3 +54,56 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "start-native.ps1 -Check -Workspace" in report
     assert "## Hook Diagnostics" in report
     assert "hooks.jsonl" in report
+
+
+def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: Path) -> None:
+    published_root = tmp_path / "published"
+    scripts_dir = published_root / "scripts"
+    hooks_dir = scripts_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
+    copyfile(REPO_ROOT / "scripts" / "collect-native-diagnostics.ps1", scripts_dir / "collect-native-diagnostics.ps1")
+    (published_root / "AgentHub.Native.App.exe").write_bytes(b"")
+    (published_root / "start-agenthub-native.bat").write_text("@echo off\n", encoding="ascii")
+    for script_name in [
+        "agenthub_hook_common.py",
+        "agenthub_codex_stop.py",
+        "agenthub_claude_stop.py",
+        "agenthub_gemini_after_agent.py",
+    ]:
+        (hooks_dir / script_name).write_text("# hook\n", encoding="utf-8")
+    output = tmp_path / "published-diagnostics.md"
+
+    command = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            (
+                f"& {ps_quote(str(scripts_dir / 'collect-native-diagnostics.ps1'))} "
+                f"-Python {ps_quote(sys.executable)} "
+                f"-Output {ps_quote(str(output))}"
+            ),
+            "exit $LASTEXITCODE",
+        ]
+    )
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=published_root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = output.read_text(encoding="utf-8")
+    assert "## Published Package" in report
+    assert "AgentHub.Native.App.exe" in report
+    assert "start-agenthub-native.bat" in report
+    assert "agenthub_hook_common.py" in report
+
+
+def test_publish_native_script_includes_diagnostics_entrypoints() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
+
+    assert "collect-native-diagnostics.ps1" in script
+    assert "collect-native-diagnostics.bat" in script
