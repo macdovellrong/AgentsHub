@@ -63,6 +63,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
             [new AgentHubSendMessageCommand("codex", "Please inspect.", null, null, null, null)],
             [],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -86,6 +87,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
                 new AgentHubPlanStatusCommand("pause_plan", "P001", null, "Need user decision")
             ],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -103,11 +105,41 @@ public sealed class CollaborationEventStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Appends_team_status_commands_as_agenthub_timeline_messages()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [],
+            [
+                new AgentHubTeamStatusCommand("claim_task", "default", "T-001", null),
+                new AgentHubTeamStatusCommand("complete_task", "default", "T-001", "Done with tests.")
+            ],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.All(events, item =>
+        {
+            Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+            Assert.Equal("agenthub", item.ProfileId);
+            Assert.Equal("team-status", item.TargetProfileId);
+        });
+        Assert.Equal("[claim_task default/T-001] claimed", events[0].Message);
+        Assert.Equal("[complete_task default/T-001] Done with tests.", events[1].Message);
+    }
+
+    [Fact]
     public async Task Appends_parse_and_dispatch_errors_as_agenthub_command_error_events()
     {
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
         var result = new AgentHubCommandDispatchResult(
             0,
+            [],
             [],
             [],
             [new AgentHubCommandParseError(0, "invalid_json", "Invalid JSON in agenthub command block", "{\"action\":")],

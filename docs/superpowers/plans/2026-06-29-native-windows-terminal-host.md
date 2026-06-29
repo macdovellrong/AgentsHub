@@ -25,6 +25,7 @@
 - [x] 多 session 列表支持 Stop selected、Stop all、切换时保留各自 terminal 实例。
 - [x] session 列表显示 profile、workspace、runId 和 hook receiver 状态。
 - [x] hook 控制命令的解析错误和转发失败会进入 Collaboration timeline。
+- [x] provider-neutral `claim_task` / `complete_task` 团队状态命令会进入 Collaboration timeline。
 
 ## 后续任务
 

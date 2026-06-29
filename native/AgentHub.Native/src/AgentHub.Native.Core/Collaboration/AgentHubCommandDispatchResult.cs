@@ -4,5 +4,6 @@ public sealed record AgentHubCommandDispatchResult(
     int SentCount,
     IReadOnlyList<AgentHubSendMessageCommand> SentMessages,
     IReadOnlyList<AgentHubPlanStatusCommand> PlanStatusCommands,
+    IReadOnlyList<AgentHubTeamStatusCommand> TeamStatusCommands,
     IReadOnlyList<AgentHubCommandParseError> ParseErrors,
     IReadOnlyList<AgentHubCommandDispatchError> DispatchErrors);

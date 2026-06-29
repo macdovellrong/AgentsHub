@@ -11,11 +11,12 @@ public static class AgentHubCommandParser
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new AgentHubCommandParseResult([], [], []);
+            return new AgentHubCommandParseResult([], [], [], []);
         }
 
         var commands = new List<AgentHubSendMessageCommand>();
         var planStatusCommands = new List<AgentHubPlanStatusCommand>();
+        var teamStatusCommands = new List<AgentHubTeamStatusCommand>();
         var errors = new List<AgentHubCommandParseError>();
         var cursor = 0;
         var index = 0;
@@ -54,6 +55,10 @@ public static class AgentHubCommandParser
                 {
                     planStatusCommands.Add(result.PlanStatusCommand);
                 }
+                else if (result.TeamStatusCommand is not null)
+                {
+                    teamStatusCommands.Add(result.TeamStatusCommand);
+                }
                 else if (result.Error is not null)
                 {
                     errors.Add(result.Error);
@@ -71,7 +76,7 @@ public static class AgentHubCommandParser
             index += 1;
         }
 
-        return new AgentHubCommandParseResult(commands, planStatusCommands, errors);
+        return new AgentHubCommandParseResult(commands, planStatusCommands, teamStatusCommands, errors);
     }
 
     private static ValidationResult ValidateCommand(JsonElement root, int index, string block)
@@ -84,6 +89,7 @@ public static class AgentHubCommandParser
         if (!TryGetString(root, "action", out var action))
         {
             return new ValidationResult(
+                null,
                 null,
                 null,
                 new AgentHubCommandParseError(
@@ -108,6 +114,16 @@ public static class AgentHubCommandParser
             return ValidateTaskPlanRoutingCommand(root, index, block, action);
         }
 
+        if (string.Equals(action, "claim_task", StringComparison.Ordinal))
+        {
+            return ValidateClaimTaskCommand(root, index, block);
+        }
+
+        if (string.Equals(action, "complete_task", StringComparison.Ordinal))
+        {
+            return ValidateCompleteTaskCommand(root, index, block);
+        }
+
         if (string.Equals(action, "approve_task", StringComparison.Ordinal))
         {
             return ValidateApproveTaskCommand(root, index, block);
@@ -119,6 +135,7 @@ public static class AgentHubCommandParser
         }
 
         return new ValidationResult(
+            null,
             null,
             null,
             new AgentHubCommandParseError(
@@ -149,6 +166,7 @@ public static class AgentHubCommandParser
                 null,
                 OptionalString(root, "conversation_id")),
             null,
+            null,
             null);
     }
 
@@ -177,6 +195,7 @@ public static class AgentHubCommandParser
                 taskId,
                 null,
                 null),
+            null,
             null,
             null);
     }
@@ -216,6 +235,50 @@ public static class AgentHubCommandParser
                 planId,
                 null),
             null,
+            null,
+            null);
+    }
+
+    private static ValidationResult ValidateClaimTaskCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "task_id", out var taskId))
+        {
+            return ValidationResult.Invalid(index, block, "claim_task command requires string field \"task_id\"");
+        }
+
+        if (!TryGetOptionalString(root, "team_id", out var teamId))
+        {
+            return ValidationResult.Invalid(index, block, "claim_task command optional field \"team_id\" must be a string");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            new AgentHubTeamStatusCommand("claim_task", DefaultTeamId(teamId), taskId, null),
+            null);
+    }
+
+    private static ValidationResult ValidateCompleteTaskCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "task_id", out var taskId))
+        {
+            return ValidationResult.Invalid(index, block, "complete_task command requires string field \"task_id\"");
+        }
+
+        if (!TryGetOptionalString(root, "team_id", out var teamId))
+        {
+            return ValidationResult.Invalid(index, block, "complete_task command optional field \"team_id\" must be a string");
+        }
+
+        if (!TryGetOptionalString(root, "summary", out var summary))
+        {
+            return ValidationResult.Invalid(index, block, "complete_task command optional field \"summary\" must be a string");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            new AgentHubTeamStatusCommand("complete_task", DefaultTeamId(teamId), taskId, summary),
             null);
     }
 
@@ -239,6 +302,7 @@ public static class AgentHubCommandParser
         return new ValidationResult(
             null,
             new AgentHubPlanStatusCommand("approve_task", planId, taskId, summary),
+            null,
             null);
     }
 
@@ -257,6 +321,7 @@ public static class AgentHubCommandParser
         return new ValidationResult(
             null,
             new AgentHubPlanStatusCommand("pause_plan", planId, null, reason),
+            null,
             null);
     }
 
@@ -317,6 +382,29 @@ public static class AgentHubCommandParser
         return TryGetString(root, propertyName, out var value) ? value : null;
     }
 
+    private static string DefaultTeamId(string? teamId)
+    {
+        return string.IsNullOrWhiteSpace(teamId) ? "default" : teamId;
+    }
+
+    private static bool TryGetOptionalString(JsonElement root, string propertyName, out string? value)
+    {
+        if (!root.TryGetProperty(propertyName, out var property))
+        {
+            value = null;
+            return true;
+        }
+
+        if (property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString();
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
     private static bool TryGetString(JsonElement root, string propertyName, out string value)
     {
         if (root.TryGetProperty(propertyName, out var property) &&
@@ -333,11 +421,13 @@ public static class AgentHubCommandParser
     private sealed record ValidationResult(
         AgentHubSendMessageCommand? SendMessageCommand,
         AgentHubPlanStatusCommand? PlanStatusCommand,
+        AgentHubTeamStatusCommand? TeamStatusCommand,
         AgentHubCommandParseError? Error)
     {
         public static ValidationResult Invalid(int index, string block, string message)
         {
             return new ValidationResult(
+                null,
                 null,
                 null,
                 new AgentHubCommandParseError(index, "invalid_command", message, block));

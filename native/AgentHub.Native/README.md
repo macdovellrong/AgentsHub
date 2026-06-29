@@ -121,7 +121,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 8. 可以用底部输入栏向选中的 terminal session 发送文本；Enter 发送，Shift+Enter 在输入框内换行。多行文本会用 bracketed paste 写入终端，再发送 Enter。
 9. 也可以在输入栏左侧选择 `codex`、`claude`、`gemini`、`powershell` 或 `cmd`，按列表中选中的 workspace/profile 路由到最新 session；没有选中 workspace 时才使用输入框路径。
 10. 输入栏支持 `@codex message`、`@claude message`、`@gemini message`、`@powershell message`、`@cmd message` 直接定向发送，定向消息正文可以是多行。
-11. Agent hook 回传如果包含 `<agenthub>{"action":"send_message","to":"codex","message":"..."}</agenthub>`、旧格式 `<agenthub>{"action":"send","target":"codex","task_id":"T-001","message":"..."}</agenthub>`，或任务计划路由命令 `assign_task` / `reject_task` / `request_review`，native app 会按当前 workspace 路由到目标 profile 的最新 session；`approve_task` / `pause_plan` 会被识别为任务计划状态命令并显示在 timeline 中，当前 native 原型暂不执行完整任务计划状态机。
+11. Agent hook 回传如果包含 `<agenthub>{"action":"send_message","to":"codex","message":"..."}</agenthub>`、旧格式 `<agenthub>{"action":"send","target":"codex","task_id":"T-001","message":"..."}</agenthub>`，或任务计划路由命令 `assign_task` / `reject_task` / `request_review`，native app 会按当前 workspace 路由到目标 profile 的最新 session；`approve_task` / `pause_plan` 会被识别为任务计划状态命令并显示在 timeline 中；`claim_task` / `complete_task` 会被识别为团队状态命令并显示在 timeline 中。当前 native 原型暂不执行完整任务计划状态机。
 12. 用户发送的消息、hook 回传，以及 AgentHub 从 hook 命令自动转发给目标 Agent 的消息都会显示在 Collaboration timeline 列表中。
 13. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 

@@ -72,6 +72,17 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 cancellationToken).ConfigureAwait(false));
         }
 
+        foreach (var command in result.TeamStatusCommands)
+        {
+            events.Add(await AppendUserMessageAsync(
+                new CollaborationUserMessage(
+                    workspacePath,
+                    "agenthub",
+                    "team-status",
+                    FormatTeamStatusCommand(command)),
+                cancellationToken).ConfigureAwait(false));
+        }
+
         foreach (var error in result.ParseErrors)
         {
             events.Add(await AppendCommandErrorAsync(
@@ -116,6 +127,14 @@ public sealed class CollaborationEventStore(string rootDirectory)
             ? command.PlanId
             : $"{command.PlanId}/{command.TaskId}";
         return $"[{command.Action} {scope}] {command.Message}";
+    }
+
+    private static string FormatTeamStatusCommand(AgentHubTeamStatusCommand command)
+    {
+        var message = string.Equals(command.Action, "claim_task", StringComparison.Ordinal)
+            ? "claimed"
+            : string.IsNullOrWhiteSpace(command.Summary) ? "completed" : command.Summary;
+        return $"[{command.Action} {command.TeamId}/{command.TaskId}] {message}";
     }
 
     public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(
