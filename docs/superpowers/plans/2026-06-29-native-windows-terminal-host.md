@@ -33,6 +33,7 @@
 - [x] native Core 支持创建 task-plan 并向当前 workspace 的 manager profile 最新 session 投递 manager prompt；无 manager session 时记录 `delivery_failed`。
 - [x] native App 提供 task-plan 来源刷新、执行快照创建、计划选择和启动 manager 的基础 UI 入口。
 - [x] native App 在 hook manager 命令转发后，会把 `assign_task` / `request_review` / `reject_task` / `approve_task` / `pause_plan` 同步写入执行快照的 `tasks.jsonl` / `events.jsonl`。
+- [x] native dispatcher 会把 `assign_task` / `reject_task` / `request_review` 转换成带 plan/task 上下文的标准 prompt，再投递到目标 Agent。
 - [x] native task-plan hook completion 会写入 `artifacts/*.md`，把 delegated task 置为 `review`，并把 observation prompt 投递回 manager session；manager 不在线时记录带 task/artifact 上下文的 `delivery_failed`。
 - [x] native App 会在选中 task-plan 执行快照后展示最新 task 状态和最近 event，hook 回传后自动刷新当前 plan detail。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。

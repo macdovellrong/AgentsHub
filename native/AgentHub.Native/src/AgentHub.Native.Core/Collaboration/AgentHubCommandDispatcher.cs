@@ -15,10 +15,11 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
 
         foreach (var command in parsed.SendMessages)
         {
+            var dispatchMessage = FormatSendMessageDispatch(command);
             var result = await messageRouter.TrySendToProfileDetailedAsync(
                 workspacePath,
                 command.To,
-                command.Message,
+                dispatchMessage,
                 cancellationToken).ConfigureAwait(false);
             if (result.Sent)
             {
@@ -72,6 +73,43 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             pairNegotiationCommands,
             parsed.Errors,
             dispatchErrors);
+    }
+
+    private static string FormatSendMessageDispatch(AgentHubSendMessageCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(command.PlanId) ||
+            string.IsNullOrWhiteSpace(command.TaskId) ||
+            string.IsNullOrWhiteSpace(command.CommandAction))
+        {
+            return command.Message;
+        }
+
+        if (command.CommandAction == "request_review")
+        {
+            return string.Join(
+                "\r\n",
+                [
+                    "AgentHub task-plan review request.",
+                    $"Plan: {command.PlanId}",
+                    $"Task: {command.TaskId}",
+                    "",
+                    command.Message,
+                    "",
+                    "Review the referenced task/artifact. When finished, rely on the configured AgentHub hook to return your review."
+                ]);
+        }
+
+        return string.Join(
+            "\r\n",
+            [
+                "AgentHub task-plan delegated task.",
+                $"Plan: {command.PlanId}",
+                $"Task: {command.TaskId}",
+                "",
+                command.Message,
+                "",
+                "When finished, rely on the configured AgentHub hook to return your final result. Keep the result focused on this task."
+            ]);
     }
 
     private static string FormatPairNegotiationDispatchMessage(AgentHubPairNegotiationCommand command)

@@ -49,12 +49,12 @@ public sealed class AgentHubCommandDispatcherTests
     }
 
     [Theory]
-    [InlineData("assign_task", "Implement T001")]
-    [InlineData("reject_task", "Add tests")]
-    [InlineData("request_review", "Review risk")]
-    public async Task Dispatches_task_plan_routing_commands_to_latest_target_profile_session(
+    [InlineData("assign_task", "AgentHub task-plan delegated task.")]
+    [InlineData("reject_task", "AgentHub task-plan delegated task.")]
+    [InlineData("request_review", "AgentHub task-plan review request.")]
+    public async Task Dispatches_task_plan_routing_commands_as_plan_aware_prompts(
         string action,
-        string expectedMessage)
+        string expectedHeader)
     {
         var target = new RecordingTerminalSession("codex-1");
         var inputRouter = new AgentInputRouter();
@@ -65,12 +65,20 @@ public sealed class AgentHubCommandDispatcherTests
 
         var result = await dispatcher.DispatchAsync(
             @"V:\OrderManager",
-            $"<agenthub>{{\"action\":\"{action}\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"to\":\"codex\",\"message\":\"{expectedMessage}\"}}</agenthub>");
+            $"<agenthub>{{\"action\":\"{action}\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"to\":\"codex\",\"message\":\"Implement T001\"}}</agenthub>");
 
         Assert.Equal(1, result.SentCount);
         Assert.Empty(result.ParseErrors);
         Assert.Empty(result.DispatchErrors);
-        Assert.Equal([expectedMessage, "\r"], target.Writes);
+        Assert.Equal("\x1b[200~", target.Writes[0]);
+        Assert.Contains(expectedHeader, target.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Plan: P001", target.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Task: T001", target.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("Implement T001", target.Writes[1], StringComparison.Ordinal);
+        Assert.Equal("\x1b[201~", target.Writes[2]);
+        Assert.Equal("\r", target.Writes[3]);
+        var sent = Assert.Single(result.SentMessages);
+        Assert.Equal("Implement T001", sent.Message);
     }
 
     [Fact]
