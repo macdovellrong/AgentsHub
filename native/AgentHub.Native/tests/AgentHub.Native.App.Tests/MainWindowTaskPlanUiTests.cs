@@ -29,6 +29,15 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("StartManagerAsync", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_records_task_plan_dispatch_results_after_hooks()
+    {
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("RecordManagerDispatchResultAsync", code, StringComparison.Ordinal);
+        Assert.Contains("hookEvent.ProfileId ?? hookEvent.Source ?? \"agent\"", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

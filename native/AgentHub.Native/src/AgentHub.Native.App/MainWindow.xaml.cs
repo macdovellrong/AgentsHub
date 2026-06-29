@@ -193,7 +193,12 @@ public partial class MainWindow : Window
             new AgentTeamStore(),
             taskStore,
             taskPlanEventStore);
-        return await processor.ProcessAsync(hookEvent);
+        var result = await processor.ProcessAsync(hookEvent);
+        await taskPlanService.RecordManagerDispatchResultAsync(
+            hookEvent.Workspace,
+            hookEvent.ProfileId ?? hookEvent.Source ?? "agent",
+            result);
+        return result;
     }
 
     private async void StartCodex_Click(object sender, RoutedEventArgs e)

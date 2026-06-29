@@ -255,6 +255,71 @@ public sealed class AgentTaskPlanStore
         return events;
     }
 
+    public async Task AppendTaskAsync(
+        string workspacePath,
+        string planId,
+        AgentTaskPlanTask task,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var json = JsonSerializer.Serialize(task, JsonlSerializerOptions);
+        await File.AppendAllTextAsync(TasksPath(plan.PlanPath), $"{json}\n", cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<AgentTaskPlanTask>> ListTaskHistoryAsync(
+        string workspacePath,
+        string planId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var filePath = TasksPath(plan.PlanPath);
+        if (!File.Exists(filePath))
+        {
+            return [];
+        }
+
+        var tasks = new List<AgentTaskPlanTask>();
+        var lines = await File.ReadAllLinesAsync(filePath, cancellationToken).ConfigureAwait(false);
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            try
+            {
+                var item = JsonSerializer.Deserialize<AgentTaskPlanTask>(line, JsonlSerializerOptions);
+                if (item is not null)
+                {
+                    tasks.Add(item);
+                }
+            }
+            catch (JsonException)
+            {
+                // Execution task history is append-only; skip partial or damaged lines.
+            }
+        }
+
+        return tasks;
+    }
+
+    public async Task<IReadOnlyList<AgentTaskPlanTask>> ListTasksAsync(
+        string workspacePath,
+        string planId,
+        CancellationToken cancellationToken = default)
+    {
+        var history = await ListTaskHistoryAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var latest = new Dictionary<string, AgentTaskPlanTask>(StringComparer.Ordinal);
+        foreach (var task in history)
+        {
+            latest[task.Id] = task;
+        }
+
+        return latest.Values.ToList();
+    }
+
     private async Task<AgentTaskPlan?> ReadPlanAsync(
         string workspacePath,
         string rootPath,
@@ -337,6 +402,11 @@ public sealed class AgentTaskPlanStore
     private static string EventsPath(string planPath)
     {
         return Path.Combine(planPath, "events.jsonl");
+    }
+
+    private static string TasksPath(string planPath)
+    {
+        return Path.Combine(planPath, "tasks.jsonl");
     }
 
     private DateTimeOffset UtcNow()

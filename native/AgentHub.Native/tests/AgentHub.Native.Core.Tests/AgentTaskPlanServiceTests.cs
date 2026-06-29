@@ -94,6 +94,138 @@ public sealed class AgentTaskPlanServiceTests : IDisposable
             item.Message.Contains("No active session for profile 'claude'", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Records_sent_manager_routing_commands_to_execution_snapshot()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex", "gemini"]));
+        var result = new AgentHubCommandDispatchResult(
+            2,
+            [
+                new AgentHubSendMessageCommand(
+                    "codex",
+                    "Implement parser.",
+                    null,
+                    "T-001",
+                    plan.Id,
+                    null,
+                    "codex-1",
+                    "assign_task"),
+                new AgentHubSendMessageCommand(
+                    "gemini",
+                    "Review parser.",
+                    null,
+                    "T-001",
+                    plan.Id,
+                    null,
+                    "gemini-1",
+                    "request_review")
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+
+        await service.RecordManagerDispatchResultAsync(workspacePath, "claude", result, "event-1");
+
+        var history = await store.ListTaskHistoryAsync(workspacePath, plan.Id);
+        Assert.Collection(
+            history,
+            item =>
+            {
+                Assert.Equal("T-001", item.Id);
+                Assert.Equal("running", item.Status);
+                Assert.Equal("codex", item.AssigneeProfileId);
+                Assert.Equal(1, item.Attempt);
+                Assert.Equal("Implement parser.", item.Description);
+            },
+            item =>
+            {
+                Assert.Equal("T-001", item.Id);
+                Assert.Equal("review", item.Status);
+                Assert.Equal("gemini", item.AssigneeProfileId);
+                Assert.Equal(1, item.Attempt);
+                Assert.Equal("Review parser.", item.Description);
+            });
+        var latest = Assert.Single(await store.ListTasksAsync(workspacePath, plan.Id));
+        Assert.Equal("review", latest.Status);
+        Assert.Equal("gemini", latest.AssigneeProfileId);
+        var events = await store.ListEventsAsync(workspacePath, plan.Id);
+        Assert.Contains(events, item =>
+            item.Type == "assigned" &&
+            item.TaskId == "T-001" &&
+            item.FromProfileId == "claude" &&
+            item.ToProfileId == "codex" &&
+            item.SessionId == "codex-1" &&
+            item.SourceEventId == "event-1");
+        Assert.Contains(events, item =>
+            item.Type == "review_requested" &&
+            item.ToProfileId == "gemini" &&
+            item.SessionId == "gemini-1");
+    }
+
+    [Fact]
+    public async Task Records_plan_status_and_dispatch_failures_to_execution_snapshot()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out _, out _);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [
+                new AgentHubPlanStatusCommand("approve_task", plan.Id, "T-001", "Accepted"),
+                new AgentHubPlanStatusCommand("pause_plan", plan.Id, null, "Need user decision")
+            ],
+            [],
+            [],
+            [],
+            [],
+            [
+                new AgentHubCommandDispatchError(
+                    "codex",
+                    "No active session for profile 'codex'",
+                    new AgentHubSendMessageCommand(
+                        "codex",
+                        "Fix parser.",
+                        null,
+                        "T-002",
+                        plan.Id,
+                        null,
+                        null,
+                        "reject_task"))
+            ]);
+
+        await service.RecordManagerDispatchResultAsync(workspacePath, "claude", result, "event-2");
+
+        var persisted = await store.GetPlanAsync(workspacePath, plan.Id);
+        Assert.Equal("paused", persisted.Status);
+        var done = Assert.Single(await store.ListTasksAsync(workspacePath, plan.Id), item => item.Id == "T-001");
+        Assert.Equal("done", done.Status);
+        Assert.Null(done.AssigneeProfileId);
+        Assert.Equal("Accepted", done.Description);
+        var events = await store.ListEventsAsync(workspacePath, plan.Id);
+        Assert.Contains(events, item => item.Type == "approved" && item.TaskId == "T-001" && item.Message == "Accepted");
+        Assert.Contains(events, item => item.Type == "paused" && item.Message == "Need user decision");
+        Assert.Contains(events, item =>
+            item.Type == "delivery_failed" &&
+            item.TaskId == "T-002" &&
+            item.ToProfileId == "codex" &&
+            item.Message is not null &&
+            item.Message.Contains("No active session for profile 'codex'", StringComparison.Ordinal));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
