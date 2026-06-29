@@ -65,6 +65,7 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     copyfile(REPO_ROOT / "scripts" / "collect-native-diagnostics.ps1", scripts_dir / "collect-native-diagnostics.ps1")
     (published_root / "AgentHub.Native.App.exe").write_bytes(b"")
     (published_root / "start-agenthub-native.bat").write_text("@echo off\n", encoding="ascii")
+    (published_root / "collect-native-diagnostics.bat").write_text("@echo off\n", encoding="ascii")
     for script_name in [
         "agenthub_hook_common.py",
         "agenthub_codex_stop.py",
@@ -101,6 +102,8 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "## Published Package" in report
     assert "AgentHub.Native.App.exe" in report
     assert "start-agenthub-native.bat" in report
+    assert "collect-native-diagnostics.bat" in report
+    assert "scripts\\collect-native-diagnostics.ps1" in report
     assert "agenthub_hook_common.py" in report
 
 

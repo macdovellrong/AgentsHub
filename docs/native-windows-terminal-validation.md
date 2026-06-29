@@ -176,5 +176,5 @@ py -3.11 --version
 
 - 该分支是并行 native 原型，不替换 `desktop/` Electron 主线。
 - 终端控件来自 `EasyWindowsTerminalControl`，底层使用 Windows Terminal backend / ConPTY，但不是微软官方稳定嵌入式 TerminalControl API。
-- 当前项目 target framework 是 `.NET 10`。
+- 当前项目 target framework 是 `.NET 10`；源码运行需要 .NET 10 SDK，默认发布包是 self-contained，不要求目标电脑额外安装 .NET Desktop Runtime。
 - native app 不记录 Codex 实时原始输出；只记录用户消息、hook 回传、自动转发事件，以及 hook 诊断事件。

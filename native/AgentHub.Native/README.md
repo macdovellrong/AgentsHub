@@ -219,4 +219,4 @@ Agent hook 诊断日志位置：
 
 - 这是并行原型，不替换现有 Electron app。
 - `EasyWindowsTerminalControl` 使用 Windows Terminal 后端包，但仍是第三方封装，不是微软正式稳定的嵌入式 TerminalControl API。
-- 当前 target framework 是 `.NET 10`。其他电脑运行前需要安装 .NET 10 Desktop Runtime，或后续改成目标机器已安装的 framework。
+- 当前 target framework 是 `.NET 10`。从源码运行需要安装 .NET 10 SDK；`scripts/publish-native.ps1` 默认生成 self-contained 发布包，目标电脑运行发布包时不需要额外安装 .NET Desktop Runtime。使用 `-FrameworkDependent` 发布时，目标电脑才需要匹配的 .NET 10 Desktop Runtime。

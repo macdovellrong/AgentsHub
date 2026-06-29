@@ -135,7 +135,7 @@ if ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
     (Test-Path -LiteralPath $publishedStarter -PathType Leaf)) {
     Add-Line "## Published Package"
     Add-Line
-    Invoke-DiagnosticCommand "Published Files" "Test-Path -LiteralPath '.\AgentHub.Native.App.exe'; Test-Path -LiteralPath '.\start-agenthub-native.bat'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_hook_common.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_codex_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_claude_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_gemini_after_agent.py'"
+    Invoke-DiagnosticCommand "Published Files" "Test-Path -LiteralPath '.\AgentHub.Native.App.exe'; Test-Path -LiteralPath '.\start-agenthub-native.bat'; Test-Path -LiteralPath '.\collect-native-diagnostics.bat'; Test-Path -LiteralPath '.\scripts\collect-native-diagnostics.ps1'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_hook_common.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_codex_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_claude_stop.py'; Test-Path -LiteralPath '.\scripts\hooks\agenthub_gemini_after_agent.py'"
 }
 
 Add-Line "## Agent CLIs"
