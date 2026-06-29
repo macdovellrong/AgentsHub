@@ -64,6 +64,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
             [],
             [],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -86,6 +87,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
                 new AgentHubPlanStatusCommand("approve_task", "P001", "T001", "Looks good"),
                 new AgentHubPlanStatusCommand("pause_plan", "P001", null, "Need user decision")
             ],
+            [],
             [],
             [],
             []);
@@ -117,6 +119,7 @@ public sealed class CollaborationEventStoreTests : IDisposable
                 new AgentHubTeamStatusCommand("complete_task", "default", "T-001", "Done with tests.")
             ],
             [],
+            [],
             []);
 
         await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
@@ -134,11 +137,42 @@ public sealed class CollaborationEventStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Appends_workflow_commands_as_agenthub_timeline_messages()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            0,
+            [],
+            [],
+            [],
+            [
+                new AgentHubWorkflowCommand("ask_user", "Which workspace should I use?"),
+                new AgentHubWorkflowCommand("done", null)
+            ],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.All(events, item =>
+        {
+            Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
+            Assert.Equal("agenthub", item.ProfileId);
+            Assert.Equal("workflow", item.TargetProfileId);
+        });
+        Assert.Equal("[ask_user] Which workspace should I use?", events[0].Message);
+        Assert.Equal("[done] completed", events[1].Message);
+    }
+
+    [Fact]
     public async Task Appends_parse_and_dispatch_errors_as_agenthub_command_error_events()
     {
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
         var result = new AgentHubCommandDispatchResult(
             0,
+            [],
             [],
             [],
             [],

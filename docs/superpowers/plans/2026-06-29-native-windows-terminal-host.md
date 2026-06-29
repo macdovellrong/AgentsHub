@@ -28,6 +28,7 @@
 - [x] provider-neutral `claim_task` / `complete_task` 团队状态命令会进入 Collaboration timeline。
 - [x] provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
+- [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 
 ## 后续任务
 

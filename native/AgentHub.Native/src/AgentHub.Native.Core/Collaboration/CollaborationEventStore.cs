@@ -83,6 +83,17 @@ public sealed class CollaborationEventStore(string rootDirectory)
                 cancellationToken).ConfigureAwait(false));
         }
 
+        foreach (var command in result.WorkflowCommands)
+        {
+            events.Add(await AppendUserMessageAsync(
+                new CollaborationUserMessage(
+                    workspacePath,
+                    "agenthub",
+                    "workflow",
+                    FormatWorkflowCommand(command)),
+                cancellationToken).ConfigureAwait(false));
+        }
+
         foreach (var error in result.ParseErrors)
         {
             events.Add(await AppendCommandErrorAsync(
@@ -135,6 +146,12 @@ public sealed class CollaborationEventStore(string rootDirectory)
             ? "claimed"
             : string.IsNullOrWhiteSpace(command.Summary) ? "completed" : command.Summary;
         return $"[{command.Action} {command.TeamId}/{command.TaskId}] {message}";
+    }
+
+    private static string FormatWorkflowCommand(AgentHubWorkflowCommand command)
+    {
+        var message = string.IsNullOrWhiteSpace(command.Message) ? "completed" : command.Message;
+        return $"[{command.Action}] {message}";
     }
 
     public async Task<IReadOnlyList<CollaborationEvent>> ListAsync(

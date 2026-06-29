@@ -11,12 +11,13 @@ public static class AgentHubCommandParser
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new AgentHubCommandParseResult([], [], [], []);
+            return new AgentHubCommandParseResult([], [], [], [], []);
         }
 
         var commands = new List<AgentHubSendMessageCommand>();
         var planStatusCommands = new List<AgentHubPlanStatusCommand>();
         var teamStatusCommands = new List<AgentHubTeamStatusCommand>();
+        var workflowCommands = new List<AgentHubWorkflowCommand>();
         var errors = new List<AgentHubCommandParseError>();
         var cursor = 0;
         var index = 0;
@@ -59,6 +60,10 @@ public static class AgentHubCommandParser
                 {
                     teamStatusCommands.Add(result.TeamStatusCommand);
                 }
+                else if (result.WorkflowCommand is not null)
+                {
+                    workflowCommands.Add(result.WorkflowCommand);
+                }
                 else if (result.Error is not null)
                 {
                     errors.Add(result.Error);
@@ -76,7 +81,7 @@ public static class AgentHubCommandParser
             index += 1;
         }
 
-        return new AgentHubCommandParseResult(commands, planStatusCommands, teamStatusCommands, errors);
+        return new AgentHubCommandParseResult(commands, planStatusCommands, teamStatusCommands, workflowCommands, errors);
     }
 
     private static ValidationResult ValidateCommand(JsonElement root, int index, string block)
@@ -89,6 +94,7 @@ public static class AgentHubCommandParser
         if (!TryGetString(root, "action", out var action))
         {
             return new ValidationResult(
+                null,
                 null,
                 null,
                 null,
@@ -124,6 +130,16 @@ public static class AgentHubCommandParser
             return ValidateCompleteTaskCommand(root, index, block);
         }
 
+        if (string.Equals(action, "ask_user", StringComparison.Ordinal))
+        {
+            return ValidateAskUserCommand(root, index, block);
+        }
+
+        if (string.Equals(action, "done", StringComparison.Ordinal))
+        {
+            return ValidateDoneCommand(root, index, block);
+        }
+
         if (string.Equals(action, "approve_task", StringComparison.Ordinal))
         {
             return ValidateApproveTaskCommand(root, index, block);
@@ -136,11 +152,12 @@ public static class AgentHubCommandParser
 
         return new ValidationResult(
             null,
-            null,
-            null,
-            new AgentHubCommandParseError(
-                index,
-                "invalid_action",
+                null,
+                null,
+                null,
+                new AgentHubCommandParseError(
+                    index,
+                    "invalid_action",
                 $"Unsupported agenthub action \"{action}\"",
                 block));
     }
@@ -165,6 +182,7 @@ public static class AgentHubCommandParser
                 OptionalString(root, "task_id"),
                 null,
                 OptionalString(root, "conversation_id")),
+            null,
             null,
             null,
             null);
@@ -195,6 +213,7 @@ public static class AgentHubCommandParser
                 taskId,
                 null,
                 null),
+            null,
             null,
             null,
             null);
@@ -236,6 +255,7 @@ public static class AgentHubCommandParser
                 null),
             null,
             null,
+            null,
             null);
     }
 
@@ -255,6 +275,7 @@ public static class AgentHubCommandParser
             null,
             null,
             new AgentHubTeamStatusCommand("claim_task", DefaultTeamId(teamId), taskId, null),
+            null,
             null);
     }
 
@@ -279,6 +300,37 @@ public static class AgentHubCommandParser
             null,
             null,
             new AgentHubTeamStatusCommand("complete_task", DefaultTeamId(teamId), taskId, summary),
+            null,
+            null);
+    }
+
+    private static ValidationResult ValidateAskUserCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetRequiredString(root, "message", out var message))
+        {
+            return ValidationResult.Invalid(index, block, "ask_user command requires string field \"message\"");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            null,
+            new AgentHubWorkflowCommand("ask_user", message),
+            null);
+    }
+
+    private static ValidationResult ValidateDoneCommand(JsonElement root, int index, string block)
+    {
+        if (!TryGetOptionalString(root, "message", out var message))
+        {
+            return ValidationResult.Invalid(index, block, "done command optional field \"message\" must be a string");
+        }
+
+        return new ValidationResult(
+            null,
+            null,
+            null,
+            new AgentHubWorkflowCommand("done", message),
             null);
     }
 
@@ -303,6 +355,7 @@ public static class AgentHubCommandParser
             null,
             new AgentHubPlanStatusCommand("approve_task", planId, taskId, summary),
             null,
+            null,
             null);
     }
 
@@ -321,6 +374,7 @@ public static class AgentHubCommandParser
         return new ValidationResult(
             null,
             new AgentHubPlanStatusCommand("pause_plan", planId, null, reason),
+            null,
             null,
             null);
     }
@@ -422,11 +476,13 @@ public static class AgentHubCommandParser
         AgentHubSendMessageCommand? SendMessageCommand,
         AgentHubPlanStatusCommand? PlanStatusCommand,
         AgentHubTeamStatusCommand? TeamStatusCommand,
+        AgentHubWorkflowCommand? WorkflowCommand,
         AgentHubCommandParseError? Error)
     {
         public static ValidationResult Invalid(int index, string block, string message)
         {
             return new ValidationResult(
+                null,
                 null,
                 null,
                 null,

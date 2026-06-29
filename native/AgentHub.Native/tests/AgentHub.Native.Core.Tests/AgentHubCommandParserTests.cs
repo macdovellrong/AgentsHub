@@ -114,6 +114,37 @@ public sealed class AgentHubCommandParserTests
     }
 
     [Fact]
+    public void Parses_workflow_status_commands_without_routing_them()
+    {
+        const string text =
+            "<agenthub>{\"action\":\"ask_user\",\"message\":\"Which workspace should I use?\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"done\",\"message\":\"Finished the requested task\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"done\"}</agenthub>";
+
+        var result = AgentHubCommandParser.Parse(text);
+
+        Assert.Empty(result.Errors);
+        Assert.Empty(result.SendMessages);
+        Assert.Collection(
+            result.WorkflowCommands,
+            command =>
+            {
+                Assert.Equal("ask_user", command.Action);
+                Assert.Equal("Which workspace should I use?", command.Message);
+            },
+            command =>
+            {
+                Assert.Equal("done", command.Action);
+                Assert.Equal("Finished the requested task", command.Message);
+            },
+            command =>
+            {
+                Assert.Equal("done", command.Action);
+                Assert.Null(command.Message);
+            });
+    }
+
+    [Fact]
     public void Allows_agenthub_close_tag_inside_json_strings()
     {
         const string text =
@@ -149,6 +180,8 @@ public sealed class AgentHubCommandParserTests
     [InlineData("<agenthub>{\"action\":\"request_review\",\"plan_id\":\"P001\",\"task_id\":\"T001\",\"message\":\"Missing target\"}</agenthub>", "request_review command requires string field \"to\"")]
     [InlineData("<agenthub>{\"action\":\"claim_task\"}</agenthub>", "claim_task command requires string field \"task_id\"")]
     [InlineData("<agenthub>{\"action\":\"complete_task\",\"task_id\":\"T-001\",\"summary\":12}</agenthub>", "complete_task command optional field \"summary\" must be a string")]
+    [InlineData("<agenthub>{\"action\":\"ask_user\"}</agenthub>", "ask_user command requires string field \"message\"")]
+    [InlineData("<agenthub>{\"action\":\"done\",\"message\":true}</agenthub>", "done command optional field \"message\" must be a string")]
     public void Rejects_invalid_send_message_commands(string text, string expectedMessage)
     {
         var result = AgentHubCommandParser.Parse(text);
