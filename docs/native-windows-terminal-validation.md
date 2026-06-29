@@ -129,7 +129,7 @@ artifacts/native/win-x64/scripts/hooks/agenthub_gemini_after_agent.py
 
 1. workspace 可以添加、选中和移除。
 2. Host shell 默认是 PowerShell，并且可以切换到 cmd。
-3. `Resume Codex` 能进入 `codex resume`。
+3. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
 4. Codex TUI 刚进入时是否有终端滚动条。
 5. 鼠标滚轮是否能向上翻历史。
 6. 触摸板双指滚动是否能向上翻历史。
@@ -167,8 +167,8 @@ py -3.11 --version
 
 - 使用的是 PowerShell host 还是 cmd host。
 - 是鼠标滚轮不能滚、触摸板不能滚，还是滚动条本身不显示。
-- 是刚进入 `codex resume` 就不显示，还是输出变多后才消失。
-- Windows Terminal 或 VS Code 终端里同一个 `codex resume` 是否能滚动。
+- 是刚进入 `codex --no-alt-screen resume` 就不显示，还是输出变多后才消失。
+- Windows Terminal 或 VS Code 终端里同一个 `codex --no-alt-screen resume` 是否能滚动。
 - AgentHub Native 状态栏最后显示的文本。
 - 如果 hook 回传没有进入 timeline，请附上 `%LOCALAPPDATA%\AgentHub\Native\hooks.jsonl` 的最后几行。
 

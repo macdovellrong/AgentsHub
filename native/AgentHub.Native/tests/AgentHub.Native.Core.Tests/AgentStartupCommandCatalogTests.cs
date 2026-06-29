@@ -11,7 +11,7 @@ public sealed class AgentStartupCommandCatalogTests
 
         Assert.Equal(AgentKind.Codex, command.AgentKind);
         Assert.Equal("codex", command.Command);
-        Assert.Empty(command.Arguments);
+        Assert.Equal(["--no-alt-screen"], command.Arguments);
     }
 
     [Fact]
@@ -21,7 +21,7 @@ public sealed class AgentStartupCommandCatalogTests
 
         Assert.Equal(AgentKind.Codex, command.AgentKind);
         Assert.Equal("codex", command.Command);
-        Assert.Equal(["resume"], command.Arguments);
+        Assert.Equal(["--no-alt-screen", "resume"], command.Arguments);
     }
 
     [Fact]
@@ -32,7 +32,9 @@ public sealed class AgentStartupCommandCatalogTests
         Assert.Equal(
             [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
             commands.Select(command => command.AgentKind));
-        Assert.All(commands, command => Assert.Empty(command.Arguments));
+        Assert.Equal(["--no-alt-screen"], commands[0].Arguments);
+        Assert.Empty(commands[1].Arguments);
+        Assert.Empty(commands[2].Arguments);
     }
 
     [Fact]
@@ -43,7 +45,7 @@ public sealed class AgentStartupCommandCatalogTests
         Assert.Equal(
             [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
             commands.Select(command => command.AgentKind));
-        Assert.Equal(["resume"], commands[0].Arguments);
+        Assert.Equal(["--no-alt-screen", "resume"], commands[0].Arguments);
         Assert.Empty(commands[1].Arguments);
         Assert.Empty(commands[2].Arguments);
     }

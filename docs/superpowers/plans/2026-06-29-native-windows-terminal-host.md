@@ -59,6 +59,7 @@
 - [x] native Core 和 App 支持用户手动 Pause/Resume/Stop conversation 编排状态，并把状态变化写入 Collaboration timeline。
 - [x] 协作层迁移已落到 native Core/App：conversation/task-plan 编排逻辑在 native Core 中执行，输入仍走 `AgentInputRouter`，hook 结果仍走 `AgentHookReceiver` 和 native hook pipeline。
 - [x] native 启动脚本和 WPF UI 的 hook Python 默认值统一为 `py -3.11`，避免装有 Python 3.14 的机器误选不兼容版本；显式 `-Python` 仍可覆盖。
+- [x] native Codex 启动和恢复命令会自动追加 `--no-alt-screen`，避免 Codex TUI 进入 alternate screen 后丢失普通 scrollback。
 
 ## 后续任务
 

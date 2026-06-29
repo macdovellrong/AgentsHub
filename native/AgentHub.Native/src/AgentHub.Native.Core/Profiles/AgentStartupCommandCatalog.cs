@@ -2,6 +2,8 @@ namespace AgentHub.Native.Core.Profiles;
 
 public static class AgentStartupCommandCatalog
 {
+    private const string CodexNoAltScreenArgument = "--no-alt-screen";
+
     public static IReadOnlyList<AgentStartupCommand> BuildManagedAgentStartCommands()
     {
         return
@@ -32,8 +34,8 @@ public static class AgentStartupCommandCatalog
         return (agentKind, mode) switch
         {
             (AgentKind.PowerShell, AgentStartupMode.Start) => new AgentStartupCommand(agentKind, "", []),
-            (AgentKind.Codex, AgentStartupMode.Start) => new AgentStartupCommand(agentKind, "codex", []),
-            (AgentKind.Codex, AgentStartupMode.Resume) => new AgentStartupCommand(agentKind, "codex", ["resume"]),
+            (AgentKind.Codex, AgentStartupMode.Start) => new AgentStartupCommand(agentKind, "codex", [CodexNoAltScreenArgument]),
+            (AgentKind.Codex, AgentStartupMode.Resume) => new AgentStartupCommand(agentKind, "codex", [CodexNoAltScreenArgument, "resume"]),
             (AgentKind.Claude, AgentStartupMode.Start) => new AgentStartupCommand(agentKind, "claude", []),
             (AgentKind.Gemini, AgentStartupMode.Start) => new AgentStartupCommand(agentKind, "gemini", []),
             _ => throw new NotSupportedException($"{mode} is not configured for {agentKind}.")
