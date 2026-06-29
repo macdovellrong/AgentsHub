@@ -286,7 +286,9 @@ public sealed class AgentHookReceiver : IAsyncDisposable
             OptionalString(root, "profileId"),
             OptionalString(root, "agenthubSessionId"),
             OptionalString(root, "runId"),
-            OptionalString(root, "source"));
+            OptionalString(root, "source"),
+            OptionalString(root, "planId") ?? OptionalString(root, "plan_id"),
+            OptionalString(root, "taskId") ?? OptionalString(root, "task_id"));
     }
 
     private static string RequiredString(JsonElement root, string propertyName)

@@ -174,6 +174,7 @@ public sealed class AgentTaskPlanService(
         var target = await ResolveCompletionTargetAsync(workspacePath, input, cancellationToken).ConfigureAwait(false);
         if (target is null)
         {
+            await RecordUnmatchedHookAsync(workspacePath, input, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -218,6 +219,36 @@ public sealed class AgentTaskPlanService(
 
         await ObserveManagerAsync(workspacePath, plan, taskId, input, artifactPath, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task RecordUnmatchedHookAsync(
+        string workspacePath,
+        AgentTaskPlanHookCompletionInput input,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(input.PlanId))
+        {
+            return;
+        }
+
+        var plan = await TryGetPlanAsync(workspacePath, input.PlanId, cancellationToken).ConfigureAwait(false);
+        if (plan is null)
+        {
+            return;
+        }
+
+        await store.AppendEventAsync(
+            workspacePath,
+            plan.Id,
+            new AgentTaskPlanLogEventInput(
+                "unmatched_hook",
+                TaskId: input.TaskId,
+                FromProfileId: input.ProfileId,
+                Message: input.Message,
+                SessionId: input.SessionId,
+                RunId: input.RunId,
+                SourceEventId: input.SourceEventId),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RecordDeliveryFailureAsync(

@@ -24,7 +24,9 @@ public sealed class AgentHookReceiverTests
                 profileId = "codex",
                 agenthubSessionId = "codex-1",
                 runId = "run-1",
-                source = "codex"
+                source = "codex",
+                planId = "P-001",
+                taskId = "T-001"
             })
         };
         request.Headers.Add("X-AgentHub-Token", "token-1");
@@ -39,6 +41,38 @@ public sealed class AgentHookReceiverTests
         Assert.Equal("codex-1", hookEvent.SessionId);
         Assert.Equal("run-1", hookEvent.RunId);
         Assert.Equal("codex", hookEvent.Source);
+        Assert.Equal("P-001", hookEvent.PlanId);
+        Assert.Equal("T-001", hookEvent.TaskId);
+    }
+
+    [Fact]
+    public async Task Accepts_snake_case_task_plan_metadata()
+    {
+        await using var receiver = new AgentHookReceiver(new AgentHookReceiverOptions(0, "token-1"));
+        var received = new List<AgentHookEvent>();
+        receiver.EventReceived += (_, hookEvent) => received.Add(hookEvent);
+        var info = await receiver.StartAsync();
+
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, info.Url)
+        {
+            Content = JsonContent.Create(new
+            {
+                workspace = @"V:\OrderManager",
+                message = "done",
+                profileId = "codex",
+                plan_id = "P-002",
+                task_id = "T-002"
+            })
+        };
+        request.Headers.Add("X-AgentHub-Token", "token-1");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var hookEvent = Assert.Single(received);
+        Assert.Equal("P-002", hookEvent.PlanId);
+        Assert.Equal("T-002", hookEvent.TaskId);
     }
 
     [Fact]

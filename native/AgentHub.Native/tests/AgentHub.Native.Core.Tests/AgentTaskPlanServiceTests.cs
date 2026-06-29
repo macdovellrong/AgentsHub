@@ -332,6 +332,41 @@ public sealed class AgentTaskPlanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Records_unmatched_hook_when_explicit_plan_has_no_completion_target()
+    {
+        var workspacePath = CreateWorkspaceWithSourcePlan();
+        var service = CreateService(out var store, out _, out var inputRouter, out var registry);
+        var plan = await service.CreatePlanAsync(workspacePath, new CreateAgentTaskPlanRequest(
+            "Native Host",
+            "20260629-native-host",
+            "claude",
+            ["codex"]));
+        var managerSession = new RecordingTerminalSession("claude-1");
+        inputRouter.Register(managerSession);
+        registry.Register(new AgentSessionDescriptor("claude-1", "claude", workspacePath, DateTimeOffset.UtcNow));
+
+        await service.RecordHookCompletionAsync(
+            workspacePath,
+            new AgentTaskPlanHookCompletionInput(
+                "codex",
+                "Implementation done.",
+                "codex-1",
+                "run-2",
+                plan.Id,
+                SourceEventId: "event-unmatched"));
+
+        var item = Assert.Single(await store.ListEventsAsync(workspacePath, plan.Id), item => item.Type == "unmatched_hook");
+        Assert.Null(item.TaskId);
+        Assert.Equal("codex", item.FromProfileId);
+        Assert.Equal("Implementation done.", item.Message);
+        Assert.Equal("codex-1", item.SessionId);
+        Assert.Equal("run-2", item.RunId);
+        Assert.Equal("event-unmatched", item.SourceEventId);
+        Assert.Empty(Directory.GetFiles(Path.Combine(plan.PlanPath, "artifacts"), "*.md"));
+        Assert.Empty(managerSession.Writes);
+    }
+
+    [Fact]
     public async Task Records_hook_completion_delivery_failure_when_manager_session_is_missing()
     {
         var workspacePath = CreateWorkspaceWithSourcePlan();

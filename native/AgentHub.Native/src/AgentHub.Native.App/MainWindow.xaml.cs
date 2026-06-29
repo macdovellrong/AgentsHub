@@ -209,6 +209,8 @@ public partial class MainWindow : Window
                 hookEvent.Message,
                 hookEvent.SessionId,
                 hookEvent.RunId,
+                hookEvent.PlanId,
+                hookEvent.TaskId,
                 SourceEventId: result.SourceEventId));
         return result;
     }
