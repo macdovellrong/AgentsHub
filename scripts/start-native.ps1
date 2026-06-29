@@ -75,9 +75,14 @@ function Test-HookPythonCommand {
         return
     }
 
-    $probe = "import sys; print(sys.executable); print(sys.version.split()[0])"
+    $probe = "import json, pathlib, sys, urllib.request; print(sys.executable)"
+    $probeArguments = @()
+    foreach ($argument in $parsed.Arguments) {
+        $probeArguments += [string]$argument
+    }
+    $probeArguments += @("-c", $probe)
     try {
-        $output = & $parsed.Executable @($parsed.Arguments) -c $probe 2>&1
+        $output = & $parsed.Executable @probeArguments 2>&1
     }
     catch {
         throw "Hook Python command could not be started: $Command`n$($_.Exception.Message)"
