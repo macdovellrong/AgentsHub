@@ -69,6 +69,7 @@
 - [x] native App 和启动脚本提供 `Scroll Test` / `-Agent scrolltest`，用普通 PowerShell 输出 240 行文本作为 Codex 以外的终端滚动对照组。
 - [x] native UI 提供 `Run diagnostics`，可用当前 workspace 直接生成诊断报告到 native data 的 `diagnostics/` 目录。
 - [x] native UI 诊断完成后会更新 `diagnostics/latest-diagnostics.txt`，方便定位最近一次报告。
+- [x] 提供 `scripts/validate-native-laptop.ps1`，一键执行笔记本 Codex/scrolltest 预检并生成诊断报告。
 
 ## 后续任务
 
@@ -83,6 +84,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 
 验证：
 
+- 运行 `scripts/validate-native-laptop.ps1`，确认能生成报告和 latest-laptop-validation.txt。
 - 启动 Codex。
 - 启动 Scroll Test，确认普通 scrollback 是否能滚动。
 - 点击 Run diagnostics，确认能生成报告和 latest-diagnostics.txt。

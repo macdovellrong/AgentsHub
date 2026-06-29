@@ -29,6 +29,14 @@ git status --short --branch
 
 ## 环境预检
 
+推荐先跑一键验证脚本：
+
+```powershell
+.\scripts\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+```
+
+这个脚本会依次执行 PowerShell/Codex 预检、cmd/Codex 预检、`scrolltest` 预检，并生成诊断报告。即使某个预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
+
 从仓库根目录执行：
 
 ```powershell
@@ -180,6 +188,14 @@ py -3.11 --version
 ```
 
 也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/latest-diagnostics.txt` 读取最新报告路径并回传对应报告。
+
+如果使用一键验证脚本，则回传：
+
+```text
+artifacts/native-diagnostics/latest-laptop-validation.txt
+```
+
+以及该文件中 `report:` 指向的诊断报告。
 
 同时说明：
 

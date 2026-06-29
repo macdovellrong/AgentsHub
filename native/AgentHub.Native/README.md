@@ -81,12 +81,15 @@
 只检查环境和路径、不启动 UI：
 
 ```powershell
+.\scripts\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\scripts\start-native.ps1 -Check
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell powershell -Agent codex -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Shell cmd -Agent codex,claude,gemini -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 .\scripts\start-native.ps1 -Check -Workspace V:\OrderManager -Agent scrolltest
 ```
+
+`validate-native-laptop.ps1` 会串行执行 PowerShell/Codex 预检、cmd/Codex 预检、`scrolltest` 预检，并生成诊断报告。即使预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
 
 `-Check` 会在不启动 UI 的情况下检查项目、可选 workspace 路径和可选 Host shell。带 `-Agent` 时会检查对应的 Agent CLI 是否能以 Windows native launcher 形式从 PATH 中找到（`.com`、`.exe`、`.bat`、`.cmd`，Codex 通常应显示 `codex.cmd` 而不是 `codex.ps1`）；Codex 还会检查该 launcher 的 `--help` 是否包含 `--no-alt-screen`。`powershell`、`cmd`、`shell`、`scrolltest` 只使用选中的 Host shell，不检查额外 Agent CLI；`scrolltest` 默认检查 PowerShell host。只有 `codex`、`claude`、`gemini` 这类需要安装 hook 的 Agent 会检查 hook Python 命令和 hook 脚本目录；Python 预检会实际导入 hook 使用的标准库模块（`json`、`pathlib`、`urllib.request`），不是只检查 Python 可执行文件是否存在。如果设置了 `AGENTHUB_HOOKS_SOURCE_DIR`，预检会检查该目录，否则检查仓库内 `scripts/hooks`。
 
@@ -230,6 +233,8 @@ Agent hook 诊断日志位置：
 若 `Scroll Test` 可以滚而 Codex 不能滚，优先排查 Codex TUI；若 `Scroll Test` 也不能滚，优先排查 native 终端控件、Windows 输入设备或系统滚动设置。
 
 如果需要回传环境信息，点击 `Run diagnostics`，状态栏会显示生成的报告路径；也可以点击 `Open data` 后进入 `diagnostics` 目录，查看 `latest-diagnostics.txt` 找到最新报告。
+
+如果是从命令行跑 `validate-native-laptop.ps1`，回传 `artifacts/native-diagnostics/latest-laptop-validation.txt` 以及其中 `report:` 指向的诊断报告。
 
 ## 注意
 
