@@ -6,4 +6,5 @@ public sealed record AgentHubSendMessageCommand(
     string? TeamId,
     string? TaskId,
     string? PlanId,
-    string? ConversationId);
+    string? ConversationId,
+    string? SessionId = null);

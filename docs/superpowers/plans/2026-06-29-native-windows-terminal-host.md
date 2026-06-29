@@ -26,6 +26,7 @@
 - [x] session 列表显示 profile、workspace、runId 和 hook receiver 状态。
 - [x] hook 控制命令的解析错误和转发失败会进入 Collaboration timeline。
 - [x] provider-neutral `claim_task` / `complete_task` 团队状态命令会进入 Collaboration timeline。
+- [x] provider-neutral team 命令会写入 `<workspace>/.agenthub/teams/<teamId>/mailbox.jsonl`。
 
 ## 后续任务
 

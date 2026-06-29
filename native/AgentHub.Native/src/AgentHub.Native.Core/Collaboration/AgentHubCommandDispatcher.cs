@@ -22,13 +22,14 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             if (result.Sent)
             {
                 sentCount += 1;
-                sentMessages.Add(command);
+                sentMessages.Add(command with { SessionId = result.SessionId });
             }
             else
             {
                 dispatchErrors.Add(new AgentHubCommandDispatchError(
                     command.To,
-                    FormatSendFailure(workspacePath, command.To, result.Status)));
+                    FormatSendFailure(workspacePath, command.To, result.Status),
+                    command));
             }
         }
 

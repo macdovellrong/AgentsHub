@@ -51,9 +51,9 @@ public sealed class AgentMessageRouter(AgentInputRouter inputRouter, AgentSessio
                 sessionRegistry.Remove(session.Id);
             }
 
-            return AgentMessageSendResult.FromInputResult(result);
+            return AgentMessageSendResult.FromInputResult(result, session.Id);
         }
 
-        return new AgentMessageSendResult(AgentMessageSendStatus.Sent);
+        return new AgentMessageSendResult(AgentMessageSendStatus.Sent, session.Id);
     }
 }

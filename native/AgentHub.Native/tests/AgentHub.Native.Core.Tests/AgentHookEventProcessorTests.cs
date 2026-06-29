@@ -11,18 +11,20 @@ public sealed class AgentHookEventProcessorTests : IDisposable
     [Fact]
     public async Task Records_agent_output_dispatches_commands_and_records_forwarded_messages()
     {
+        var workspacePath = CreateWorkspace();
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
         var target = new RecordingTerminalSession("codex-1");
         var inputRouter = new AgentInputRouter();
         inputRouter.Register(target);
         var registry = new AgentSessionRegistry();
-        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.UtcNow));
         var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
-        var processor = new AgentHookEventProcessor(store, dispatcher);
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore);
 
         var result = await processor.ProcessAsync(new AgentHookEvent(
-            @"V:\OrderManager",
-            "Done.\n<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\"}</agenthub>",
+            workspacePath,
+            "Done.\n<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\",\"team_id\":\"default\",\"task_id\":\"T-001\",\"conversation_id\":\"C-001\"}</agenthub>",
             "claude",
             "claude-1",
             "run-1",
@@ -30,24 +32,35 @@ public sealed class AgentHookEventProcessorTests : IDisposable
 
         Assert.Equal(1, result.SentCount);
         Assert.Equal(["Please inspect.", "\r"], target.Writes);
-        var events = await store.ListAsync(@"V:\OrderManager");
+        var events = await store.ListAsync(workspacePath);
         Assert.Equal([CollaborationEventKind.AgentOutput, CollaborationEventKind.UserMessage], events.Select(item => item.Kind).ToArray());
         Assert.Equal("claude", events[0].ProfileId);
         Assert.Equal("agenthub", events[1].ProfileId);
         Assert.Equal("codex", events[1].TargetProfileId);
         Assert.Equal("Please inspect.", events[1].Message);
+        var mailbox = await teamStore.ListMailboxAsync(workspacePath, "default");
+        var mailboxMessage = Assert.Single(mailbox);
+        Assert.Equal("send_message", mailboxMessage.Action);
+        Assert.Equal("claude", mailboxMessage.FromProfileId);
+        Assert.Equal("codex", mailboxMessage.ToProfileId);
+        Assert.Equal("sent", mailboxMessage.Status);
+        Assert.Equal("codex-1", mailboxMessage.SessionId);
+        Assert.Equal("T-001", mailboxMessage.TaskId);
+        Assert.Equal("C-001", mailboxMessage.ConversationId);
     }
 
     [Fact]
     public async Task Records_dispatch_errors_from_agenthub_commands()
     {
+        var workspacePath = CreateWorkspace();
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
         var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));
-        var processor = new AgentHookEventProcessor(store, dispatcher);
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore);
 
         var result = await processor.ProcessAsync(new AgentHookEvent(
-            @"V:\OrderManager",
-            "<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\"}</agenthub>",
+            workspacePath,
+            "<agenthub>{\"action\":\"send_message\",\"to\":\"codex\",\"message\":\"Please inspect.\",\"team_id\":\"default\",\"task_id\":\"T-001\"}</agenthub>",
             "claude",
             "claude-1",
             "run-1",
@@ -56,11 +69,54 @@ public sealed class AgentHookEventProcessorTests : IDisposable
         Assert.Equal(0, result.SentCount);
         var dispatchError = Assert.Single(result.DispatchErrors);
         Assert.Equal("codex", dispatchError.TargetProfileId);
-        var events = await store.ListAsync(@"V:\OrderManager");
+        var events = await store.ListAsync(workspacePath);
         Assert.Equal([CollaborationEventKind.AgentOutput, CollaborationEventKind.AgentHubCommandError], events.Select(item => item.Kind).ToArray());
         Assert.Equal("agenthub", events[1].ProfileId);
         Assert.Equal("command-error", events[1].TargetProfileId);
         Assert.Contains("No active session for profile 'codex'", events[1].Message, StringComparison.Ordinal);
+        var mailbox = await teamStore.ListMailboxAsync(workspacePath, "default");
+        var mailboxMessage = Assert.Single(mailbox);
+        Assert.Equal("send_message", mailboxMessage.Action);
+        Assert.Equal("failed", mailboxMessage.Status);
+        Assert.Equal("codex", mailboxMessage.ToProfileId);
+        Assert.Contains("No active session for profile 'codex'", mailboxMessage.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Records_team_status_commands_to_mailbox()
+    {
+        var workspacePath = CreateWorkspace();
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore);
+
+        await processor.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"claim_task\",\"task_id\":\"T-001\",\"team_id\":\"default\"}</agenthub>\n" +
+            "<agenthub>{\"action\":\"complete_task\",\"task_id\":\"T-001\",\"summary\":\"Done with tests.\",\"team_id\":\"default\"}</agenthub>",
+            "codex",
+            "codex-1",
+            "run-1",
+            "codex"));
+
+        var mailbox = await teamStore.ListMailboxAsync(workspacePath, "default");
+        Assert.Collection(
+            mailbox,
+            item =>
+            {
+                Assert.Equal("claim_task", item.Action);
+                Assert.Equal("codex", item.FromProfileId);
+                Assert.Equal("T-001", item.TaskId);
+                Assert.Equal("observed", item.Status);
+            },
+            item =>
+            {
+                Assert.Equal("complete_task", item.Action);
+                Assert.Equal("codex", item.FromProfileId);
+                Assert.Equal("Done with tests.", item.Message);
+                Assert.Equal("observed", item.Status);
+            });
     }
 
     public void Dispose()
@@ -86,5 +142,12 @@ public sealed class AgentHookEventProcessorTests : IDisposable
         {
             return Task.CompletedTask;
         }
+    }
+
+    private string CreateWorkspace()
+    {
+        var workspacePath = Path.Combine(tempRoot, "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+        return workspacePath;
     }
 }
