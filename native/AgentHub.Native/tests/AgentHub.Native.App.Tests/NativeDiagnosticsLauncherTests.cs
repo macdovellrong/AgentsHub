@@ -85,6 +85,35 @@ public sealed class NativeDiagnosticsLauncherTests
         Assert.True(startInfo.RedirectStandardError);
     }
 
+    [Fact]
+    public void Writes_latest_report_pointer_next_to_diagnostics_reports()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var result = new NativeDiagnosticsRunResult(
+                Path.Combine(root, "diagnostics", "native-diagnostics-20260629-150405.md"),
+                0,
+                "ok",
+                "");
+
+            var pointerPath = NativeDiagnosticsLauncher.WriteLatestReportPointer(
+                root,
+                result,
+                new DateTimeOffset(2026, 6, 29, 15, 5, 6, TimeSpan.Zero));
+
+            Assert.Equal(Path.Combine(root, "diagnostics", "latest-diagnostics.txt"), pointerPath);
+            var content = File.ReadAllText(pointerPath, Encoding.UTF8);
+            Assert.Contains("timestamp: 2026-06-29T15:05:06.0000000+00:00", content, StringComparison.Ordinal);
+            Assert.Contains("exitCode: 0", content, StringComparison.Ordinal);
+            Assert.Contains($"report: {result.OutputPath}", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agenthub-native-tests-{Guid.NewGuid():N}");

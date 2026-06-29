@@ -64,7 +64,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
 
 ## 直接运行开发版
 
@@ -142,7 +142,7 @@ artifacts/native/win-x64/scripts/hooks/agenthub_gemini_after_agent.py
 1. workspace 可以添加、选中和移除。
 2. Host shell 默认是 PowerShell，并且可以切换到 cmd。
 3. `Run diagnostics` 能生成报告，状态栏显示 `Diagnostics written: ...`。
-4. `Open data` 能打开 native 数据目录，并能在 `diagnostics/` 里找到刚生成的报告。
+4. `Open data` 能打开 native 数据目录，并能在 `diagnostics/` 里找到刚生成的报告和 `latest-diagnostics.txt`。
 5. `Scroll Test` 能输出 240 行 smoke text，并且终端滚动条出现。
 6. 鼠标滚轮和触摸板双指滚动能在 `Scroll Test` session 中向上翻历史。
 7. `Resume Codex` 能进入 `codex --no-alt-screen resume`。
@@ -179,7 +179,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/` 目录回传最新报告。
+也可以在 native UI 里点击 `Run diagnostics`，再点击 `Open data`，从 `diagnostics/latest-diagnostics.txt` 读取最新报告路径并回传对应报告。
 
 同时说明：
 

@@ -122,7 +122,7 @@
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Codex/Claude/Gemini CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`。
+默认输出到 `artifacts/native-diagnostics/<timestamp>.md`。报告会记录 git 状态、.NET、Windows 版本、显示缩放、Windows Terminal/Console Host 环境、输入设备、`Win32_PointingDevice`、Precision Touchpad 设置、Codex/Claude/Gemini CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 诊断日志摘要；命令失败也会写入 exit code 和错误文本，方便直接回传排查。native UI 顶部的 `Run diagnostics` 会调用同一诊断脚本，并把报告写到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`；同目录的 `latest-diagnostics.txt` 会记录最近一次报告路径和 exit code。
 
 也可以直接运行项目：
 
@@ -157,7 +157,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 18. WPF hook pipeline 会优先识别 running conversation 输出；manager supervisor hook 会绕过通用 command dispatcher，交给 conversation orchestrator 投递 delegated prompt 或更新 conversation 状态，避免同一条 `send` 命令被通用 dispatcher 和 conversation orchestrator 重复发送。manager participant hook 如果显式带 `conversationId/taskId`，或可以从最近一次 delegated event 的 `conversationId/taskId/sessionId` 推断上下文，会生成 observation prompt 投回 supervisor。roundtable hook 会按 conversation 的 participant 顺序投递给下一位，到达 `maxSteps` 后完成 conversation。pair negotiation hook 会按两名参与者轮转投递 `continue`，双方接受同一 `proposal_version` 时完成 conversation，达到 `maxSteps` 时暂停。
 19. Sessions 默认勾选 `Current`，只显示当前 workspace 的 session，切换 workspace 时会自动刷新；取消勾选后可以查看所有 workspace 的 session。可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
 20. 顶部 `Open data` 会打开本机 native 数据目录，方便查看 `workspaces.json`、`settings.json`、`events/` 和 `hooks.jsonl` 等诊断文件。
-21. 顶部 `Run diagnostics` 会用当前 workspace 和 hook Python 命令生成诊断报告，默认保存到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`。
+21. 顶部 `Run diagnostics` 会用当前 workspace 和 hook Python 命令生成诊断报告，默认保存到 `%LOCALAPPDATA%\AgentHub\Native\diagnostics\`，并更新 `latest-diagnostics.txt`。
 
 workspace 列表保存位置：
 
@@ -229,7 +229,7 @@ Agent hook 诊断日志位置：
 
 若 `Scroll Test` 可以滚而 Codex 不能滚，优先排查 Codex TUI；若 `Scroll Test` 也不能滚，优先排查 native 终端控件、Windows 输入设备或系统滚动设置。
 
-如果需要回传环境信息，点击 `Run diagnostics`，状态栏会显示生成的报告路径；也可以点击 `Open data` 后进入 `diagnostics` 目录找到最新报告。
+如果需要回传环境信息，点击 `Run diagnostics`，状态栏会显示生成的报告路径；也可以点击 `Open data` 后进入 `diagnostics` 目录，查看 `latest-diagnostics.txt` 找到最新报告。
 
 ## 注意
 

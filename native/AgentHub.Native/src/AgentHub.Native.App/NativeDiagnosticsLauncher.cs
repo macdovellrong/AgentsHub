@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 namespace AgentHub.Native.App;
 
@@ -51,6 +52,34 @@ public static class NativeDiagnosticsLauncher
             dataDirectory,
             "diagnostics",
             $"native-diagnostics-{resolvedTimestamp:yyyyMMdd-HHmmss}.md");
+    }
+
+    public static string ResolveLatestReportPointerPath(string dataDirectory)
+    {
+        return Path.Combine(dataDirectory, "diagnostics", "latest-diagnostics.txt");
+    }
+
+    public static string WriteLatestReportPointer(
+        string dataDirectory,
+        NativeDiagnosticsRunResult result,
+        DateTimeOffset? timestamp = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var pointerPath = ResolveLatestReportPointerPath(dataDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(pointerPath)!);
+        var resolvedTimestamp = timestamp ?? DateTimeOffset.Now;
+        File.WriteAllText(
+            pointerPath,
+            string.Join(
+                Environment.NewLine,
+                [
+                    $"timestamp: {resolvedTimestamp:O}",
+                    $"exitCode: {result.ExitCode}",
+                    $"report: {result.OutputPath}",
+                    ""
+                ]),
+            Encoding.UTF8);
+        return pointerPath;
     }
 
     public static ProcessStartInfo BuildStartInfo(
@@ -108,10 +137,12 @@ public static class NativeDiagnosticsLauncher
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
-        return new NativeDiagnosticsRunResult(
+        var result = new NativeDiagnosticsRunResult(
             outputPath,
             process.ExitCode,
             await stdoutTask,
             await stderrTask);
+        WriteLatestReportPointer(dataDirectory, result);
+        return result;
     }
 }
