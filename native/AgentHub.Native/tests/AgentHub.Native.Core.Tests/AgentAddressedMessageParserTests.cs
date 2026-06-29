@@ -9,6 +9,7 @@ public sealed class AgentAddressedMessageParserTests
     [InlineData("  @Claude   check this  ", "claude", "check this")]
     [InlineData("@gemini: summarize", "gemini", "summarize")]
     [InlineData("@agents: sync status", "agents", "sync status")]
+    [InlineData("@codex,gemini compare notes", "codex,gemini", "compare notes")]
     [InlineData("@cmd dir", "cmd", "dir")]
     public void Parses_profile_prefix(string raw, string expectedProfileId, string expectedMessage)
     {
@@ -34,6 +35,7 @@ public sealed class AgentAddressedMessageParserTests
     [InlineData("@codex")]
     [InlineData("@codex   ")]
     [InlineData("@bad-target hello")]
+    [InlineData("@codex,bad hello")]
     public void Returns_null_when_text_is_not_an_addressed_message(string raw)
     {
         Assert.Null(AgentAddressedMessageParser.Parse(raw));

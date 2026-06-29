@@ -28,7 +28,7 @@ public static partial class AgentAddressedMessageParser
         }
 
         var profileId = match.Groups["profile"].Value.ToLowerInvariant();
-        if (!KnownProfiles.Contains(profileId))
+        if (!IsKnownProfileTarget(profileId))
         {
             return null;
         }
@@ -39,6 +39,13 @@ public static partial class AgentAddressedMessageParser
             : new AgentAddressedMessage(profileId, message);
     }
 
-    [GeneratedRegex("^@(?<profile>[A-Za-z0-9_]+):?\\s+(?<message>.+)$", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
+    private static bool IsKnownProfileTarget(string profileId)
+    {
+        var targetProfileIds = AgentProfileTargetResolver.Resolve(profileId);
+        return targetProfileIds.Count > 0 &&
+               targetProfileIds.All(targetProfileId => KnownProfiles.Contains(targetProfileId));
+    }
+
+    [GeneratedRegex("^@(?<profile>[A-Za-z0-9_,]+):?\\s+(?<message>.+)$", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
     private static partial Regex AddressedMessageRegex();
 }

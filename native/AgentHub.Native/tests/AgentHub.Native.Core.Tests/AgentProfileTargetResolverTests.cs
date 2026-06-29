@@ -22,4 +22,20 @@ public sealed class AgentProfileTargetResolverTests
 
         Assert.Equal(["codex", "claude", "gemini"], profileIds);
     }
+
+    [Fact]
+    public void Resolves_comma_separated_profile_targets()
+    {
+        var profileIds = AgentProfileTargetResolver.Resolve("codex, gemini");
+
+        Assert.Equal(["codex", "gemini"], profileIds);
+    }
+
+    [Fact]
+    public void Resolves_mixed_alias_and_profile_targets_without_duplicates()
+    {
+        var profileIds = AgentProfileTargetResolver.Resolve("agents,codex");
+
+        Assert.Equal(["codex", "claude", "gemini"], profileIds);
+    }
 }
