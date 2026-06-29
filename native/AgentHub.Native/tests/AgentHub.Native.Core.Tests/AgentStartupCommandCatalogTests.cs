@@ -36,6 +36,19 @@ public sealed class AgentStartupCommandCatalogTests
     }
 
     [Fact]
+    public void Builds_managed_agent_resume_commands_with_codex_resume_first()
+    {
+        var commands = AgentStartupCommandCatalog.BuildManagedAgentResumeCommands();
+
+        Assert.Equal(
+            [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
+            commands.Select(command => command.AgentKind));
+        Assert.Equal(["resume"], commands[0].Arguments);
+        Assert.Empty(commands[1].Arguments);
+        Assert.Empty(commands[2].Arguments);
+    }
+
+    [Fact]
     public void Rejects_resume_for_agents_without_a_resume_preset()
     {
         var ex = Assert.Throws<NotSupportedException>(() =>

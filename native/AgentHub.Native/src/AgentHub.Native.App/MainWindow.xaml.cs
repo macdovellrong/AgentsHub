@@ -271,6 +271,19 @@ public partial class MainWindow : Window
     private async void StartManagedAgents_Click(object sender, RoutedEventArgs e)
     {
         var commands = AgentStartupCommandCatalog.BuildManagedAgentStartCommands();
+        var startedCount = await StartAgentBatchAsync(commands);
+        StatusTextBlock.Text = $"Started managed agents: {startedCount}/{commands.Count}";
+    }
+
+    private async void ResumeManagedAgents_Click(object sender, RoutedEventArgs e)
+    {
+        var commands = AgentStartupCommandCatalog.BuildManagedAgentResumeCommands();
+        var startedCount = await StartAgentBatchAsync(commands);
+        StatusTextBlock.Text = $"Resumed managed agents: {startedCount}/{commands.Count}";
+    }
+
+    private async Task<int> StartAgentBatchAsync(IReadOnlyList<AgentStartupCommand> commands)
+    {
         var startedCount = 0;
         foreach (var command in commands)
         {
@@ -280,7 +293,7 @@ public partial class MainWindow : Window
             }
         }
 
-        StatusTextBlock.Text = $"Started managed agents: {startedCount}/{commands.Count}";
+        return startedCount;
     }
 
     private async void StartPowerShell_Click(object sender, RoutedEventArgs e)

@@ -12,6 +12,16 @@ public static class AgentStartupCommandCatalog
         ];
     }
 
+    public static IReadOnlyList<AgentStartupCommand> BuildManagedAgentResumeCommands()
+    {
+        return
+        [
+            Build(AgentKind.Codex, AgentStartupMode.Resume),
+            Build(AgentKind.Claude, AgentStartupMode.Start),
+            Build(AgentKind.Gemini, AgentStartupMode.Start)
+        ];
+    }
+
     public static AgentStartupCommand Build(AgentKind agentKind, AgentStartupMode mode)
     {
         return (agentKind, mode) switch
