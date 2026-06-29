@@ -30,6 +30,7 @@
 - [x] 任务计划路由命令转发后的 mailbox 记录会保留 `planId`，方便后续 task-plan 状态机迁移。
 - [x] `assign_task` / `request_review` / `reject_task` / `approve_task` / `pause_plan` 任务计划命令会写入 `<workspace>/.agenthub/task-plans/native/<planId>/events.jsonl`。
 - [x] native Core 支持扫描 `<workspace>/tasks/*/task-plan.md`，并从选中的任务目录创建 `.agenthub/task-plans/YYYY-MM-DD/HHmmss-slug/` 执行快照。
+- [x] native Core 支持创建 task-plan 并向当前 workspace 的 manager profile 最新 session 投递 manager prompt；无 manager session 时记录 `delivery_failed`。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。

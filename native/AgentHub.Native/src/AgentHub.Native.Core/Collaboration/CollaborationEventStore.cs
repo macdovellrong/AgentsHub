@@ -137,7 +137,7 @@ public sealed class CollaborationEventStore(string rootDirectory)
         return events;
     }
 
-    private Task<CollaborationEvent> AppendCommandErrorAsync(
+    public Task<CollaborationEvent> AppendCommandErrorAsync(
         string workspacePath,
         string message,
         CancellationToken cancellationToken = default)

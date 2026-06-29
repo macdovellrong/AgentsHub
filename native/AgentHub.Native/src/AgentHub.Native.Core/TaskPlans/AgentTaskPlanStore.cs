@@ -10,6 +10,12 @@ public sealed class AgentTaskPlanStore
         WriteIndented = true
     };
 
+    private static readonly JsonSerializerOptions JsonlSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false
+    };
+
     private readonly AgentTaskPlanStoreOptions options;
 
     public AgentTaskPlanStore()
@@ -166,6 +172,89 @@ public sealed class AgentTaskPlanStore
             .ConfigureAwait(false);
     }
 
+    public async Task<AgentTaskPlan> UpdatePlanStatusAsync(
+        string workspacePath,
+        string planId,
+        string status,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsKnownStatus(status))
+        {
+            throw new ArgumentException($"Unknown task plan status: {status}", nameof(status));
+        }
+
+        var plan = await GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var updated = plan with
+        {
+            Status = status,
+            UpdatedAt = UtcNow()
+        };
+        await WritePlanAsync(updated, cancellationToken).ConfigureAwait(false);
+        return updated;
+    }
+
+    public async Task<AgentTaskPlanLogEvent> AppendEventAsync(
+        string workspacePath,
+        string planId,
+        AgentTaskPlanLogEventInput input,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var item = new AgentTaskPlanLogEvent(
+            Guid.NewGuid().ToString("N"),
+            input.Type,
+            UtcNow(),
+            input.TaskId,
+            input.FromProfileId,
+            input.ToProfileId,
+            input.Message,
+            input.SessionId,
+            input.RunId,
+            input.SourceEventId);
+        var json = JsonSerializer.Serialize(item, JsonlSerializerOptions);
+        await File.AppendAllTextAsync(EventsPath(plan.PlanPath), $"{json}\n", cancellationToken)
+            .ConfigureAwait(false);
+        return item;
+    }
+
+    public async Task<IReadOnlyList<AgentTaskPlanLogEvent>> ListEventsAsync(
+        string workspacePath,
+        string planId,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetPlanAsync(workspacePath, planId, cancellationToken).ConfigureAwait(false);
+        var filePath = EventsPath(plan.PlanPath);
+        if (!File.Exists(filePath))
+        {
+            return [];
+        }
+
+        var events = new List<AgentTaskPlanLogEvent>();
+        var lines = await File.ReadAllLinesAsync(filePath, cancellationToken).ConfigureAwait(false);
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            try
+            {
+                var item = JsonSerializer.Deserialize<AgentTaskPlanLogEvent>(line, JsonlSerializerOptions);
+                if (item is not null)
+                {
+                    events.Add(item);
+                }
+            }
+            catch (JsonException)
+            {
+                // Execution event logs are append-only; skip partial or damaged lines.
+            }
+        }
+
+        return events;
+    }
+
     private async Task<AgentTaskPlan?> ReadPlanAsync(
         string workspacePath,
         string rootPath,
@@ -235,6 +324,19 @@ public sealed class AgentTaskPlanStore
     private static async Task WriteTextAsync(string path, string content, CancellationToken cancellationToken)
     {
         await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task WritePlanAsync(AgentTaskPlan plan, CancellationToken cancellationToken)
+    {
+        await WriteTextAsync(
+            Path.Combine(plan.PlanPath, "plan.json"),
+            $"{JsonSerializer.Serialize(plan, SerializerOptions)}\n",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string EventsPath(string planPath)
+    {
+        return Path.Combine(planPath, "events.jsonl");
     }
 
     private DateTimeOffset UtcNow()
