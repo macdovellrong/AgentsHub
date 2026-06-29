@@ -459,11 +459,19 @@ public sealed class AgentConversationOrchestratorTests : IDisposable
         Assert.Contains("Conversation: pair-1", claudeSession.Writes[1], StringComparison.Ordinal);
         Assert.Contains("Topic: Agree on native terminal architecture", claudeSession.Writes[1], StringComparison.Ordinal);
         Assert.Contains("Participants: claude <-> codex", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains(".agenthub/conversations/pair-1/brief.md", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains(".agenthub/conversations/pair-1/memory.md", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains(".agenthub/conversations/pair-1/turns/0001-claude.md", claudeSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains("\"artifact_path\":\".agenthub/conversations/pair-1/turns/0001-claude.md\"", claudeSession.Writes[1], StringComparison.Ordinal);
         Assert.Contains("\"action\":\"continue\"", claudeSession.Writes[1], StringComparison.Ordinal);
         Assert.Contains("\"action\":\"accept\"", claudeSession.Writes[1], StringComparison.Ordinal);
         Assert.Equal("\x1b[201~", claudeSession.Writes[2]);
         Assert.Equal("\r", claudeSession.Writes[3]);
         Assert.Empty(codexSession.Writes);
+        Assert.True(File.Exists(Path.Combine(workspacePath, ".agenthub", "conversations", "pair-1", "brief.md")));
+        Assert.True(File.Exists(Path.Combine(workspacePath, ".agenthub", "conversations", "pair-1", "memory.md")));
+        Assert.True(File.Exists(Path.Combine(workspacePath, ".agenthub", "conversations", "pair-1", "state.json")));
+        Assert.True(Directory.Exists(Path.Combine(workspacePath, ".agenthub", "conversations", "pair-1", "turns")));
         var item = Assert.Single(await timelineStore.ListAsync(workspacePath));
         Assert.Equal(CollaborationEventKind.UserMessage, item.Kind);
         Assert.Equal("agenthub", item.ProfileId);
@@ -520,6 +528,58 @@ public sealed class AgentConversationOrchestratorTests : IDisposable
         Assert.Equal("agenthub", item.ProfileId);
         Assert.Equal("codex", item.TargetProfileId);
         Assert.Equal("pair-1", item.ConversationId);
+        Assert.Equal("[continue v1] Use native host.", item.Message);
+    }
+
+    [Fact]
+    public async Task Writes_legacy_pair_negotiation_message_to_turn_artifact_before_forwarding()
+    {
+        var workspacePath = CreateWorkspace();
+        var conversationStore = new AgentConversationStore();
+        var timelineStore = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var inputRouter = new AgentInputRouter();
+        var registry = new AgentSessionRegistry();
+        var codexSession = new RecordingTerminalSession("codex-1");
+        inputRouter.Register(codexSession);
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.Parse("2026-06-29T10:02:00Z")));
+        await conversationStore.CreateAsync(
+            workspacePath,
+            new CreateAgentConversationRequest(
+                "pair-1",
+                "pair_negotiation",
+                null,
+                ["claude", "codex"],
+                "Agree on native terminal architecture",
+                CurrentStep: 1,
+                MaxSteps: 4));
+        var artifactStore = new AgentConversationArtifactStore();
+        await artifactStore.InitializePairConversationAsync(
+            workspacePath,
+            new PairConversationArtifactInput(
+                "pair-1",
+                "Agree on native terminal architecture",
+                ["claude", "codex"],
+                4));
+        var orchestrator = new AgentConversationOrchestrator(conversationStore, timelineStore, inputRouter, registry);
+
+        var handled = await orchestrator.HandleAgentOutputAsync(new AgentHookEvent(
+            workspacePath,
+            "Full proposal body.\n<agenthub>{\"action\":\"continue\",\"proposal_version\":1,\"summary\":\"Use native host.\",\"message\":\"Please review the native host plan.\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude",
+            ConversationId: "pair-1"));
+
+        Assert.True(handled);
+        var firstArtifact = Path.Combine(workspacePath, ".agenthub", "conversations", "pair-1", "turns", "0001-claude.md");
+        Assert.True(File.Exists(firstArtifact));
+        var artifactText = await File.ReadAllTextAsync(firstArtifact);
+        Assert.Contains("Full proposal body.", artifactText, StringComparison.Ordinal);
+        Assert.DoesNotContain("<agenthub>", artifactText, StringComparison.Ordinal);
+        Assert.Contains(".agenthub/conversations/pair-1/turns/0001-claude.md", codexSession.Writes[1], StringComparison.Ordinal);
+        Assert.Contains(".agenthub/conversations/pair-1/turns/0002-codex.md", codexSession.Writes[1], StringComparison.Ordinal);
+        var item = Assert.Single(await timelineStore.ListAsync(workspacePath));
         Assert.Equal("[continue v1] Use native host.", item.Message);
     }
 

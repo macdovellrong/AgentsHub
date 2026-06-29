@@ -1,6 +1,7 @@
 using AgentHub.Native.Core.Input;
 using AgentHub.Native.Core.Hooks;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace AgentHub.Native.Core.Collaboration;
 
@@ -8,12 +9,15 @@ public sealed class AgentConversationOrchestrator(
     AgentConversationStore conversationStore,
     CollaborationEventStore timelineStore,
     AgentInputRouter inputRouter,
-    AgentSessionRegistry sessionRegistry)
+    AgentSessionRegistry sessionRegistry,
+    AgentConversationArtifactStore? artifactStore = null)
 {
     private const int DefaultMaxSteps = 12;
     private const int DefaultMaxRounds = 2;
     private const int DefaultPairNegotiationMaxRounds = 3;
+    private const string WaitingArtifactPath = "__waiting_artifact__";
     private static readonly string[] RoundtableProfileOrder = ["claude", "codex", "gemini"];
+    private readonly AgentConversationArtifactStore artifacts = artifactStore ?? new AgentConversationArtifactStore();
 
     public async Task<AgentConversation> StartManagerAsync(
         StartAgentManagerConversationRequest request,
@@ -184,6 +188,32 @@ public sealed class AgentConversationOrchestrator(
                 MaxSteps: participants.Count * maxRounds),
             cancellationToken).ConfigureAwait(false);
         var firstProfileId = conversation.ParticipantProfileIds[0];
+        PairConversationArtifactPaths artifactPaths;
+        try
+        {
+            artifactPaths = await artifacts.InitializePairConversationAsync(
+                request.WorkspacePath,
+                new PairConversationArtifactInput(
+                    conversation.Id,
+                    conversation.Topic,
+                    conversation.ParticipantProfileIds,
+                    conversation.MaxSteps),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await timelineStore.AppendCommandErrorAsync(
+                request.WorkspacePath,
+                $"Pair negotiation failed to initialize artifacts: {ex.Message}",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await conversationStore.UpdateAsync(
+                request.WorkspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var firstSession = sessionRegistry.FindLatest(request.WorkspacePath, firstProfileId);
         if (firstSession is null)
         {
@@ -202,7 +232,10 @@ public sealed class AgentConversationOrchestrator(
 
         var sendResult = await inputRouter.TrySendLineDetailedAsync(
             firstSession.Id,
-            BuildInitialPairNegotiationPrompt(conversation),
+            BuildInitialPairNegotiationPrompt(
+                conversation,
+                artifactPaths,
+                artifacts.TurnArtifactPath(conversation.Id, 1, firstProfileId)),
             cancellationToken).ConfigureAwait(false);
         if (!sendResult.Sent)
         {
@@ -754,6 +787,17 @@ public sealed class AgentConversationOrchestrator(
             return conversation;
         }
 
+        var artifactPath = await ResolvePairNegotiationArtifactAsync(
+            workspacePath,
+            conversation,
+            hookEvent,
+            command,
+            cancellationToken).ConfigureAwait(false);
+        if (artifactPath == WaitingArtifactPath)
+        {
+            return conversation;
+        }
+
         var targetSession = sessionRegistry.FindLatest(workspacePath, targetProfileId);
         if (targetSession is null)
         {
@@ -771,7 +815,7 @@ public sealed class AgentConversationOrchestrator(
 
         var sendResult = await inputRouter.TrySendLineDetailedAsync(
             targetSession.Id,
-            BuildPairNegotiationTurnPrompt(conversation, hookEvent, command, targetProfileId),
+            BuildPairNegotiationTurnPrompt(conversation, hookEvent, command, targetProfileId, artifactPath),
             cancellationToken).ConfigureAwait(false);
         if (!sendResult.Sent)
         {
@@ -814,6 +858,17 @@ public sealed class AgentConversationOrchestrator(
     {
         var profileId = hookEvent.ProfileId ?? "agent";
         var version = FormatProposalVersion(command.ProposalVersion);
+        var artifactPath = await ResolvePairNegotiationArtifactAsync(
+            workspacePath,
+            conversation,
+            hookEvent,
+            command,
+            cancellationToken).ConfigureAwait(false);
+        if (artifactPath == WaitingArtifactPath)
+        {
+            return conversation;
+        }
+
         await timelineStore.AppendUserMessageAsync(
             new CollaborationUserMessage(
                 workspacePath,
@@ -876,7 +931,7 @@ public sealed class AgentConversationOrchestrator(
 
         var sendResult = await inputRouter.TrySendLineDetailedAsync(
             targetSession.Id,
-            BuildPairNegotiationAcceptancePrompt(conversation, hookEvent, command, targetProfileId),
+            BuildPairNegotiationAcceptancePrompt(conversation, hookEvent, command, targetProfileId, artifactPath),
             cancellationToken).ConfigureAwait(false);
         if (!sendResult.Sent)
         {
@@ -908,6 +963,114 @@ public sealed class AgentConversationOrchestrator(
                 SessionId: targetSession.Id),
             cancellationToken).ConfigureAwait(false);
         return updated;
+    }
+
+    private async Task<string?> ResolvePairNegotiationArtifactAsync(
+        string workspacePath,
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        AgentHubPairNegotiationCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(command.ArtifactPath))
+        {
+            return await ValidatePairNegotiationArtifactAsync(
+                workspacePath,
+                conversation,
+                hookEvent,
+                command.ArtifactPath,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var expectedArtifactPath = artifacts.TurnArtifactPath(
+            conversation.Id,
+            conversation.CurrentStep,
+            hookEvent.ProfileId ?? "agent");
+        try
+        {
+            var validated = await artifacts.ValidateTurnArtifactPathAsync(
+                workspacePath,
+                conversation.Id,
+                expectedArtifactPath,
+                cancellationToken).ConfigureAwait(false);
+            return validated.RelativePath;
+        }
+        catch (FileNotFoundException)
+        {
+            // Older prompts allowed the Agent to return the proposal inline. Preserve that
+            // output in the expected turn artifact, then continue with the file-backed flow.
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Same compatibility path as FileNotFoundException; the conversation may have
+            // been created before file-backed negotiation was available.
+        }
+
+        var legacyMessage = command.Message ?? "";
+        var content = BuildPairNegotiationTurnBody(hookEvent.Message, legacyMessage);
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            var written = await artifacts.WriteTurnArtifactAsync(
+                workspacePath,
+                new WriteTurnArtifactInput(
+                    conversation.Id,
+                    conversation.CurrentStep,
+                    hookEvent.ProfileId ?? "agent",
+                    content),
+                cancellationToken).ConfigureAwait(false);
+            return written.RelativePath;
+        }
+        catch (Exception ex)
+        {
+            await conversationStore.UpdateAsync(
+                workspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "failed"),
+                cancellationToken).ConfigureAwait(false);
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"Pair negotiation failed to write turn artifact: {ex.Message}",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return WaitingArtifactPath;
+        }
+    }
+
+    private async Task<string?> ValidatePairNegotiationArtifactAsync(
+        string workspacePath,
+        AgentConversation conversation,
+        AgentHookEvent hookEvent,
+        string artifactPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var validated = await artifacts.ValidateTurnArtifactPathAsync(
+                workspacePath,
+                conversation.Id,
+                artifactPath,
+                cancellationToken).ConfigureAwait(false);
+            return validated.RelativePath;
+        }
+        catch (Exception ex)
+        {
+            await conversationStore.UpdateAsync(
+                workspacePath,
+                conversation.Id,
+                new UpdateAgentConversationRequest(Status: "paused"),
+                cancellationToken).ConfigureAwait(false);
+            await timelineStore.AppendCommandErrorAsync(
+                workspacePath,
+                $"Artifact is not ready: {artifactPath}: {ex.Message}",
+                conversation.Id,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return WaitingArtifactPath;
+        }
     }
 
     private async Task<AgentConversation> ApplyManagerWorkflowCommandAsync(
@@ -971,7 +1134,10 @@ public sealed class AgentConversationOrchestrator(
             ]);
     }
 
-    private static string BuildInitialPairNegotiationPrompt(AgentConversation conversation)
+    private static string BuildInitialPairNegotiationPrompt(
+        AgentConversation conversation,
+        PairConversationArtifactPaths paths,
+        string outputPath)
     {
         return string.Join(
             "\r\n",
@@ -980,10 +1146,14 @@ public sealed class AgentConversationOrchestrator(
                 $"Conversation: {conversation.Id}",
                 $"Topic: {conversation.Topic}",
                 $"Participants: {string.Join(" <-> ", conversation.ParticipantProfileIds)}",
+                $"Brief: {paths.BriefPath}",
+                $"Memory: {paths.MemoryPath}",
+                $"Output: {outputPath}",
                 "Proposal version: 1",
-                "Give a concise proposal, then use one command:",
-                "<agenthub>{\"action\":\"continue\",\"proposal_version\":1,\"summary\":\"Short summary\",\"message\":\"Request review from the other participant\"}</agenthub>",
-                "<agenthub>{\"action\":\"accept\",\"proposal_version\":1,\"summary\":\"Accepted\"}</agenthub>"
+                "Read the brief, write your complete proposal to Output, update Memory, then print exactly one AgentHub control command as the final line.",
+                $"<agenthub>{{\"action\":\"continue\",\"proposal_version\":1,\"artifact_path\":\"{outputPath}\",\"summary\":\"Short summary\"}}</agenthub>",
+                $"<agenthub>{{\"action\":\"accept\",\"proposal_version\":1,\"artifact_path\":\"{outputPath}\",\"summary\":\"Accepted\"}}</agenthub>",
+                "Do not put the full proposal in a message field."
             ]);
     }
 
@@ -1053,51 +1223,69 @@ public sealed class AgentConversationOrchestrator(
             ]);
     }
 
-    private static string BuildPairNegotiationTurnPrompt(
+    private string BuildPairNegotiationTurnPrompt(
         AgentConversation conversation,
         AgentHookEvent hookEvent,
         AgentHubPairNegotiationCommand command,
-        string targetProfileId)
+        string targetProfileId,
+        string? previousArtifactPath)
     {
         var version = FormatProposalVersion(command.ProposalVersion);
+        var paths = artifacts.Paths(conversation.Id);
+        var outputPath = artifacts.TurnArtifactPath(conversation.Id, conversation.CurrentStep + 1, targetProfileId);
         return string.Join(
             "\r\n",
             [
                 "AgentHub pair negotiation conversation.",
                 $"Conversation: {conversation.Id}",
                 $"Topic: {conversation.Topic}",
+                $"Brief: {paths.BriefPath}",
+                $"Memory: {paths.MemoryPath}",
                 $"Previous speaker: {hookEvent.ProfileId ?? "agent"}",
+                $"Previous artifact: {previousArtifactPath ?? ""}",
                 $"Next speaker: {targetProfileId}",
                 $"Proposal version: {version}",
+                $"Output: {outputPath}",
                 string.IsNullOrWhiteSpace(command.Summary) ? "" : $"Summary: {command.Summary}",
                 string.IsNullOrWhiteSpace(command.ArtifactPath) ? "" : $"Artifact: {command.ArtifactPath}",
                 "",
-                command.Message ?? hookEvent.Message,
+                previousArtifactPath is null ? command.Message ?? hookEvent.Message : command.Message ?? "",
                 "",
-                "Respond with continue for a revision or accept when the proposal is good enough."
+                "Read the files above, write your complete response to Output, update Memory, then print exactly one AgentHub control command as the final line.",
+                $"<agenthub>{{\"action\":\"accept\",\"proposal_version\":{version},\"artifact_path\":\"{outputPath}\",\"summary\":\"Accepted\"}}</agenthub>",
+                $"<agenthub>{{\"action\":\"continue\",\"proposal_version\":{FormatProposalVersion(command.ProposalVersion + 1)},\"artifact_path\":\"{outputPath}\",\"summary\":\"Revision summary\"}}</agenthub>"
             ]);
     }
 
-    private static string BuildPairNegotiationAcceptancePrompt(
+    private string BuildPairNegotiationAcceptancePrompt(
         AgentConversation conversation,
         AgentHookEvent hookEvent,
         AgentHubPairNegotiationCommand command,
-        string targetProfileId)
+        string targetProfileId,
+        string? previousArtifactPath)
     {
         var version = FormatProposalVersion(command.ProposalVersion);
+        var paths = artifacts.Paths(conversation.Id);
+        var outputPath = artifacts.TurnArtifactPath(conversation.Id, conversation.CurrentStep + 1, targetProfileId);
         return string.Join(
             "\r\n",
             [
                 "AgentHub pair negotiation acceptance.",
                 $"Conversation: {conversation.Id}",
                 $"Topic: {conversation.Topic}",
+                $"Brief: {paths.BriefPath}",
+                $"Memory: {paths.MemoryPath}",
                 $"Accepted by: {hookEvent.ProfileId ?? "agent"}",
+                $"Previous artifact: {previousArtifactPath ?? ""}",
                 $"Next speaker: {targetProfileId}",
                 $"Proposal version: {version}",
+                $"Output: {outputPath}",
                 "",
                 command.Summary ?? "Accepted",
                 "",
-                "Accept the same proposal version to complete the negotiation, or continue with a revision."
+                "Read the files above, write your confirmation or revision to Output, update Memory, then print exactly one AgentHub control command as the final line.",
+                $"<agenthub>{{\"action\":\"accept\",\"proposal_version\":{version},\"artifact_path\":\"{outputPath}\",\"summary\":\"Accepted\"}}</agenthub>",
+                $"<agenthub>{{\"action\":\"continue\",\"proposal_version\":{FormatProposalVersion(command.ProposalVersion + 1)},\"artifact_path\":\"{outputPath}\",\"summary\":\"Revision summary\"}}</agenthub>"
             ]);
     }
 
@@ -1233,6 +1421,39 @@ public sealed class AgentConversationOrchestrator(
             ? command.Summary ?? command.Message ?? command.ArtifactPath ?? "updated"
             : command.Summary ?? command.ArtifactPath ?? "accepted";
         return $"[{command.Action} v{version}] {message}";
+    }
+
+    private static string BuildPairNegotiationTurnBody(string eventMessage, string commandMessage)
+    {
+        var visibleMessage = StripAgentHubCommandBlocks(eventMessage).Trim();
+        var reviewMessage = commandMessage.Trim();
+        if (string.IsNullOrWhiteSpace(visibleMessage))
+        {
+            return reviewMessage;
+        }
+
+        if (string.IsNullOrWhiteSpace(reviewMessage) ||
+            visibleMessage.Contains(reviewMessage, StringComparison.Ordinal))
+        {
+            return visibleMessage;
+        }
+
+        return string.Join(
+            "\r\n\r\n",
+            [
+                visibleMessage,
+                "Review request from the previous speaker:",
+                reviewMessage
+            ]);
+    }
+
+    private static string StripAgentHubCommandBlocks(string message)
+    {
+        return Regex.Replace(
+            message,
+            "<agenthub>[\\s\\S]*?</agenthub>",
+            "",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim();
     }
 
     private static string FormatProposalVersion(double proposalVersion)
