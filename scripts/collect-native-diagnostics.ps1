@@ -303,6 +303,12 @@ Add-Line
 Invoke-DiagnosticCommand "OS Version" "[Environment]::OSVersion.VersionString; Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture | Format-List"
 Invoke-DiagnosticCommand "Display Scaling" "Get-CimInstance Win32_DesktopMonitor | Select-Object Name,ScreenWidth,ScreenHeight | Format-Table -AutoSize; Get-ItemProperty 'HKCU:\Control Panel\Desktop' | Select-Object LogPixels,Win8DpiScaling | Format-List"
 
+Add-Line "## Terminal Environment"
+Add-Line
+Invoke-DiagnosticCommand "Windows Terminal Package" "Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName,Version,InstallLocation | Format-List; Get-AppxPackage -Name Microsoft.WindowsTerminalPreview -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName,Version,InstallLocation | Format-List"
+Invoke-DiagnosticCommand "Windows Terminal Settings" "`$settingsPaths = @((Join-Path `$env:LOCALAPPDATA 'Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'), (Join-Path `$env:LOCALAPPDATA 'Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json')); foreach (`$settingsPath in `$settingsPaths) { [pscustomobject]@{ Path = `$settingsPath; Exists = Test-Path -LiteralPath `$settingsPath -PathType Leaf } } | Format-Table -AutoSize"
+Invoke-DiagnosticCommand "Console Host Registry" "Get-ItemProperty 'HKCU:\Console' -ErrorAction SilentlyContinue | Select-Object ForceV2,LineWrap,QuickEdit,InsertMode,ScreenBufferSize,WindowSize,VirtualTerminalLevel,DelegationConsole,DelegationTerminal | Format-List; Get-ItemProperty 'HKCU:\Console\%%Startup' -ErrorAction SilentlyContinue | Select-Object DelegationConsole,DelegationTerminal | Format-List"
+
 Add-Line "## Input Devices"
 Add-Line
 Invoke-DiagnosticCommand "Pointer and HID Devices" "Get-PnpDevice -Class Mouse,Keyboard,HIDClass | Select-Object Status,Class,FriendlyName,InstanceId | Format-Table -AutoSize"

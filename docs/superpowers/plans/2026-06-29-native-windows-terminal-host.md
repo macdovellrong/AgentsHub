@@ -64,6 +64,7 @@
 - [x] native UI 和 `scripts/start-native.ps1 -Check` 的 Agent CLI 解析都优先使用 Windows native launcher（`.com`、`.exe`、`.bat`、`.cmd`），避免 npm 同时生成 `codex.ps1` 和 `codex.cmd` 时预检走到 PowerShell shim。
 - [x] native 诊断报告会独立记录 Codex native launcher 解析结果和 `--no-alt-screen` 探测结果，发布包模式下没有源码 `start-native.ps1` 时也能回传这些信息。
 - [x] native 发布包同时提供 `.bat` 和 `.ps1` 根入口；NAS/UNC 路径下可用 `.ps1` 启动或生成诊断，避免 `cmd.exe` 的 UNC 当前目录提示干扰报告。
+- [x] native 诊断报告会采集 Windows Terminal 包信息、settings 文件存在性和 Console Host 注册表关键项，方便对比不同电脑的滚动/终端环境差异。
 
 ## 后续任务
 

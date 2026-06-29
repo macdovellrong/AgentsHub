@@ -49,6 +49,9 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "git status --short --branch" in report
     assert "## Windows" in report
     assert "Win32_OperatingSystem" in report
+    assert "## Terminal Environment" in report
+    assert "Get-AppxPackage -Name Microsoft.WindowsTerminal" in report
+    assert "HKCU:\\Console" in report
     assert "## Input Devices" in report
     assert "Get-PnpDevice" in report
     assert "### Codex Native Launcher" in report
