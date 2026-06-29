@@ -44,6 +44,7 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert result.returncode == 0, result.stdout + result.stderr
     report = output.read_text(encoding="utf-8")
     assert "# AgentHub Native Diagnostics" in report
+    assert "- Execution mode: repository" in report
     assert "## Repository" in report
     assert "git status --short --branch" in report
     assert "## Windows" in report
@@ -96,6 +97,7 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
 
     assert result.returncode == 0, result.stdout + result.stderr
     report = output.read_text(encoding="utf-8")
+    assert "- Execution mode: published package" in report
     assert "## Published Package" in report
     assert "AgentHub.Native.App.exe" in report
     assert "start-agenthub-native.bat" in report

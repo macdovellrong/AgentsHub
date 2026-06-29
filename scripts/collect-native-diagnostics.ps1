@@ -88,12 +88,23 @@ $publishNativeCommand = ".\scripts\publish-native.ps1"
 $repoStartNativeScript = Join-Path $script:RepoRoot "scripts/start-native.ps1"
 $publishedApp = Join-Path $script:RepoRoot "AgentHub.Native.App.exe"
 $publishedStarter = Join-Path $script:RepoRoot "start-agenthub-native.bat"
+$executionMode = if (Test-Path -LiteralPath $repoStartNativeScript -PathType Leaf) {
+    "repository"
+}
+elseif ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
+    (Test-Path -LiteralPath $publishedStarter -PathType Leaf)) {
+    "published package"
+}
+else {
+    "standalone diagnostics"
+}
 
 $generatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
 Add-Line "# AgentHub Native Diagnostics"
 Add-Line
 Add-Line "- Generated at: $generatedAt"
+Add-Line "- Execution mode: $executionMode"
 Add-Line "- Repository: $script:RepoRoot"
 Add-Line "- Workspace: $Workspace"
 Add-Line "- Python command: $Python"
