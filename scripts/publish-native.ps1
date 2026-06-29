@@ -166,6 +166,7 @@ $powershellValidationPath = Join-Path $outputPath "validate-native-laptop.ps1"
 $powershellValidation = @'
 param(
     [string]$Workspace,
+    [string[]]$Agent = @("codex"),
     [string]$Python = "py -3.11",
     [string]$Output
 )
@@ -354,6 +355,58 @@ function Test-WorkspacePath {
     Write-Host "Workspace check passed: $resolvedPath"
 }
 
+function Split-AgentList {
+    param(
+        [string[]]$Agents
+    )
+
+    if ($null -eq $Agents) {
+        return @("codex")
+    }
+
+    $parsedAgents = @()
+    foreach ($rawAgent in $Agents) {
+        if ([string]::IsNullOrWhiteSpace($rawAgent)) {
+            continue
+        }
+
+        foreach ($agentName in ($rawAgent -split ",")) {
+            $trimmed = $agentName.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $normalized = $trimmed.ToLowerInvariant()
+                if ($normalized -eq "agents") {
+                    $parsedAgents += @("codex", "claude", "gemini")
+                }
+                else {
+                    $parsedAgents += $normalized
+                }
+            }
+        }
+    }
+
+    if ($parsedAgents.Count -eq 0) {
+        return @("codex")
+    }
+
+    return $parsedAgents
+}
+
+function Resolve-AgentCommandName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AgentName
+    )
+
+    switch ($AgentName.ToLowerInvariant()) {
+        "codex" { return "codex" }
+        "claude" { return "claude" }
+        "gemini" { return "gemini" }
+        default {
+            throw "Unsupported Agent '$AgentName'. Supported values: codex, claude, gemini, agents."
+        }
+    }
+}
+
 function Get-NativeAgentCommandCandidates {
     param(
         [Parameter(Mandatory = $true)]
@@ -412,6 +465,43 @@ function Resolve-NativeAgentCommand {
     }
 
     return $null
+}
+
+function Test-AgentCommands {
+    param(
+        [string[]]$Agents
+    )
+
+    foreach ($agentName in (Split-AgentList -Agents $Agents)) {
+        $commandName = Resolve-AgentCommandName -AgentName $agentName
+        $launcher = Resolve-NativeAgentCommand -CommandName $commandName
+        if ([string]::IsNullOrWhiteSpace($launcher)) {
+            throw "Agent CLI '$commandName' was not found as a native Windows launcher in PATH."
+        }
+
+        Write-Host "Agent CLI check passed: $agentName"
+        Write-Host "  $launcher"
+        Test-AgentCommandCapabilities -AgentName $agentName -CommandInvocation $launcher
+    }
+}
+
+function Test-AgentCommandCapabilities {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AgentName,
+        [Parameter(Mandatory = $true)]
+        [string]$CommandInvocation
+    )
+
+    if ($AgentName.ToLowerInvariant() -ne "codex") {
+        return
+    }
+
+    $probe = Invoke-NativeLauncherHelp -Launcher $CommandInvocation
+    $helpText = @($probe.Output) -join "`n"
+    if ($helpText -notlike "*--no-alt-screen*") {
+        throw "Codex CLI does not support --no-alt-screen. Update Codex CLI before launching AgentHub Native Codex sessions."
+    }
 }
 
 function Invoke-NativeLauncherHelp {
@@ -497,18 +587,8 @@ Invoke-ValidationStep "cmd host" {
     }
 }
 
-Invoke-ValidationStep "codex native launcher" {
-    $launcher = Resolve-NativeAgentCommand -CommandName "codex"
-    if ([string]::IsNullOrWhiteSpace($launcher)) {
-        throw "Codex native Windows launcher was not found in PATH."
-    }
-
-    Write-Host $launcher
-    $probe = Invoke-NativeLauncherHelp -Launcher $launcher
-    $helpText = @($probe.Output) -join "`n"
-    if ($helpText -notlike "*--no-alt-screen*") {
-        throw "Codex CLI does not support --no-alt-screen. Update Codex CLI before launching AgentHub Native Codex sessions."
-    }
+Invoke-ValidationStep "agent native launchers" {
+    Test-AgentCommands -Agents $Agent
 }
 
 Invoke-ValidationStep "hook python" {

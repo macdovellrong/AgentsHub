@@ -1,5 +1,6 @@
 param(
     [string]$Workspace,
+    [string[]]$Agent = @("codex"),
     [string]$Python = "py -3.11",
     [string]$Output
 )
@@ -94,13 +95,14 @@ if (-not (Test-Path -LiteralPath $diagnosticsScript -PathType Leaf)) {
 
 $script:ValidationSteps = @()
 $script:ValidationHadFailure = $false
+$agentLabel = $Agent -join ","
 
-Invoke-ValidationStep "powershell codex preflight" {
-    & $startNativeScript -Check -Workspace $Workspace -Shell powershell -Agent codex -Python $Python
+Invoke-ValidationStep "powershell $agentLabel preflight" {
+    & $startNativeScript -Check -Workspace $Workspace -Shell powershell -Agent $Agent -Python $Python
 }
 
-Invoke-ValidationStep "cmd codex preflight" {
-    & $startNativeScript -Check -Workspace $Workspace -Shell cmd -Agent codex -Python $Python
+Invoke-ValidationStep "cmd $agentLabel preflight" {
+    & $startNativeScript -Check -Workspace $Workspace -Shell cmd -Agent $Agent -Python $Python
 }
 
 Invoke-ValidationStep "scrolltest preflight" {

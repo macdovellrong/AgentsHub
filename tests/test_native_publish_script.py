@@ -43,3 +43,14 @@ def test_publish_native_script_embeds_workspace_path_validation() -> None:
     assert 'Invoke-ValidationStep "workspace path"' in script
     assert "Test-WorkspacePath" in script
     assert "Workspace path was not found or is not a directory" in script
+
+
+def test_publish_native_script_embeds_agent_selection_validation() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
+
+    assert '[string[]]$Agent = @("codex")' in script
+    assert '$normalized -eq "agents"' in script
+    assert '$parsedAgents += @("codex", "claude", "gemini")' in script
+    assert '"claude" { return "claude" }' in script
+    assert '"gemini" { return "gemini" }' in script
+    assert 'Invoke-ValidationStep "agent native launchers"' in script

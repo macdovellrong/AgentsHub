@@ -33,9 +33,10 @@ git status --short --branch
 
 ```powershell
 .\scripts\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\scripts\validate-native-laptop.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
-源码版脚本会依次执行 PowerShell/Codex 预检、cmd/Codex 预检、`scrolltest` 预检，并生成诊断报告。发布包版脚本位于 `artifacts/native/win-x64/validate-native-laptop.ps1`，会检查包文件、workspace 路径、PowerShell/cmd host、Codex native launcher、`--no-alt-screen` 和 hook Python，再生成诊断报告。即使某个预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
+源码版脚本默认验证 Codex；传入 `-Agent agents` 时会验证 Codex、Claude、Gemini。源码版会依次执行 PowerShell/Agent 预检、cmd/Agent 预检、`scrolltest` 预检，并生成诊断报告。发布包版脚本位于 `artifacts/native/win-x64/validate-native-laptop.ps1`，会检查包文件、workspace 路径、PowerShell/cmd host、所选 Agent native launcher、Codex `--no-alt-screen` 和 hook Python，再生成诊断报告。即使某个预检失败，也会继续生成报告；最近一次报告路径会写入 `artifacts/native-diagnostics/latest-laptop-validation.txt`。
 
 从仓库根目录执行：
 
@@ -127,6 +128,7 @@ py -3.11 --version
 .\artifacts\native\win-x64\collect-native-diagnostics.bat -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
+.\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 ```
 
 需要确认发布目录存在：

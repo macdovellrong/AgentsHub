@@ -72,6 +72,7 @@
 - [x] native UI 诊断完成后会更新 `diagnostics/latest-diagnostics.txt`，方便定位最近一次报告。
 - [x] 提供 `scripts/validate-native-laptop.ps1`，一键执行笔记本 Codex/scrolltest 预检并生成诊断报告。
 - [x] native 发布包提供 `validate-native-laptop.ps1/.bat`，目标电脑不依赖源码仓库也能检查包文件、workspace 路径、Codex、hook Python，并生成验证指针和诊断报告。
+- [x] native 验证脚本支持 `-Agent agents`，可选覆盖 Codex、Claude、Gemini 三类托管 Agent 的 CLI 预检。
 
 ## 后续任务
 

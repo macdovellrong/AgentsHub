@@ -145,3 +145,11 @@ def test_validate_native_laptop_accepts_provider_qualified_output_path(tmp_path:
     assert output.exists()
     pointer_text = (output.parent / "latest-laptop-validation.txt").read_text(encoding="utf-8")
     assert f"report: {output}" in pointer_text
+
+
+def test_validate_native_laptop_supports_agent_selection() -> None:
+    script = (REPO_ROOT / "scripts" / "validate-native-laptop.ps1").read_text(encoding="utf-8")
+
+    assert '[string[]]$Agent = @("codex")' in script
+    assert "-Agent $Agent" in script
+    assert '$agentLabel = $Agent -join ","' in script
