@@ -133,6 +133,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
 17. delegated agent 的 hook 回传会从最近的 task-plan 分派事件推断 plan/task；hook payload 也可以显式带 `planId/taskId` 或 `plan_id/task_id`，HTTP header 也兼容 `X-AgentHub-Plan-Id` / `X-AgentHub-Task-Id`。匹配成功时会写入 `artifacts/*.md`，把任务状态置为 `review`，并把 observation prompt 投递回 manager session；manager 不在线时会记录带 task/artifact 上下文的 `delivery_failed`；显式 plan 无法匹配任务时会记录 `unmatched_hook`。task-plan 执行快照事件会保留触发它们的 Collaboration `agent_output` source event id；同一个 source event id 的重复 hook completion 会被忽略，方便后续追踪和去重。当前 workspace 的 hook 处理完成后会刷新 timeline、Task Plans 列表和当前 plan detail。
 18. WPF hook pipeline 会优先识别 running conversation 输出；manager supervisor hook 会绕过通用 command dispatcher，交给 conversation orchestrator 投递 delegated prompt 或更新 conversation 状态，避免同一条 `send` 命令被通用 dispatcher 和 conversation orchestrator 重复发送。manager participant hook 如果显式带 `conversationId/taskId`，或可以从最近一次 delegated event 的 `conversationId/taskId/sessionId` 推断上下文，会生成 observation prompt 投回 supervisor。roundtable hook 会按 conversation 的 participant 顺序投递给下一位，到达 `maxSteps` 后完成 conversation。pair negotiation hook 会按两名参与者轮转投递 `continue`，双方接受同一 `proposal_version` 时完成 conversation，达到 `maxSteps` 时暂停。
 19. 可以用 Interrupt 向当前 session 发送 Ctrl+C 而不关闭终端；用 Stop selected 停止当前 session，也可以用 Stop all 停止全部 session。
+20. 顶部 `Open data` 会打开本机 native 数据目录，方便查看 `workspaces.json`、`settings.json`、`events/` 和 `hooks.jsonl` 等诊断文件。
 
 workspace 列表保存位置：
 

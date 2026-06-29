@@ -604,6 +604,25 @@ public partial class MainWindow : Window
         StatusTextBlock.Text = $"Opened task plan folder: {selected.Plan.Title}";
     }
 
+    private void OpenNativeDataFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var folderPath = NativeDiagnosticsPaths.ResolveDataDirectory();
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = folderPath,
+                UseShellExecute = true
+            });
+            StatusTextBlock.Text = "Opened native data folder";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Open native data folder failed: {ex.Message}";
+        }
+    }
+
     private async void TaskPlanListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         await ReloadSelectedTaskPlanDetailsAsync();
@@ -808,15 +827,12 @@ public partial class MainWindow : Window
 
     private static string ResolveHookLogPath()
     {
-        return Path.Combine(ResolveNativeDataDirectory(), "hooks.jsonl");
+        return NativeDiagnosticsPaths.ResolveHookLogPath(ResolveNativeDataDirectory());
     }
 
     private static string ResolveNativeDataDirectory()
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return string.IsNullOrWhiteSpace(appData)
-            ? Path.Combine(AppContext.BaseDirectory, ".agenthub-native")
-            : Path.Combine(appData, "AgentHub", "Native");
+        return NativeDiagnosticsPaths.ResolveDataDirectory();
     }
 
     private static string ResolveHookScriptsDirectory()

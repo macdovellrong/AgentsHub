@@ -213,6 +213,12 @@
 
             <Border Grid.Row="0" Background="#151F2A" BorderBrush="#2E4055" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                 <DockPanel>
+                    <Button DockPanel.Dock="Right"
+                            Content="Open data"
+                            Click="OpenNativeDataFolder_Click"
+                            MinHeight="28"
+                            MinWidth="82"
+                            Margin="10,0,0,0" />
                     <TextBlock x:Name="CurrentSessionTextBlock"
                                Text="No session"
                                Foreground="#F2F6FA"

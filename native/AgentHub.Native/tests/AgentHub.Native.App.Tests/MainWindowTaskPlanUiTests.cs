@@ -146,6 +146,19 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("ManualUserMessageFactory.Create(", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Main_window_exposes_native_data_folder_diagnostics()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Content=\"Open data\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"OpenNativeDataFolder_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("OpenNativeDataFolder_Click", code, StringComparison.Ordinal);
+        Assert.Contains("NativeDiagnosticsPaths.ResolveDataDirectory()", code, StringComparison.Ordinal);
+        Assert.Contains("Opened native data folder", code, StringComparison.Ordinal);
+    }
+
     private static string FindSourceFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
