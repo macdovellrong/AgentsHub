@@ -233,6 +233,61 @@ function Add-CodexNoAltScreenProbe {
     Add-Line
 }
 
+function Add-NativeTerminalBackendDiagnostics {
+    $nativeAppProject = Join-Path $script:RepoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
+    $nativeAppProjectCommand = @"
+`$projectPath = $(Quote-PS $nativeAppProject)
+if (Test-Path -LiteralPath `$projectPath -PathType Leaf) {
+    [xml]`$project = Get-Content -LiteralPath `$projectPath
+    [pscustomobject]@{
+        Project = `$projectPath
+        TargetFramework = (`$project.Project.PropertyGroup | ForEach-Object { `$_.TargetFramework } | Where-Object { `$_ } | Select-Object -First 1)
+        RuntimeIdentifier = (`$project.Project.PropertyGroup | ForEach-Object { `$_.RuntimeIdentifier } | Where-Object { `$_ } | Select-Object -First 1)
+        UseWPF = (`$project.Project.PropertyGroup | ForEach-Object { `$_.UseWPF } | Where-Object { `$_ } | Select-Object -First 1)
+    } | Format-List
+    `$project.Project.ItemGroup.PackageReference |
+        ForEach-Object {
+            [pscustomobject]@{
+                Include = `$_.Include
+                Version = `$_.Version
+            }
+        } |
+        Format-Table -AutoSize
+}
+else {
+    "AgentHub.Native.App.csproj not found: `$projectPath"
+}
+"@
+
+    $publishedDeps = Join-Path $script:RepoRoot "AgentHub.Native.App.deps.json"
+    $publishedDepsCommand = @"
+`$depsPath = $(Quote-PS $publishedDeps)
+if (Test-Path -LiteralPath `$depsPath -PathType Leaf) {
+    "AgentHub.Native.App.deps.json: `$depsPath"
+    `$patterns = @(
+        'EasyWindowsTerminalControl',
+        'Microsoft.Terminal',
+        'Microsoft.WindowsAppSDK',
+        'Microsoft.Windows.CsWinRT'
+    )
+    foreach (`$pattern in `$patterns) {
+        "Pattern: `$pattern"
+        Select-String -LiteralPath `$depsPath -Pattern `$pattern -SimpleMatch |
+            Select-Object LineNumber,Line |
+            Format-Table -AutoSize -Wrap
+    }
+}
+else {
+    "AgentHub.Native.App.deps.json not found: `$depsPath"
+}
+"@
+
+    Add-Line "## Native Terminal Backend"
+    Add-Line
+    Invoke-DiagnosticCommand "Native App Project" $nativeAppProjectCommand
+    Invoke-DiagnosticCommand "Published Dependency Manifest" $publishedDepsCommand
+}
+
 function Resolve-DefaultOutputPath {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     return Join-Path $script:RepoRoot "artifacts/native-diagnostics/$timestamp.md"
@@ -308,6 +363,8 @@ Add-Line
 Invoke-DiagnosticCommand "Windows Terminal Package" "Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName,Version,InstallLocation | Format-List; Get-AppxPackage -Name Microsoft.WindowsTerminalPreview -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName,Version,InstallLocation | Format-List"
 Invoke-DiagnosticCommand "Windows Terminal Settings" "`$settingsPaths = @((Join-Path `$env:LOCALAPPDATA 'Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'), (Join-Path `$env:LOCALAPPDATA 'Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json')); foreach (`$settingsPath in `$settingsPaths) { [pscustomobject]@{ Path = `$settingsPath; Exists = Test-Path -LiteralPath `$settingsPath -PathType Leaf } } | Format-Table -AutoSize"
 Invoke-DiagnosticCommand "Console Host Registry" "Get-ItemProperty 'HKCU:\Console' -ErrorAction SilentlyContinue | Select-Object ForceV2,LineWrap,QuickEdit,InsertMode,ScreenBufferSize,WindowSize,VirtualTerminalLevel,DelegationConsole,DelegationTerminal | Format-List; Get-ItemProperty 'HKCU:\Console\%%Startup' -ErrorAction SilentlyContinue | Select-Object DelegationConsole,DelegationTerminal | Format-List"
+
+Add-NativeTerminalBackendDiagnostics
 
 Add-Line "## Input Devices"
 Add-Line

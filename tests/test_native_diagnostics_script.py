@@ -52,6 +52,10 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "## Terminal Environment" in report
     assert "Get-AppxPackage -Name Microsoft.WindowsTerminal" in report
     assert "HKCU:\\Console" in report
+    assert "## Native Terminal Backend" in report
+    assert "AgentHub.Native.App.csproj" in report
+    assert "TargetFramework" in report
+    assert "EasyWindowsTerminalControl" in report
     assert "## Input Devices" in report
     assert "Get-PnpDevice" in report
     assert "Win32_PointingDevice" in report
@@ -116,6 +120,9 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "collect-native-diagnostics.ps1" in report
     assert "scripts\\collect-native-diagnostics.ps1" in report
     assert "agenthub_hook_common.py" in report
+    assert "## Native Terminal Backend" in report
+    assert "Published Dependency Manifest" in report
+    assert "AgentHub.Native.App.deps.json" in report
     assert "### Codex Native Launcher" in report
     assert "### Codex No Alt Screen Probe" in report
 
