@@ -8,4 +8,6 @@ public sealed record AgentHookEvent(
     string? RunId,
     string? Source,
     string? PlanId = null,
-    string? TaskId = null);
+    string? TaskId = null,
+    string? ConversationId = null,
+    string? TeamId = null);

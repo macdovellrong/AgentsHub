@@ -44,7 +44,11 @@ public sealed class CollaborationEventStore(string rootDirectory)
             null,
             hookEvent.SessionId,
             hookEvent.RunId,
-            hookEvent.Source);
+            hookEvent.Source,
+            hookEvent.PlanId,
+            hookEvent.TaskId,
+            hookEvent.ConversationId,
+            hookEvent.TeamId);
         return AppendAsync(collaborationEvent, cancellationToken);
     }
 

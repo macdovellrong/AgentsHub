@@ -40,6 +40,7 @@
 - [x] native hook processor 会把 Collaboration `agent_output` 事件 id 透传到 task-plan 执行快照事件，方便后续追踪和去重。
 - [x] native task-plan hook completion 会按 `sourceEventId` 幂等处理重复回传，避免重复写 artifact 或重复通知 manager。
 - [x] native hook receiver 支持从 payload 读取显式 `planId/taskId`、`plan_id/task_id`，也兼容 `X-AgentHub-Plan-Id` / `X-AgentHub-Task-Id` header，并在显式 plan 无法匹配 task 时记录 `unmatched_hook`。
+- [x] native hook receiver/timeline 支持 `conversationId/conversation_id`、`teamId/team_id` 及对应 header，并把 conversation/task/team/plan 元数据写入 Collaboration event。
 - [x] provider-neutral `claim_task` / `complete_task` 会同步更新已有 legacy task log。
 - [x] provider-neutral `ask_user` / `done` workflow 命令会进入 Collaboration timeline。
 - [x] provider-neutral `continue` / `accept` pair negotiation 命令会进入 Collaboration timeline；带 `message_to` 时会直接转发给目标 profile 并记录 default mailbox。当前不执行完整 pair negotiation 状态机。

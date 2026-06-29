@@ -25,6 +25,8 @@ public sealed class AgentHookReceiverTests
                 agenthubSessionId = "codex-1",
                 runId = "run-1",
                 source = "codex",
+                conversationId = "conversation-1",
+                teamId = "team-1",
                 planId = "P-001",
                 taskId = "T-001"
             })
@@ -41,6 +43,8 @@ public sealed class AgentHookReceiverTests
         Assert.Equal("codex-1", hookEvent.SessionId);
         Assert.Equal("run-1", hookEvent.RunId);
         Assert.Equal("codex", hookEvent.Source);
+        Assert.Equal("conversation-1", hookEvent.ConversationId);
+        Assert.Equal("team-1", hookEvent.TeamId);
         Assert.Equal("P-001", hookEvent.PlanId);
         Assert.Equal("T-001", hookEvent.TaskId);
     }
@@ -61,6 +65,8 @@ public sealed class AgentHookReceiverTests
                 workspace = @"V:\OrderManager",
                 message = "done",
                 profileId = "codex",
+                conversation_id = "conversation-2",
+                team_id = "team-2",
                 plan_id = "P-002",
                 task_id = "T-002"
             })
@@ -71,6 +77,8 @@ public sealed class AgentHookReceiverTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var hookEvent = Assert.Single(received);
+        Assert.Equal("conversation-2", hookEvent.ConversationId);
+        Assert.Equal("team-2", hookEvent.TeamId);
         Assert.Equal("P-002", hookEvent.PlanId);
         Assert.Equal("T-002", hookEvent.TaskId);
     }
@@ -94,6 +102,8 @@ public sealed class AgentHookReceiverTests
             })
         };
         request.Headers.Add("X-AgentHub-Token", "token-1");
+        request.Headers.Add("X-AgentHub-Conversation-Id", "conversation-3");
+        request.Headers.Add("X-AgentHub-Team-Id", "team-3");
         request.Headers.Add("X-AgentHub-Plan-Id", "P-003");
         request.Headers.Add("X-AgentHub-Task-Id", "T-003");
 
@@ -101,6 +111,8 @@ public sealed class AgentHookReceiverTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var hookEvent = Assert.Single(received);
+        Assert.Equal("conversation-3", hookEvent.ConversationId);
+        Assert.Equal("team-3", hookEvent.TeamId);
         Assert.Equal("P-003", hookEvent.PlanId);
         Assert.Equal("T-003", hookEvent.TaskId);
     }

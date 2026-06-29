@@ -288,7 +288,9 @@ public sealed class AgentHookReceiver : IAsyncDisposable
             OptionalString(root, "runId"),
             OptionalString(root, "source"),
             OptionalString(root, "planId") ?? OptionalString(root, "plan_id") ?? HeaderString(headers, "X-AgentHub-Plan-Id"),
-            OptionalString(root, "taskId") ?? OptionalString(root, "task_id") ?? HeaderString(headers, "X-AgentHub-Task-Id"));
+            OptionalString(root, "taskId") ?? OptionalString(root, "task_id") ?? HeaderString(headers, "X-AgentHub-Task-Id"),
+            OptionalString(root, "conversationId") ?? OptionalString(root, "conversation_id") ?? HeaderString(headers, "X-AgentHub-Conversation-Id"),
+            OptionalString(root, "teamId") ?? OptionalString(root, "team_id") ?? HeaderString(headers, "X-AgentHub-Team-Id"));
     }
 
     private static string RequiredString(JsonElement root, string propertyName)

@@ -10,4 +10,8 @@ public sealed record CollaborationEvent(
     string? TargetProfileId,
     string? SessionId,
     string? RunId,
-    string? Source);
+    string? Source,
+    string? PlanId = null,
+    string? TaskId = null,
+    string? ConversationId = null,
+    string? TeamId = null);

@@ -23,7 +23,11 @@ public sealed class CollaborationEventStoreTests : IDisposable
             "codex",
             "codex-1",
             "run-1",
-            "codex"));
+            "codex",
+            "P-001",
+            "T-001",
+            "conversation-1",
+            "team-1"));
 
         var events = await store.ListAsync(@"v:\OrderManager\");
 
@@ -34,6 +38,10 @@ public sealed class CollaborationEventStoreTests : IDisposable
         Assert.Equal(CollaborationEventKind.AgentOutput, events[1].Kind);
         Assert.Equal("codex", events[1].ProfileId);
         Assert.Equal("done", events[1].Message);
+        Assert.Equal("P-001", events[1].PlanId);
+        Assert.Equal("T-001", events[1].TaskId);
+        Assert.Equal("conversation-1", events[1].ConversationId);
+        Assert.Equal("team-1", events[1].TeamId);
     }
 
     [Fact]
