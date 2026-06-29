@@ -123,6 +123,12 @@ py -3.11 --version
 
 发布版 `start-agenthub-native.bat` 和 `start-agenthub-native.ps1` 都会直接调用 native exe，并会把 `AGENTHUB_HOOKS_SOURCE_DIR` 固定为发布包内的 `scripts/hooks`。native exe 同时兼容 `-Workspace/-Agent/-Resume/-Python` 和 `--workspace/--agent/--resume/--python` 两种参数风格。发布包位于 NAS/UNC 路径时，优先使用 `.ps1` 入口可以避开 `cmd.exe` 的 UNC 当前目录提示。
 
+发布目录也提供 `write-native-validation-report.bat/.ps1`。如果 UI 没有打开，也可以直接生成手工验证清单：
+
+```powershell
+.\artifacts\native\win-x64\write-native-validation-report.ps1 -Workspace V:\OrderManager
+```
+
 发布目录也可以直接生成诊断报告：
 
 ```powershell
@@ -131,6 +137,7 @@ py -3.11 --version
 .\artifacts\native\win-x64\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 .\artifacts\native\win-x64\validate-native-laptop.ps1 -Workspace V:\OrderManager -Agent agents -Python "py -3.11"
+.\artifacts\native\win-x64\write-native-validation-report.ps1 -Workspace V:\OrderManager
 ```
 
 需要确认发布目录存在：
@@ -141,7 +148,10 @@ artifacts/native/win-x64/start-agenthub-native.bat
 artifacts/native/win-x64/start-agenthub-native.ps1
 artifacts/native/win-x64/collect-native-diagnostics.bat
 artifacts/native/win-x64/collect-native-diagnostics.ps1
+artifacts/native/win-x64/write-native-validation-report.bat
+artifacts/native/win-x64/write-native-validation-report.ps1
 artifacts/native/win-x64/scripts/collect-native-diagnostics.ps1
+artifacts/native/win-x64/scripts/write-native-validation-report.ps1
 artifacts/native/win-x64/scripts/hooks/agenthub_hook_common.py
 artifacts/native/win-x64/scripts/hooks/agenthub_codex_stop.py
 artifacts/native/win-x64/scripts/hooks/agenthub_claude_stop.py

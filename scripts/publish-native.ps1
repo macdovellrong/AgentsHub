@@ -13,6 +13,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeProject = Join-Path $repoRoot "native/AgentHub.Native/src/AgentHub.Native.App/AgentHub.Native.App.csproj"
 $hookSource = Join-Path $repoRoot "scripts/hooks"
 $diagnosticsScript = Join-Path $repoRoot "scripts/collect-native-diagnostics.ps1"
+$manualValidationScript = Join-Path $repoRoot "scripts/write-native-validation-report.ps1"
 
 if (-not (Test-Path -LiteralPath $nativeProject)) {
     throw "AgentHub Native project not found: $nativeProject"
@@ -24,6 +25,10 @@ if (-not (Test-Path -LiteralPath (Join-Path $hookSource "agenthub_hook_common.py
 
 if (-not (Test-Path -LiteralPath $diagnosticsScript)) {
     throw "AgentHub native diagnostics script not found: $diagnosticsScript"
+}
+
+if (-not (Test-Path -LiteralPath $manualValidationScript)) {
+    throw "AgentHub native manual validation script not found: $manualValidationScript"
 }
 
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
@@ -45,6 +50,7 @@ if ($Check) {
     Write-Host "Project: $nativeProject"
     Write-Host "Hooks: $hookSource"
     Write-Host "Diagnostics: $diagnosticsScript"
+    Write-Host "Manual validation: $manualValidationScript"
     Write-Host "Output: $outputPath"
     Write-Host "Self-contained: $selfContained"
     exit 0
@@ -79,6 +85,7 @@ Get-ChildItem -LiteralPath $publishedHooks -Recurse -File -ErrorAction SilentlyC
 $publishedScripts = Join-Path $outputPath "scripts"
 New-Item -ItemType Directory -Force -Path $publishedScripts | Out-Null
 Copy-Item -LiteralPath $diagnosticsScript -Destination (Join-Path $publishedScripts "collect-native-diagnostics.ps1") -Force
+Copy-Item -LiteralPath $manualValidationScript -Destination (Join-Path $publishedScripts "write-native-validation-report.ps1") -Force
 
 $starterPath = Join-Path $outputPath "start-agenthub-native.bat"
 $starter = @"
@@ -161,6 +168,45 @@ if ($exitCode -ne 0) {
 exit $exitCode
 '@
 Set-Content -LiteralPath $powershellDiagnosticsStarterPath -Value $powershellDiagnosticsStarter -Encoding UTF8
+
+$manualValidationStarterPath = Join-Path $outputPath "write-native-validation-report.bat"
+$manualValidationStarter = @"
+@echo off
+setlocal
+pushd "%~dp0" || exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\write-native-validation-report.ps1" %*
+set "AGENTHUB_NATIVE_MANUAL_VALIDATION_EXIT_CODE=%ERRORLEVEL%"
+popd
+if not "%AGENTHUB_NATIVE_MANUAL_VALIDATION_EXIT_CODE%"=="0" (
+  echo AgentHub Native manual validation exited with code %AGENTHUB_NATIVE_MANUAL_VALIDATION_EXIT_CODE%.
+  pause
+)
+exit /b %AGENTHUB_NATIVE_MANUAL_VALIDATION_EXIT_CODE%
+"@
+Set-Content -LiteralPath $manualValidationStarterPath -Value $manualValidationStarter -Encoding ASCII
+
+$powershellManualValidationStarterPath = Join-Path $outputPath "write-native-validation-report.ps1"
+$powershellManualValidationStarter = @'
+$ErrorActionPreference = "Stop"
+$packageRoot = $PSScriptRoot
+Push-Location -LiteralPath $packageRoot
+try {
+    & (Join-Path $packageRoot "scripts/write-native-validation-report.ps1") @args
+    $exitCode = $LASTEXITCODE
+    if ($null -eq $exitCode) {
+        $exitCode = 0
+    }
+}
+finally {
+    Pop-Location
+}
+
+if ($exitCode -ne 0) {
+    Write-Host "AgentHub Native manual validation exited with code $exitCode."
+}
+exit $exitCode
+'@
+Set-Content -LiteralPath $powershellManualValidationStarterPath -Value $powershellManualValidationStarter -Encoding UTF8
 
 $powershellValidationPath = Join-Path $outputPath "validate-native-laptop.ps1"
 $powershellValidation = @'
@@ -555,6 +601,9 @@ Invoke-ValidationStep "published package files" {
         "validate-native-laptop.bat",
         "validate-native-laptop.ps1",
         "scripts/collect-native-diagnostics.ps1",
+        "write-native-validation-report.bat",
+        "write-native-validation-report.ps1",
+        "scripts/write-native-validation-report.ps1",
         "scripts/hooks/agenthub_hook_common.py",
         "scripts/hooks/agenthub_codex_stop.py",
         "scripts/hooks/agenthub_claude_stop.py",
@@ -637,5 +686,7 @@ Write-Host "Run: $starterPath -Workspace V:\OrderManager -Agent codex -Resume"
 Write-Host "Run without cmd: $powershellStarterPath -Workspace V:\OrderManager -Agent codex -Resume"
 Write-Host "Diagnostics: $diagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
 Write-Host "Diagnostics without cmd: $powershellDiagnosticsStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
+Write-Host "Manual validation: $manualValidationStarterPath -Workspace V:\OrderManager"
+Write-Host "Manual validation without cmd: $powershellManualValidationStarterPath -Workspace V:\OrderManager"
 Write-Host "Validation: $validationStarterPath -Workspace V:\OrderManager -Python `"py -3.11`""
 Write-Host "Validation without cmd: $powershellValidationPath -Workspace V:\OrderManager -Python `"py -3.11`""

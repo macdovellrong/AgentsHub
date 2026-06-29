@@ -75,6 +75,7 @@
 - [x] native 验证脚本支持 `-Agent agents`，可选覆盖 Codex、Claude、Gemini 三类托管 Agent 的 CLI 预检。
 - [x] native 诊断脚本和 UI `Run diagnostics` 支持传递 Agent 选择；UI 默认按 `agents` 采集 Codex、Claude、Gemini 预检信息。
 - [x] native UI 提供 `Write validation`，可生成带 workspace、诊断指针、hook log、session 列表和人工勾选项的手工验证报告。
+- [x] native 发布包提供 `write-native-validation-report.ps1/.bat`，无需打开 UI 也能生成同格式手工验证清单。
 
 ## 后续任务
 

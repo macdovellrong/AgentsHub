@@ -79,6 +79,9 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     (published_root / "start-agenthub-native.ps1").write_text("Write-Output start\n", encoding="utf-8")
     (published_root / "collect-native-diagnostics.bat").write_text("@echo off\n", encoding="ascii")
     (published_root / "collect-native-diagnostics.ps1").write_text("Write-Output diagnostics\n", encoding="utf-8")
+    (published_root / "write-native-validation-report.bat").write_text("@echo off\n", encoding="ascii")
+    (published_root / "write-native-validation-report.ps1").write_text("Write-Output manual\n", encoding="utf-8")
+    (scripts_dir / "write-native-validation-report.ps1").write_text("Write-Output manual\n", encoding="utf-8")
     for script_name in [
         "agenthub_hook_common.py",
         "agenthub_codex_stop.py",
@@ -120,7 +123,10 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "collect-native-diagnostics.ps1" in report
     assert "validate-native-laptop.bat" in report
     assert "validate-native-laptop.ps1" in report
+    assert "write-native-validation-report.bat" in report
+    assert "write-native-validation-report.ps1" in report
     assert "scripts\\collect-native-diagnostics.ps1" in report
+    assert "scripts\\write-native-validation-report.ps1" in report
     assert "agenthub_hook_common.py" in report
     assert "## Native Terminal Backend" in report
     assert "Published Dependency Manifest" in report
