@@ -7,4 +7,6 @@ public sealed record AgentHubPairNegotiationCommand(
     string? ArtifactPath,
     string? MessageTo,
     string? Summary,
-    string? Stance);
+    string? Stance,
+    string? DispatchMessage = null,
+    string? SessionId = null);

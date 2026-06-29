@@ -96,6 +96,19 @@ public sealed class CollaborationEventStore(string rootDirectory)
 
         foreach (var command in result.PairNegotiationCommands)
         {
+            if (!string.IsNullOrWhiteSpace(command.MessageTo) &&
+                !string.IsNullOrWhiteSpace(command.DispatchMessage) &&
+                !string.IsNullOrWhiteSpace(command.SessionId))
+            {
+                events.Add(await AppendUserMessageAsync(
+                    new CollaborationUserMessage(
+                        workspacePath,
+                        "agenthub",
+                        command.MessageTo,
+                        command.DispatchMessage),
+                    cancellationToken).ConfigureAwait(false));
+            }
+
             events.Add(await AppendUserMessageAsync(
                 new CollaborationUserMessage(
                     workspacePath,

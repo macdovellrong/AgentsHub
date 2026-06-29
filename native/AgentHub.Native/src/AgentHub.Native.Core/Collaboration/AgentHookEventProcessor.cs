@@ -91,6 +91,56 @@ public sealed class AgentHookEventProcessor(
                     null),
                 cancellationToken).ConfigureAwait(false);
         }
+
+        foreach (var command in dispatchResult.PairNegotiationCommands)
+        {
+            if (string.IsNullOrWhiteSpace(command.MessageTo) ||
+                string.IsNullOrWhiteSpace(command.DispatchMessage) ||
+                string.IsNullOrWhiteSpace(command.SessionId))
+            {
+                continue;
+            }
+
+            await store.AppendMailboxAsync(
+                hookEvent.Workspace,
+                new AgentTeamMailboxRequest(
+                    "default",
+                    command.Action,
+                    fromProfileId,
+                    command.MessageTo,
+                    command.DispatchMessage,
+                    null,
+                    null,
+                    "sent",
+                    command.SessionId,
+                    null),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var error in dispatchResult.DispatchErrors)
+        {
+            if (error.PairNegotiationCommand is null ||
+                string.IsNullOrWhiteSpace(error.PairNegotiationCommand.MessageTo) ||
+                string.IsNullOrWhiteSpace(error.PairNegotiationCommand.DispatchMessage))
+            {
+                continue;
+            }
+
+            await store.AppendMailboxAsync(
+                hookEvent.Workspace,
+                new AgentTeamMailboxRequest(
+                    "default",
+                    error.PairNegotiationCommand.Action,
+                    fromProfileId,
+                    error.PairNegotiationCommand.MessageTo,
+                    error.PairNegotiationCommand.DispatchMessage,
+                    null,
+                    null,
+                    "failed",
+                    null,
+                    error.Message),
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static string TeamIdOrDefault(string? teamId)

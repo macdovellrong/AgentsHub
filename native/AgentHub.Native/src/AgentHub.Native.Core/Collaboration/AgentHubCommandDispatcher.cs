@@ -10,6 +10,7 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
         var parsed = AgentHubCommandParser.Parse(text);
         var sentCount = 0;
         var sentMessages = new List<AgentHubSendMessageCommand>();
+        var pairNegotiationCommands = new List<AgentHubPairNegotiationCommand>();
         var dispatchErrors = new List<AgentHubCommandDispatchError>();
 
         foreach (var command in parsed.SendMessages)
@@ -33,15 +34,70 @@ public sealed class AgentHubCommandDispatcher(AgentMessageRouter messageRouter)
             }
         }
 
+        foreach (var command in parsed.PairNegotiationCommands)
+        {
+            var routedCommand = command;
+            if (!string.IsNullOrWhiteSpace(command.MessageTo))
+            {
+                var dispatchMessage = FormatPairNegotiationDispatchMessage(command);
+                routedCommand = command with { DispatchMessage = dispatchMessage };
+                var result = await messageRouter.TrySendToProfileDetailedAsync(
+                    workspacePath,
+                    command.MessageTo,
+                    dispatchMessage,
+                    cancellationToken).ConfigureAwait(false);
+                if (result.Sent)
+                {
+                    sentCount += 1;
+                    routedCommand = routedCommand with { SessionId = result.SessionId };
+                }
+                else
+                {
+                    dispatchErrors.Add(new AgentHubCommandDispatchError(
+                        command.MessageTo,
+                        FormatSendFailure(workspacePath, command.MessageTo, result.Status),
+                        PairNegotiationCommand: routedCommand));
+                }
+            }
+
+            pairNegotiationCommands.Add(routedCommand);
+        }
+
         return new AgentHubCommandDispatchResult(
             sentCount,
             sentMessages,
             parsed.PlanStatusCommands,
             parsed.TeamStatusCommands,
             parsed.WorkflowCommands,
-            parsed.PairNegotiationCommands,
+            pairNegotiationCommands,
             parsed.Errors,
             dispatchErrors);
+    }
+
+    private static string FormatPairNegotiationDispatchMessage(AgentHubPairNegotiationCommand command)
+    {
+        if (!string.IsNullOrWhiteSpace(command.Message))
+        {
+            return command.Message;
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.Summary) &&
+            !string.IsNullOrWhiteSpace(command.ArtifactPath))
+        {
+            return $"{command.Summary}\n\nArtifact: {command.ArtifactPath}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.Summary))
+        {
+            return command.Summary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.ArtifactPath))
+        {
+            return $"Please review artifact: {command.ArtifactPath}";
+        }
+
+        return $"Pair negotiation {command.Action} v{command.ProposalVersion:0.##}";
     }
 
     private static string FormatSendFailure(

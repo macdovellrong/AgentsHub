@@ -216,6 +216,41 @@ public sealed class CollaborationEventStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Appends_direct_pair_negotiation_handoff_as_target_message_and_timeline_message()
+    {
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var result = new AgentHubCommandDispatchResult(
+            1,
+            [],
+            [],
+            [],
+            [],
+            [
+                new AgentHubPairNegotiationCommand(
+                    "continue",
+                    2,
+                    "Please review version 2.",
+                    null,
+                    "codex",
+                    "Version 2 adds tests.",
+                    "revise",
+                    "Please review version 2.",
+                    "codex-1")
+            ],
+            [],
+            []);
+
+        await store.AppendForwardedAgentHubCommandsAsync(@"V:\OrderManager", result);
+
+        var events = await store.ListAsync(@"V:\OrderManager");
+        Assert.Equal(2, events.Count);
+        Assert.Equal("codex", events[0].TargetProfileId);
+        Assert.Equal("Please review version 2.", events[0].Message);
+        Assert.Equal("pair-negotiation", events[1].TargetProfileId);
+        Assert.Equal("[continue v2] Please review version 2.", events[1].Message);
+    }
+
+    [Fact]
     public async Task Appends_parse_and_dispatch_errors_as_agenthub_command_error_events()
     {
         var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));

@@ -100,6 +100,32 @@ public sealed class AgentHubCommandDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatches_pair_negotiation_continue_with_message_to_to_latest_target_profile_session()
+    {
+        var target = new RecordingTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", @"V:\OrderManager", DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+
+        var result = await dispatcher.DispatchAsync(
+            @"V:\OrderManager",
+            "<agenthub>{\"action\":\"continue\",\"proposal_version\":2,\"message\":\"Please review version 2.\",\"message_to\":\"codex\",\"summary\":\"Version 2 adds tests.\"}</agenthub>");
+
+        Assert.Equal(1, result.SentCount);
+        Assert.Empty(result.ParseErrors);
+        Assert.Empty(result.DispatchErrors);
+        Assert.Empty(result.SentMessages);
+        Assert.Equal(["Please review version 2.", "\r"], target.Writes);
+        var command = Assert.Single(result.PairNegotiationCommands);
+        Assert.Equal("continue", command.Action);
+        Assert.Equal("codex", command.MessageTo);
+        Assert.Equal("Please review version 2.", command.DispatchMessage);
+        Assert.Equal("codex-1", command.SessionId);
+    }
+
+    [Fact]
     public async Task Reports_dispatch_error_when_target_profile_is_offline()
     {
         var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(new AgentInputRouter(), new AgentSessionRegistry()));

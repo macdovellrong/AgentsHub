@@ -120,6 +120,39 @@ public sealed class AgentHookEventProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Records_direct_pair_negotiation_handoffs_to_mailbox()
+    {
+        var workspacePath = CreateWorkspace();
+        var store = new CollaborationEventStore(Path.Combine(tempRoot, "events"));
+        var teamStore = new AgentTeamStore();
+        var target = new RecordingTerminalSession("codex-1");
+        var inputRouter = new AgentInputRouter();
+        inputRouter.Register(target);
+        var registry = new AgentSessionRegistry();
+        registry.Register(new AgentSessionDescriptor("codex-1", "codex", workspacePath, DateTimeOffset.UtcNow));
+        var dispatcher = new AgentHubCommandDispatcher(new AgentMessageRouter(inputRouter, registry));
+        var processor = new AgentHookEventProcessor(store, dispatcher, teamStore);
+
+        await processor.ProcessAsync(new AgentHookEvent(
+            workspacePath,
+            "<agenthub>{\"action\":\"continue\",\"proposal_version\":2,\"message\":\"Please review version 2.\",\"message_to\":\"codex\",\"summary\":\"Version 2 adds tests.\"}</agenthub>",
+            "claude",
+            "claude-1",
+            "run-1",
+            "claude"));
+
+        Assert.Equal(["Please review version 2.", "\r"], target.Writes);
+        var mailbox = await teamStore.ListMailboxAsync(workspacePath, "default");
+        var mailboxMessage = Assert.Single(mailbox);
+        Assert.Equal("continue", mailboxMessage.Action);
+        Assert.Equal("claude", mailboxMessage.FromProfileId);
+        Assert.Equal("codex", mailboxMessage.ToProfileId);
+        Assert.Equal("Please review version 2.", mailboxMessage.Message);
+        Assert.Equal("sent", mailboxMessage.Status);
+        Assert.Equal("codex-1", mailboxMessage.SessionId);
+    }
+
+    [Fact]
     public async Task Updates_task_log_from_team_status_commands()
     {
         var workspacePath = CreateWorkspace();
