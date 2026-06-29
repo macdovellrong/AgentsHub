@@ -26,3 +26,12 @@ def test_publish_native_script_embeds_laptop_validation_pointer() -> None:
     assert '"passed"' in script
     assert '"failed"' in script
     assert "report:" in script
+
+
+def test_publish_native_script_embeds_hook_python_validation() -> None:
+    script = (REPO_ROOT / "scripts" / "publish-native.ps1").read_text(encoding="utf-8")
+
+    assert 'Invoke-ValidationStep "hook python"' in script
+    assert "Split-HookPythonCommand" in script
+    assert "urllib.request" in script
+    assert "Hook Python command failed" in script
