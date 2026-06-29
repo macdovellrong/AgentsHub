@@ -51,6 +51,8 @@ def test_collect_native_diagnostics_writes_markdown_report(tmp_path: Path) -> No
     assert "Win32_OperatingSystem" in report
     assert "## Input Devices" in report
     assert "Get-PnpDevice" in report
+    assert "### Codex Native Launcher" in report
+    assert "### Codex No Alt Screen Probe" in report
     assert "## Native Launch Checks" in report
     assert "start-native.ps1 -Check -Workspace" in report
     assert "## Hook Diagnostics" in report
@@ -105,6 +107,8 @@ def test_collect_native_diagnostics_supports_published_package_layout(tmp_path: 
     assert "collect-native-diagnostics.bat" in report
     assert "scripts\\collect-native-diagnostics.ps1" in report
     assert "agenthub_hook_common.py" in report
+    assert "### Codex Native Launcher" in report
+    assert "### Codex No Alt Screen Probe" in report
 
 
 def test_publish_native_script_includes_diagnostics_entrypoints() -> None:

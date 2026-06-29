@@ -57,6 +57,182 @@ function Invoke-DiagnosticCommand {
     Add-Line
 }
 
+function Get-NativeAgentCommandCandidates {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $extension = [System.IO.Path]::GetExtension($CommandName)
+    if (-not [string]::IsNullOrWhiteSpace($extension)) {
+        return @($CommandName)
+    }
+
+    $nativeExtensions = @(".COM", ".EXE", ".BAT", ".CMD")
+    $pathExtensions = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:PATHEXT)) {
+        foreach ($pathExtension in ($env:PATHEXT -split ";")) {
+            $trimmed = $pathExtension.Trim()
+            if ($nativeExtensions -contains $trimmed.ToUpperInvariant()) {
+                $pathExtensions += $trimmed
+            }
+        }
+    }
+
+    if ($pathExtensions.Count -eq 0) {
+        $pathExtensions = $nativeExtensions
+    }
+
+    $candidates = @()
+    foreach ($pathExtension in $pathExtensions) {
+        $candidates += "$CommandName$pathExtension"
+    }
+
+    return $candidates | Select-Object -Unique
+}
+
+function Resolve-NativeAgentCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($env:PATH)) {
+        return $null
+    }
+
+    foreach ($directory in ($env:PATH -split [System.IO.Path]::PathSeparator)) {
+        if ([string]::IsNullOrWhiteSpace($directory)) {
+            continue
+        }
+
+        foreach ($candidate in (Get-NativeAgentCommandCandidates -CommandName $CommandName)) {
+            $candidatePath = Join-Path $directory.Trim() $candidate
+            if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+                return $candidatePath
+            }
+        }
+    }
+
+    return $null
+}
+
+function Add-NativeLauncherDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AgentName,
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    Add-Line "### $AgentName Native Launcher"
+    Add-Line
+    Add-Line '```powershell'
+    Add-Line "Resolve native Windows launcher for $CommandName (.com/.exe/.bat/.cmd)"
+    Add-Line '```'
+    Add-Line
+    Add-Line '```text'
+    $launcher = Resolve-NativeAgentCommand -CommandName $CommandName
+    if ([string]::IsNullOrWhiteSpace($launcher)) {
+        Add-Line "Exit code: 1"
+        Add-Line "Native Windows launcher was not found for '$CommandName'."
+        Add-Line '```'
+        Add-Line
+        return $null
+    }
+
+    Add-Line "Exit code: 0"
+    Add-Line $launcher
+    Add-Line '```'
+    Add-Line
+    return $launcher
+}
+
+function Invoke-NativeLauncherHelp {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Launcher
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Launcher)
+    if ($extension -in @(".cmd", ".bat")) {
+        $cmd = Join-Path ([Environment]::SystemDirectory) "cmd.exe"
+        $commandLine = "`"$Launcher`" --help"
+        $previousLocation = Get-Location
+        try {
+            Set-Location -LiteralPath ([Environment]::SystemDirectory)
+            $output = & $cmd /d /s /c $commandLine 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            Set-Location -LiteralPath $previousLocation
+        }
+    }
+    else {
+        $output = & $Launcher --help 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+
+    if ($null -eq $exitCode) {
+        $exitCode = 0
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = @($output)
+    }
+}
+
+function Add-CodexNoAltScreenProbe {
+    param(
+        [string]$Launcher
+    )
+
+    Add-Line "### Codex No Alt Screen Probe"
+    Add-Line
+    Add-Line '```powershell'
+    if ([string]::IsNullOrWhiteSpace($Launcher)) {
+        Add-Line "Codex native launcher was not found; --no-alt-screen probe skipped."
+    }
+    else {
+        Add-Line "$(Quote-PS $Launcher) --help"
+    }
+    Add-Line '```'
+    Add-Line
+    Add-Line '```text'
+
+    if ([string]::IsNullOrWhiteSpace($Launcher)) {
+        Add-Line "Exit code: 1"
+        Add-Line "Codex native launcher was not found."
+        Add-Line '```'
+        Add-Line
+        return
+    }
+
+    try {
+        $probe = Invoke-NativeLauncherHelp -Launcher $Launcher
+        Add-Line "Exit code: $($probe.ExitCode)"
+        $helpText = @($probe.Output) -join "`n"
+        if ($helpText -like "*--no-alt-screen*") {
+            Add-Line "Codex --no-alt-screen support: yes"
+        }
+        else {
+            Add-Line "Codex --no-alt-screen support: no"
+        }
+
+        foreach ($line in @($probe.Output)) {
+            Add-Line ([string]$line)
+        }
+    }
+    catch {
+        Add-Line "Exit code: 1"
+        Add-Line $_.Exception.Message
+    }
+
+    Add-Line '```'
+    Add-Line
+}
+
 function Resolve-DefaultOutputPath {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     return Join-Path $script:RepoRoot "artifacts/native-diagnostics/$timestamp.md"
@@ -141,6 +317,8 @@ if ((Test-Path -LiteralPath $publishedApp -PathType Leaf) -or
 Add-Line "## Agent CLIs"
 Add-Line
 Invoke-DiagnosticCommand "Codex CLI" "where.exe codex; codex --version"
+$codexNativeLauncher = Add-NativeLauncherDiagnostics -AgentName "Codex" -CommandName "codex"
+Add-CodexNoAltScreenProbe -Launcher $codexNativeLauncher
 Invoke-DiagnosticCommand "Claude CLI" "where.exe claude; claude --version"
 Invoke-DiagnosticCommand "Gemini CLI" "where.exe gemini; gemini --version"
 

@@ -63,7 +63,7 @@ py -3.11 --version
 .\scripts\collect-native-diagnostics.ps1 -Workspace V:\OrderManager -Python "py -3.11"
 ```
 
-默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、输入设备、Agent CLI、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
+默认报告位置是 `artifacts/native-diagnostics/<timestamp>.md`。报告头部会写明 `Execution mode`，用于区分当前运行的是源码仓库、发布包还是独立诊断脚本。这份报告只读收集 git、.NET、Windows 版本、显示缩放、输入设备、Agent CLI、Codex native launcher、Codex `--no-alt-screen` 探测、Python、native 启动预检、发布预检和 hook 日志摘要；即使命令失败，也会保留 exit code 和错误文本。
 
 ## 直接运行开发版
 
