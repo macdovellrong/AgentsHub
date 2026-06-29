@@ -44,6 +44,7 @@
 ```powershell
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent codex,claude,gemini -Resume
 .\start-agenthub-native.bat -Workspace V:\OrderManager -Agent codex,claude,gemini -Resume
+.\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent agents -Resume
 ```
 
 启动时指定 Host shell：

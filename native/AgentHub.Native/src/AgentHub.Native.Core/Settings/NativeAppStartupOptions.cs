@@ -152,6 +152,17 @@ public sealed record NativeAppStartupOptions(
         };
     }
 
+    private static IReadOnlyList<AgentKind> ParseAgentKinds(string? raw)
+    {
+        if (string.Equals(raw?.Trim(), "agents", StringComparison.OrdinalIgnoreCase))
+        {
+            return [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini];
+        }
+
+        var agentKind = ParseAgentKind(raw);
+        return agentKind is null ? [] : [agentKind.Value];
+    }
+
     private static ShellKind? ParseHostShellFromStartupAgents(IReadOnlyList<string> rawAgents)
     {
         foreach (var rawAgent in rawAgents)
@@ -183,16 +194,13 @@ public sealed record NativeAppStartupOptions(
         {
             foreach (var token in rawAgent.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                var agentKind = ParseAgentKind(token);
-                if (agentKind is null)
+                foreach (var agentKind in ParseAgentKinds(token))
                 {
-                    continue;
+                    var mode = resume && agentKind == AgentKind.Codex
+                        ? AgentStartupMode.Resume
+                        : AgentStartupMode.Start;
+                    agents.Add(new NativeAppStartupAgent(agentKind, mode));
                 }
-
-                var mode = resume && agentKind == AgentKind.Codex
-                    ? AgentStartupMode.Resume
-                    : AgentStartupMode.Start;
-                agents.Add(new NativeAppStartupAgent(agentKind.Value, mode));
             }
         }
 

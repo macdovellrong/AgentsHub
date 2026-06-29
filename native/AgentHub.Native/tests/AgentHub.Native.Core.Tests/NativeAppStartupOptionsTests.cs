@@ -148,6 +148,19 @@ public sealed class NativeAppStartupOptionsTests
     }
 
     [Fact]
+    public void Parses_agents_alias_as_managed_agent_list()
+    {
+        var options = NativeAppStartupOptions.Parse(["--agent", "agents", "--resume"]);
+
+        Assert.Equal(
+            [AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini],
+            options.StartupAgents.Select(item => item.AgentKind).ToArray());
+        Assert.Equal(
+            [AgentStartupMode.Resume, AgentStartupMode.Start, AgentStartupMode.Start],
+            options.StartupAgents.Select(item => item.Mode).ToArray());
+    }
+
+    [Fact]
     public void Parses_repeated_agent_options_in_order()
     {
         var options = NativeAppStartupOptions.Parse(["--agent", "claude", "--agent", "codex"]);
