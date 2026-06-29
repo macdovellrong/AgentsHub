@@ -167,10 +167,10 @@ public sealed class AgentStartupPreflightCheckerTests
     }
 
     [Fact]
-    public void Prefers_windows_pathext_launchers_before_extensionless_npm_shims()
+    public void Only_uses_native_windows_launchers_for_path_command_resolution()
     {
         var originalPathExt = Environment.GetEnvironmentVariable("PATHEXT");
-        Environment.SetEnvironmentVariable("PATHEXT", ".COM;.EXE;.BAT;.CMD");
+        Environment.SetEnvironmentVariable("PATHEXT", ".PS1;.CMD;.EXE;.BAT;.COM");
 
         try
         {
@@ -180,11 +180,12 @@ public sealed class AgentStartupPreflightCheckerTests
 
             var candidates = Assert.IsAssignableFrom<IReadOnlyList<string>>(method.Invoke(null, ["codex"]));
 
-            Assert.Equal("codex.COM", candidates[0]);
+            Assert.Equal("codex.CMD", candidates[0]);
             Assert.Equal("codex.EXE", candidates[1]);
             Assert.Equal("codex.BAT", candidates[2]);
-            Assert.Equal("codex.CMD", candidates[3]);
-            Assert.Equal("codex", candidates[^1]);
+            Assert.Equal("codex.COM", candidates[3]);
+            Assert.DoesNotContain("codex.PS1", candidates);
+            Assert.DoesNotContain("codex", candidates);
         }
         finally
         {

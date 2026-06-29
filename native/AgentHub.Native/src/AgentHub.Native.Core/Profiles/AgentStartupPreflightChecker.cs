@@ -21,6 +21,13 @@ public sealed class AgentStartupPreflightChecker(
         "agenthub_claude_stop.py",
         "agenthub_gemini_after_agent.py"
     ];
+    private static readonly string[] NativeLauncherExtensions =
+    [
+        ".COM",
+        ".EXE",
+        ".BAT",
+        ".CMD"
+    ];
 
     public static AgentStartupPreflightChecker CreateDefault()
     {
@@ -354,14 +361,16 @@ public sealed class AgentStartupPreflightChecker(
 
         var pathExtensions = Environment.GetEnvironmentVariable("PATHEXT")
             ?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        pathExtensions = pathExtensions?
+            .Where(extension => NativeLauncherExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
         if (pathExtensions is null || pathExtensions.Length == 0)
         {
-            pathExtensions = [".exe", ".cmd", ".bat", ".com"];
+            pathExtensions = NativeLauncherExtensions;
         }
 
         return pathExtensions
             .Select(extension => $"{command}{extension}")
-            .Append(command)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

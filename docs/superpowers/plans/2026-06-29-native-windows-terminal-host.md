@@ -61,6 +61,7 @@
 - [x] native 启动脚本和 WPF UI 的 hook Python 默认值统一为 `py -3.11`，避免装有 Python 3.14 的机器误选不兼容版本；显式 `-Python` 仍可覆盖。
 - [x] native Codex 启动和恢复命令会自动追加 `--no-alt-screen`，避免 Codex TUI 进入 alternate screen 后丢失普通 scrollback。
 - [x] native UI 预检和 `scripts/start-native.ps1 -Check` 会提前确认 Codex CLI 支持 `--no-alt-screen`，避免旧 Codex 版本启动后才失败。
+- [x] native UI 和 `scripts/start-native.ps1 -Check` 的 Agent CLI 解析都优先使用 Windows native launcher（`.com`、`.exe`、`.bat`、`.cmd`），避免 npm 同时生成 `codex.ps1` 和 `codex.cmd` 时预检走到 PowerShell shim。
 
 ## 后续任务
 

@@ -149,6 +149,86 @@ function Resolve-AgentCommandName {
     }
 }
 
+function Get-NativeAgentCommandCandidates {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $extension = [System.IO.Path]::GetExtension($CommandName)
+    if (-not [string]::IsNullOrWhiteSpace($extension)) {
+        return @($CommandName)
+    }
+
+    $nativeExtensions = @(".COM", ".EXE", ".BAT", ".CMD")
+    $pathExtensions = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:PATHEXT)) {
+        foreach ($pathExtension in ($env:PATHEXT -split ";")) {
+            $trimmed = $pathExtension.Trim()
+            if ($nativeExtensions -contains $trimmed.ToUpperInvariant()) {
+                $pathExtensions += $trimmed
+            }
+        }
+    }
+
+    if ($pathExtensions.Count -eq 0) {
+        $pathExtensions = $nativeExtensions
+    }
+
+    $candidates = @()
+    foreach ($pathExtension in $pathExtensions) {
+        $candidates += "$CommandName$pathExtension"
+    }
+
+    return $candidates | Select-Object -Unique
+}
+
+function Resolve-NativeAgentCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($env:PATH)) {
+        foreach ($directory in ($env:PATH -split [System.IO.Path]::PathSeparator)) {
+            if ([string]::IsNullOrWhiteSpace($directory)) {
+                continue
+            }
+
+            foreach ($candidate in (Get-NativeAgentCommandCandidates -CommandName $CommandName)) {
+                $candidatePath = Join-Path $directory.Trim() $candidate
+                if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+                    return [pscustomobject]@{
+                        Source = $candidatePath
+                        Invocation = $candidatePath
+                    }
+                }
+            }
+        }
+    }
+
+    $command = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        return $null
+    }
+
+    $source = if ([string]::IsNullOrWhiteSpace($command.Source)) {
+        $CommandName
+    }
+    else {
+        $command.Source
+    }
+
+    if (Test-Path -LiteralPath $source -PathType Leaf) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        Source = $source
+        Invocation = $CommandName
+    }
+}
+
 function Test-AgentCommands {
     param(
         [string[]]$Agents
@@ -161,14 +241,14 @@ function Test-AgentCommands {
             continue
         }
 
-        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        $command = Resolve-NativeAgentCommand -CommandName $commandName
         if ($null -eq $command) {
-            throw "Agent CLI '$commandName' was not found in PATH. Install it or update PATH before launching AgentHub Native."
+            throw "Agent CLI '$commandName' was not found as a native Windows launcher in PATH. Install it or update PATH before launching AgentHub Native."
         }
 
         Write-Host "Agent CLI check passed: $agentName"
         Write-Host "  $($command.Source)"
-        Test-AgentCommandCapabilities -AgentName $agentName -CommandName $commandName
+        Test-AgentCommandCapabilities -AgentName $agentName -CommandInvocation $command.Invocation
     }
 }
 
@@ -177,7 +257,7 @@ function Test-AgentCommandCapabilities {
         [Parameter(Mandatory = $true)]
         [string]$AgentName,
         [Parameter(Mandatory = $true)]
-        [string]$CommandName
+        [string]$CommandInvocation
     )
 
     if ($AgentName.ToLowerInvariant() -ne "codex") {
@@ -185,7 +265,22 @@ function Test-AgentCommandCapabilities {
     }
 
     try {
-        $output = & $CommandName --help 2>&1
+        $extension = [System.IO.Path]::GetExtension($CommandInvocation)
+        if ($extension -in @(".cmd", ".bat")) {
+            $cmd = Join-Path ([Environment]::SystemDirectory) "cmd.exe"
+            $commandLine = "`"$CommandInvocation`" --help"
+            $previousLocation = Get-Location
+            try {
+                Set-Location -LiteralPath ([Environment]::SystemDirectory)
+                $output = & $cmd /d /s /c $commandLine 2>&1
+            }
+            finally {
+                Set-Location -LiteralPath $previousLocation
+            }
+        }
+        else {
+            $output = & $CommandInvocation --help 2>&1
+        }
     }
     catch {
         throw "Codex CLI help check could not be started: $($_.Exception.Message)"
