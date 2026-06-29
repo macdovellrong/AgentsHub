@@ -282,6 +282,28 @@ public partial class MainWindow : Window
         StatusTextBlock.Text = $"Resumed managed agents: {startedCount}/{commands.Count}";
     }
 
+    private async void StopManagedAgents_Click(object sender, RoutedEventArgs e)
+    {
+        var targetSessions = sessions.Values
+            .Where(session =>
+                AgentStartupCommandCatalog.IsManagedAgent(session.AgentKind) &&
+                IsCurrentWorkspace(session.Workspace.Path))
+            .ToArray();
+
+        var stoppedCount = 0;
+        foreach (var session in targetSessions)
+        {
+            if (await inputRouter.TryStopAsync(session.Id))
+            {
+                stoppedCount++;
+            }
+
+            RemoveSessionView(session.Id);
+        }
+
+        StatusTextBlock.Text = $"Stopped managed agents: {stoppedCount}";
+    }
+
     private async Task<int> StartAgentBatchAsync(IReadOnlyList<AgentStartupCommand> commands)
     {
         var startedCount = 0;

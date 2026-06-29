@@ -221,6 +221,21 @@ public sealed class MainWindowTaskPlanUiTests
     }
 
     [Fact]
+    public async Task Main_window_can_stop_managed_agents_for_current_workspace()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Content=\"Stop Agents\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"StopManagedAgents_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("StopManagedAgents_Click", code, StringComparison.Ordinal);
+        Assert.Contains("AgentStartupCommandCatalog.IsManagedAgent(session.AgentKind)", code, StringComparison.Ordinal);
+        Assert.Contains("IsCurrentWorkspace(session.Workspace.Path)", code, StringComparison.Ordinal);
+        Assert.Contains("await inputRouter.TryStopAsync(session.Id)", code, StringComparison.Ordinal);
+        Assert.Contains("Stopped managed agents: {stoppedCount}", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Main_window_can_route_input_to_all_managed_agents()
     {
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));

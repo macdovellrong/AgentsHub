@@ -48,6 +48,16 @@ public sealed class AgentStartupCommandCatalogTests
         Assert.Empty(commands[2].Arguments);
     }
 
+    [Theory]
+    [InlineData(AgentKind.Codex, true)]
+    [InlineData(AgentKind.Claude, true)]
+    [InlineData(AgentKind.Gemini, true)]
+    [InlineData(AgentKind.PowerShell, false)]
+    public void Identifies_managed_agent_kinds(AgentKind agentKind, bool expected)
+    {
+        Assert.Equal(expected, AgentStartupCommandCatalog.IsManagedAgent(agentKind));
+    }
+
     [Fact]
     public void Rejects_resume_for_agents_without_a_resume_preset()
     {

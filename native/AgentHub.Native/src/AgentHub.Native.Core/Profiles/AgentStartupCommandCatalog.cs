@@ -22,6 +22,11 @@ public static class AgentStartupCommandCatalog
         ];
     }
 
+    public static bool IsManagedAgent(AgentKind agentKind)
+    {
+        return agentKind is AgentKind.Codex or AgentKind.Claude or AgentKind.Gemini;
+    }
+
     public static AgentStartupCommand Build(AgentKind agentKind, AgentStartupMode mode)
     {
         return (agentKind, mode) switch

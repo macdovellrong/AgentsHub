@@ -78,6 +78,7 @@
                     <Button Content="Start Shell" Click="StartPowerShell_Click" Margin="0,6,6,0" MinHeight="36" />
                     <Button Content="Start Agents" Click="StartManagedAgents_Click" Margin="6,6,0,6" MinHeight="36" />
                     <Button Content="Resume Agents" Click="ResumeManagedAgents_Click" Margin="0,6,6,0" MinHeight="36" />
+                    <Button Content="Stop Agents" Click="StopManagedAgents_Click" Margin="6,6,0,0" MinHeight="36" />
                 </UniformGrid>
 
                 <TextBlock DockPanel.Dock="Top" Text="Conversations" Foreground="#9FB0C2" Margin="0,0,0,6" />
