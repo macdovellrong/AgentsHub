@@ -211,7 +211,7 @@ public sealed class MainWindowTaskPlanUiTests
         var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
         var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("Rows=\"4\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Rows=\"5\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"Resume Agents\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"ResumeManagedAgents_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ResumeManagedAgents_Click", code, StringComparison.Ordinal);
@@ -233,6 +233,22 @@ public sealed class MainWindowTaskPlanUiTests
         Assert.Contains("IsCurrentWorkspace(session.Workspace.Path)", code, StringComparison.Ordinal);
         Assert.Contains("await inputRouter.TryStopAsync(session.Id)", code, StringComparison.Ordinal);
         Assert.Contains("Stopped managed agents: {stoppedCount}", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_window_can_interrupt_managed_agents_for_current_workspace()
+    {
+        var xaml = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml"));
+        var code = await File.ReadAllTextAsync(FindSourceFile("src", "AgentHub.Native.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("Rows=\"5\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Interrupt Agents\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"InterruptManagedAgents_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("InterruptManagedAgents_Click", code, StringComparison.Ordinal);
+        Assert.Contains("AgentStartupCommandCatalog.IsManagedAgent(session.AgentKind)", code, StringComparison.Ordinal);
+        Assert.Contains("IsCurrentWorkspace(session.Workspace.Path)", code, StringComparison.Ordinal);
+        Assert.Contains("await inputRouter.TrySendControlDetailedAsync(session.Id, \"\\x03\")", code, StringComparison.Ordinal);
+        Assert.Contains("Interrupted managed agents: {interruptedCount}/{targetSessions.Length}", code, StringComparison.Ordinal);
     }
 
     [Fact]

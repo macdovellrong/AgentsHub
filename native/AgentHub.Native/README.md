@@ -120,7 +120,7 @@ dotnet run --project src/AgentHub.Native.App/AgentHub.Native.App.csproj
    Open 会打开当前输入框或选中项解析出的 workspace 目录；Remove 会优先删除列表中选中的 workspace，选中项为空时才使用输入框路径。
 3. app 会在该 workspace 的 `.gitignore` 中幂等加入 `.agenthub/`、`.codex/`、`.claude/`、`.gemini/`。
 4. 选中 workspace 后选择 Host shell，默认 PowerShell，也可以切换为 cmd。
-5. 启动 Codex、Claude、Gemini 或普通 shell session；也可以用 `Start Agents` 按 Codex、Claude、Gemini 顺序一次启动当前 workspace 的三类托管 Agent，用 `Resume Agents` 以 `codex resume` + Claude/Gemini 普通启动的组合恢复协作环境，或用 `Stop Agents` 停止当前 workspace 的托管 Agent，并在状态栏显示处理数量。
+5. 启动 Codex、Claude、Gemini 或普通 shell session；也可以用 `Start Agents` 按 Codex、Claude、Gemini 顺序一次启动当前 workspace 的三类托管 Agent，用 `Resume Agents` 以 `codex resume` + Claude/Gemini 普通启动的组合恢复协作环境，用 `Interrupt Agents` 向当前 workspace 的托管 Agent 发送 Ctrl+C，或用 `Stop Agents` 停止当前 workspace 的托管 Agent，并在状态栏显示处理数量。
 6. 对托管 Agent，app 会安装项目级 `.codex`、`.claude`、`.gemini` hooks。
 7. app 会启动本地 hook receiver，并向 PowerShell/cmd-hosted session 注入 `AGENTHUB_HOOK_*` 环境变量。
 8. 可以用底部输入栏向选中的 terminal session 发送文本；Enter 发送，Shift+Enter 在输入框内换行。多行文本会用 bracketed paste 写入终端，再发送 Enter。

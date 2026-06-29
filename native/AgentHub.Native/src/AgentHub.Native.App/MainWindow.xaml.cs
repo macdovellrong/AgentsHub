@@ -304,6 +304,33 @@ public partial class MainWindow : Window
         StatusTextBlock.Text = $"Stopped managed agents: {stoppedCount}";
     }
 
+    private async void InterruptManagedAgents_Click(object sender, RoutedEventArgs e)
+    {
+        var targetSessions = sessions.Values
+            .Where(session =>
+                AgentStartupCommandCatalog.IsManagedAgent(session.AgentKind) &&
+                IsCurrentWorkspace(session.Workspace.Path))
+            .ToArray();
+
+        var interruptedCount = 0;
+        foreach (var session in targetSessions)
+        {
+            var result = await inputRouter.TrySendControlDetailedAsync(session.Id, "\x03");
+            if (result.Sent)
+            {
+                interruptedCount++;
+                continue;
+            }
+
+            if (result.ShouldRemoveSession)
+            {
+                RemoveSessionView(session.Id);
+            }
+        }
+
+        StatusTextBlock.Text = $"Interrupted managed agents: {interruptedCount}/{targetSessions.Length}";
+    }
+
     private async Task<int> StartAgentBatchAsync(IReadOnlyList<AgentStartupCommand> commands)
     {
         var startedCount = 0;
