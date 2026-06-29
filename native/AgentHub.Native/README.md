@@ -63,7 +63,7 @@
 
 `shell` 是普通 shell 的默认别名，等价于 `powershell`；需要 cmd 时请使用 `-Agent cmd` 或 `-Shell cmd`。
 
-启动时指定 Agent hook 使用的 Python 命令；未指定时默认使用 `py -3`：
+启动时指定 Agent hook 使用的 Python 命令；未指定时默认使用 `py -3.11`，也可以通过 `-Python` 显式覆盖：
 
 ```powershell
 .\scripts\start-native.ps1 -Workspace V:\OrderManager -Agent codex -Resume -Python "C:\Program Files\Python311\python.exe"

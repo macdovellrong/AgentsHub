@@ -328,7 +328,7 @@ if ($Check) {
         Test-HookPythonCommand -Command $Python
     }
     elseif ($agentHooksRequired) {
-        Test-HookPythonCommand -Command "py -3"
+        Test-HookPythonCommand -Command "py -3.11"
     }
 
     if ($agentHooksRequired) {

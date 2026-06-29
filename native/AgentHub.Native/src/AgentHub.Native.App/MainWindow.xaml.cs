@@ -978,7 +978,7 @@ public partial class MainWindow : Window
 
     private string ResolveHookPythonCommand()
     {
-        return startupOptions.HookPythonCommand ?? "py -3";
+        return NativeHookPythonCommandResolver.Resolve(startupOptions.HookPythonCommand);
     }
 
     private static void AddAncestorCandidates(List<string> candidates, string startDirectory)
